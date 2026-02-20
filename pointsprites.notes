@@ -1,0 +1,43 @@
+
+
+GLuint particleTextureID;
+
+int loadParticleTexture() {
+
+	SDL_Surface *particleSurface;
+	
+	if (!fileExists(MISCDIR "/particle.png"))
+		return 0;
+		
+	particleSurface = IMG_Load(MISCDIR "/particle.png");
+
+	glGenTextures(1, &particleTextureID);
+	glCheck();
+
+	glBindTexture(GL_TEXTURE_2D, particleTextureID);
+	glCheck();
+
+	gluBuild2DMipmaps(GL_TEXTURE_2D, 4, particleSurface->w, particleSurface->h, GL_RGBA, GL_UNSIGNED_BYTE, particleSurface->pixels);
+	glCheck();
+
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_NEAREST);
+	glCheck();
+
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+	glCheck();
+
+	SDL_FreeSurface(particleSurface);
+
+	return 1;
+
+}
+
+        
+        if (view.particleRenderTexture) {
+           glTexEnvf( GL_POINT_SPRITE_ARB, GL_COORD_REPLACE_ARB, GL_TRUE );
+           glBindTexture(GL_TEXTURE_2D, particleTextureID);
+        } else {        
+           glBindTexture(GL_TEXTURE_2D, 0);
+        }
+
+        glEnable( GL_POINT_SPRITE_ARB );

@@ -1,0 +1,1569 @@
+-----
+Install fltk 1.1.5
+Keyboard access to slider values
+control panel per window (or control panel settings per window)
+t1, t2, displacement?  
+---
+
+rgb color exponent slider
+Precompliled headers for blitz and fltk (and gmm++)
+    tried it - only saves a a couple of seconds on compile			 
+link gmm++ to blas and lapack
+ratios of densities
+matrix invariants, or other anisotropy measures
+eigenvectors?
+least squares grad and hessian
+relative coords.
+natural neighbors densities
+control panels consolodated into one, with one tab per plot
+fix normalization, etc.  For pairs, xforms, etc.
+	normalization (scaling of data) seperate from display offset, except perhaps for 3sigma
+	e.g. do not shift data zero - just scale data, have separate option for display -1:1 or 0:1
+add sixsigma?
+histograms for marginals
+make skelaton for other programs, e.g. ktest
+multiple selections
+separate colors for selected, unselected, blendcolor
+panel buttons to duplicate keys to reset xform, invert selection, deselect, etc..
+trackball 3d manip
+binned kernel densities
+nD trackball
+running entropy / MI estimates
+run entropy code
+principal componenents
+independent components
+---
+use texture (1-d?) coord instead of color to render color of points.  Generate texture based on selection region, thus avoiding testing all points to see if they are in the region.  Question: how to handle individual colors ramps and alphas on a per-plot basis:  Answer, use a separate texture for each plot, but use the same texture coords.  Use vertex (and texture) arrays to speed rendering.
+---
+
+denb_16, vs lam2_16, rank, x+y v x-y
+select rhs vs lhs
+
+10:00:09 05 May 05
+
+Fast selection idea.  Use mouse x and mouse y to create a new
+texture (or texture matrix) that is effetively a blue rectangle
+(corners based on mouse coords) inside a red square.  Use each point's
+x,y coords in active window (where selection is being made) as that
+points texture coords in ALL windows.  This can generalized to create
+textures (coresponding to soft selections) based on arbirary functions
+of coordinates and other (e.g. slider) variables.  E.g. a texture coord
+can represent energy, or distance from some n-d point, or how many
+times a region has been brushed by an airbrush, etc....
+
+18:57:25 06 Sep 05
+
+Functionality to add (see also project plan):
+
+***tuning
+- remember normalization & ranking
+  - don't repeatedly rerank and/or renormalize the same var
+  - fast reranking after "delete selected points"?
+- don't require multiple copies of vertices
+  - interleaved vs. not
+- histogram speedups
+
+***misc
+- tile windows correctly for multiple screens
+- dynamically couple to running sims on another machine(!)
+- comments in files ("#")
+- mapped files?
+
+***global controls to non-tabbed panel
+- npoints DONE
+- start, end, stride for npoints
+- random points (repsecting start & end)
+- reset all views
+- clear selection DONE
+- complement selection DONE
+- dont display deselected DONE
+- add to selection BUGGY
+- subtract from selection
+- brush selection
+- move selection
+- new selection (as opposed to brush or move, works for add & subtract)
+- delete selected points DONE
+- write data to file DONE !
+- global versions of local controls (size, nbins, etc)
+- show count (and %) of selected/visible/total points
+
+***per-view controls, in tab
+- reset view
+- selection color (or should this be on global panel?)
+- better axis labels
+  - labels smaller
+  - labels display axis transformations (x+y, polar, normalizations, ranking...)
+- tickmarks on axes (per axis?)
+- polar grids?
+- logarithmic axes
+  - via normalzation option
+  - show in labels
+- atanh (logistic) normalization
+- histogram enhancements
+  - speed them up when changing bin counts
+    - should be very fast for equi-depth case, when data is sorted: O(nbins).
+  - histogram bin counts independent for x and y
+  - default bin counts using Kevin Knuth's algorithm
+  - equi-depth option
+  - extend KK's algorithm for equi-depth case
+  - offsets for histogram
+  - better coloring for histograms 
+    - better alphs, or edges on lines
+    - colored same as selection color
+  - selection via histograms
+- boxplots
+- density estimates
+  - binned kdes?
+  - point sprites (same thing?)
+- multiple axes
+  - ND rotation
+- time series
+- vector variables
+- rework normalization
+  - separate scaling, centering, windowing
+  - separate axes and windowing ?
+
+***plot window enhancements
+- min, max, mean, median, variance, stddev, quartiles, etc, (like R.summary())
+  - for each axis
+  - for each selection on each axis
+  - for each histogram bin on each axis
+- boxplots
+- multiple selections
+- selection color chooser (global & local)
+- fix relationship between color, depth, seletion visibility
+  - for 2D, alpha=0, selected points should never be obscured
+  - separate 3rd axis=NONE to force 2D
+    - then we can use z to make selected points draw on top of non-selected points
+- tie plot window keys to control panel keys (shortcuts?), where possible
+- trackballs for 3d rotation
+- scale w.r.t. mouse down as center
+- move point to center ?
+  - show center glyph, like flashearth
+- lock aspect ratio to 1:1
+  - even when window aspect ratio is not 1:1
+- fancy texture hacking, as above
+
+
+***additional kinds of vis
+- parallel coordinates
+- vectors
+- glyphs
+- color by scalar
+- MDS
+- laplacian eigenmaps, LLE, other dim. reduction....
+- classification (SOM....)
+- co-clustering, info bottleneck, real gaussianization
+- new random choice for axes
+- slider for axis
+- choose axes by MI
+- high-d rotations
+- predfined views (45 degree rotations....)
+- projection pursuit in multiple plots at once.
+- linked scaling/translation on idenitcal axes in separate plots
+.....
+
+Priorities (?)
+
+histogram rescale slders
+data scales (done, almost)
+resizable windows (fix) (done)
+mouse buttons test for translate & rotate, fix
+rotation of (2D & 3D) axis
+multiple tickmarks
+normalization NONE -> zero to center of screen, -1 to left, +1 to right
+
+Thu Sep 22 2005
+
+fix centers too, in normalization routines
+fix no redraw in (some) other windows when selection changes
+fix z normalization (z-scale?) - rotation seems screwed up (done)
+add scale numbers
+tickmarks......
+add priority to selected when in 2d (use Z = z+1 for each new selection)
+texture based selection "colors"
+timeseries
+randomize vars ?
+histo scale sliders!
+swapbuffers timing
+
+11:04:38 30 Sep 05
+
+Timeseries / spectra (UGRIZ, orderbook, etc) ideas.
+ - timeseries (including timeseries of spectra)
+   - timeseries are handled by utilizing row index of point as timestamp.
+   - offset value (slider) for an axis displaces its row index values i by a constant k, so we can plot x_i vs. x_{i+k} (or vs y_{i+k})...
+   - npoints slider will need min, max, and "offset" sliders.  offset rigidly moves min and max.
+ - spectra (books, parallel coordinates)
+   - spectra are stored for each point in its row (like ugriz).
+   - choose vis type (parallel coords, scatterplots...)
+   - for parallel coord vis type, column index is used as (implicit?) axis
+   - need to be able to choose (limits) for row indices that will be used as a set of parallel coordinates
+      - is there an fltk mutiple chooser we can use for this? (yes - class Fl_Multi_Browser ?)
+   - for parallel coord vis, plot glLines instead of glPoints
+   - use column labels as axis tick labels
+   - how to handle selections?
+  
+17:19:37 01 Oct 05
+
+Simplest "parellel coord" implementation - levl 0
+  - extract vertices as huge array, 3*npoints*nvars in size, x=all vav values, y=column index, z=row index (or 0).
+  - no good.  back out.
+
+Added new starting axes (nonrandom). Added "choose new axes" which changes all axes to new ones.
+  - this could be on a per plot basis, too.
+
+lock axis
+  - global
+  - per plot / axis
+
+Tue Oct  4 11:26:29 2005
+
+controls should have local and global versions
+
+add trackball controls
+
+data ideas
+  chemistry
+  final.txt DR4
+    + add xyz (done)
+	+ add colors (both k-corrected and raw)
+     + include far colors (u-r, G-K, etc)
+     + rename z->spectro_z, M-z->z', M_Z->Z
+    + add extra vars from vagc
+    + add extra vars from photo, spectra
+    + add extra vars from aux VAGC files
+    + add density estimators from knn
+    + add moment of intertia eigenvalues & summaries...
+    + binned KDEs and derivatives
+  CFD / etc from tim?
+  machine learning data repository
+
+4D rotation from one 2D plot to another
+  - frame interp. ala Asimov
+  - use opengl w/4d vertices
+  - use 4D rotation matrix: (s = sin(theta), c = cos(theta))
+      c  0  s  0
+      0  c  0  s
+     -s  0  c  0
+      0 -s  0  c
+  - generalization: use mouse-x, mouse-y to control two rotation angles, t1 & t2, and use matrix:
+    with c1 = cos(t1), etc.
+      c1  0  s1  0
+      0  c2  0  s2
+     -s1  0  c1  0
+      0 -s2  0  c2
+  - both plots get same set of 4d vertices, one plot uses the above matrix, the other plot uses
+    the above matrix with upper & lower half swapped.  Or, swap x1,x2 with x3,x4 in 4d vertex array.
+
+-- need "90%" and "99%" normalization styles, which trim the top 1% and top 10% of outliers, repectively.
+
+-- change "add to selction" to "or selection"
+  - add "and with selection" (or some such wording)
+
+15:05:22 02 Oct 05
+
+  - "display deselected" should be local (optionally).  How about "d" vs. "D".
+ 
+09:02:56 05 Oct 05
+
+  - "The Dependence of Clustering on Galaxy Properties" http://xxx.lanl.gov/abs/astro-ph/0509873  uses:  (in addition to M_r(0.1)) D_4000 (which is "better thatn color g-r),  H_alpha,  "stellar" Mass M_*, surface density d_*, concenntration index C (as a proxy for hubble type), 
+
+Thu Oct  6 17:40:13 2005
+
+ - need local versions of "display deselected".
+ - need size for selected.
+ - need to spped things up.  Bogs down on > 1M points.
+   - e.g. (multi)-texture idea.  No "color-array-from-selection()", but a 2D texture is painted using selection tools, and that 2D texture is applied to all points.  Selections in multiple windows are handled with multi-textures.
+
+ - LIBRARIES WRONG ON LINUX10?  I need to link with /usr/lib/libGL.so.1.0.7667 and *not* with /usr/lib/libGL.so -> ../../usr/X11R6/lib/libGL.so
+  (see ftp://download.nvidia.com/XFree86/Linux-x86/1.0-7676/README.txt)
+
+11:20:26 09 Oct 05
+
+* - the best way to render this data with openGL on linux and osx is probably to use vertex buffer objects (VBOs).  That way, the vertex coordinates can be static (they hardly ever change), and the color (or texture) coordinates can be dynamic (if necessary). There would need to be N+!, probably.  N static ones for the vertex data and one for the (dynamic) color or texture data. 
+
+DONE - using textures insetad of colors for selection.
+   - initial imp; one selection color only.  
+   - then, one texture for "show deleselcted", another for "dont show deselected".
+   - then, handle multiple colors and "add to selection".
+   - then (maybe) handle "don't paint".
+
+17:35:15 04 Feb 06
+
+features to add:
+  get good data for SDSS, genetic (www) domains, statarb, china study, cfd (alan?), chemistry, ....
+DONE  multiple colors
+  color = nwindows...2*nwindows-1 as t coord with one additional intersection color at t=2*nwindows.  Add colors valuess for multiple selections, clamp t at t>=2*nwindows.
+  line plots
+    vector variabls 
+    parellel coords
+  subject-observer pattern for multiple views
+  can we use sprites and colors?
+  how to use pixel textures for hue maps/lightness maps.
+  better blending
+    more dynamic range on blending
+    slider for points_color (again);
+  selected points should render on top of non-selected points.
+  are there too many redraws?  Why do plot windows swap one at a time?
+  scale for z axis needs to be sensible
+global reset to initial state
+  * add trackball rotation for 3D
+  separate 3D and 2D rendering?
+  separate histogram scale sliders?
+  separate histogram nbins sliders?
+  Jeff's default histogram nbins?
+  how to handle multiple screens?
+  windows overlap on macs is still wrong.
+  is there a monospaced sans serif font?
+  selection stats are too small, and should be rendered with logicop, or above main points.
+  need global control panel
+   size
+   normalization
+   colors?
+   blend?
+   lock axes
+   .....
+   chooser to omit certain panels from global ops.
+  need per axis control to skip certain axes on "change axes"
+  npoints stride?  random?
+  DONE skip columns that only have one value (cmd line arg to override)
+  bail if too many input errors in a row..
+  comments in input files?
+  fine control on sliders - how? 
+  
+For demo at apple:
+
+  DONE fix initial startup color (why is it white?)
+  DONE initial startup normalization trim 10^-3
+  DONE set z scale to x&y scale
+  DONE fix "reset view"
+  DONE get and use 2 screen info on mac
+  DONE (I think) true multiple colors
+  profile and tune.
+  DONE eliminate columns with no information
+  global panel
+  DONE get slides, data, and DEMO! together
+
+
+14:29:08 15 Mar 06
+
+todo list from eeting with Paul
+
+Creon
+get svn up on trotsky
+move repository to trotsky
+get windows version checked in
+get svn on paul's machine(s)
+get windows version backported to mac & linux
+global reset to initial state
+new todo list
+single slider (or two, hue and sat) for color selector
+complete splom
+row number as implicit column
+"data set" (see below) as implicit column.
+order plots by mutual information
+table of values for selection (alternate view)
+  all values (max rows)
+  basic stats 
+remove don't paint
+clear selection on new windows, always, or never
+
+
+Paul
+vp web site on trotsky
+finish class file splitting
+fix binary IO
+add header processing
+create/destroy plot windows
+reload input file
+create new window or reset to initial window configuration
+add row / add column
+menu bar design
+compile with optimization
+startup with no data & from icon
+
+
+Paul & Creon
+binaries to vp web site
+read more data (on the fly, or from command line).
+  1) add another column
+  2) add more rows, with an implicit column for which data set.
+
+missing values
+
+10:58:51 01 Apr 06
+
+Mon Apr 17 11:57:13 2006
+=======
+Mike's suggestions
+screenshots for web, manual, and PASP/astro-ph
+write a FAQ
+what commands to run if vp doesn't work.
+wiki
+opengl extensions registry
+linux library checking
+send boost config file library to paul
+dependencies
+sample data
+list of known platforms
+=======
+1. command line args to specify which variables to plot, initially
+2. command line args for initial selection bounds
+3. current position of mouse should be dynamically printed (like the selection statistics)
+4. separate x and y histogram bin count controls
+5. separate point size control for selected points
+   in 2D, this should be easy with glPointParameterfARB
+   could be different for each selection.
+   better with NV_Point_sprite
+     -  Then we can have fast open circles, filled circles, squares, X's, +'s, letters, Gaussian humps....)
+
+15:58:48 02 Apr 06
+
+Ideas from simvis http://www.vrvis.at/simvis/
+
+  smooth brushing
+  (smooth) brushing in histograms
+  simple (greyscale) luminance composition for deselected points
+
+ideas from ggobi/rggobi http://www.ggobi.org/
+
+  "replicates"
+  "edge display" / edge brushing (see movies of linked brushing on website)
+  "persistant" vs. "transient" brushing (i.e. "paint/add to selection")
+
+
+Wed Apr 26 16:11:57 2006
+New idea for spectra, lineplots, etc:
+
+in the axis choice menu, allow for multiple selections.  Select a contiguos group
+to plot a spectrum or timeseries (instead of a point).
+
+
+16:42:58 24 May 06
+
+NOTE log(voronoi_volume) for DR4 final has Gaussian distribution.  Why is voronoi volume distribution lognormal?  at amy and all redshifts?
+
+Z-axis option should be "selected" - so selected points are plotted above nonselected (turn on depth buffers)
+
+need per plot "deselected color" control
+
+need to use "selected" (float) as 3rd coordinate for 2d plots.
+
+add "zoom to selected set" (zoom so selection bbox fills window)
+
+add equi-depth histograms
+add shifted histograms
+
+Look at IRAS data
+
+12:19:42 16 Jun 06
+
+notes from meeting w/Paul
+
+  selector (with scrolling) for axes, instead of popup menu
+    mulitple selection in y axis selector selects (implicit) column index for x axes, and plots lines!
+      normalization either globally (across all y values) or per column (parallel coords style)
+  binary search on ordered data to find selected set, instaed of brute force range check
+  stack trace on erroc (see gnu libc backtrace() ) *built in on macos*
+  z = selected option
+      pointpramameters for size
+  catagorical data (via hash)
+
+
+  look into:
+   can you grow a blitz array (e.g. when reading file)
+   boost (or standard) arrays instead of blitz++ *not yet*
+   fttk scripting
+  
+  email to paul re finance (talk with Adrian smith and Sandra Owen) 
+  get GLSL book (especially pipline reference), openGL guide fifth edition, *done*
+  can use vertex program to pass vertex component arrays separately.
+    and to do n-D projection/rotation
+
+ideas:
+
+  use select to move indices between selected and nonselected arrays. *done*
+   then we can render selected and deselected separately, to get selected "on top" in 2d plots.
+   can us opengl array index primitives.  can stll use vbos(s)
+   can use color call, once per index array, instead of one texture coord per vertex.
+  using color, we can have colored point sprites using standard point sprites (no need for r coord)
+  can have multiple arrays, for multiple selections.
+
+  try point smoothing again. *done*
+
+  add outlier detection.
+
+handle alternate field delimiters with --delimiter="," etc...
+  make a function convert_delimiters_to_whitespace(string)
+  but this doesnt allow us to handle missing values (1,2,3,,5,,,8,9)
+  for now, if there aren't enough variabes read on one line, then assume that line has missing values and discard it (with a counted log message).
+
+Idea:
+
+  toggle through multiple selections, like invert selection, but next plot's selected set (only) is shown.  deselected is also shown (?).  Plots with no selected points get skipped.
+
+  We can visualize multiple time series (and spectra, etc) in multiple variables as follows:  assume we have series 
+
+     S_1 = {{x1_1, y1_1, z1_1}, {x2_1, y2_1, z2_1}, .... {xn_1, yn_1, zn_1}}
+     S_2 = {{x1_2, y1_2, z1_2}, {x2_2, y2_2, z2_2}, .... {xn_2, yn_2, zn_2}}
+     ...
+     S_N = {{x1_N, y1_N, z1_N}, {x2_N, y2_N, z2_N}, .... {xn_N, yn_N, zn_N}}
+
+  create a file with the following format:
+
+    series timestep  x             y         z
+    1      1         x1_1          y1_1      z1_1
+    1      2         x2_1          y2_1      z2_1
+    ...
+    1      n         xn_1          yn_1      zn_1
+    2      1         x1_2          y1_2      z1_2
+    2      2         x2_2          y2_2      z2_2
+    ...
+    2      n         xn_1          yn_1      zn_1
+    ....
+    N      1         x1_N          y1_N      z1_N
+    N      2         x2_N          y2_N      z2_N
+    ...
+    N      n         xn_N          yn_N      zn_N
+
+  note that the timeseries (spectra) do *not* all have to have the same number of timestpes (wavelengths), nor do they have to be equaly spaced.
+
+  Q1) is there a way to turn a more traditional spectral data fle inot this kind of file by "folding" on input in some clever, autofocus sort of way?
+  Q2) How do we (efficiently) optionally connect draw the individual timeseries as polylines?
+
+Idea - add "data table" viewer for selected points. (Joe Mazzarella at ipac)
+
+Better color selection:  
+  Saturation is the second "contouring" control I've been waiting for. 
+  Add saturation & hue (quantized) to main control panel tab. (& global tab)
+  Remove selection color popup. (& deselection color popup)
+  h,s,v,a sliders (with optionally quantized hue) for everything.
+
+Better direct manipulation:
+  clicking on axis label in plot window pops up menu of axes
+  clicking and drag on tick mark drags is (& rescales plot)
+  click
+
+Get Tycho 2 catalog (http://www.astro.ku.dk/~cf/CD/) and use it for demos.  500M download.
+
+For fast selections, use binary search on sorted values on at least
+one axis to esablish bounds for linear search.  This will even work for
+non-rectangular brushes.
+
+Interface to weca (ML application) using plastic protocol.
+
+
+Simple - legend for colors to density map.
+
+Add pallette of hues to color chooser.
+
+"Error bars" by associating additional variables (low priority, probably better ideas).
+
+15:58:44 23 Oct 06
+
+VBO strategy:
+
+   first, put vertex coordinates into VBO, leave indices in user memory.
+   put all nplots*npoints vertices into one VBO, thus we only need to worry about one binding.
+   only need to bind one buffer, to target GL_ARRAY_BUFFER,  usage GL_STATIC_DRAW
+   use glBufferSubData() to put an individual plot's vertex coordinates into the VBO.
+
+OK - this initial VBO strategy seems to be working, at higher
+performance, too.  Now, we need to solve the problem that changing
+nplots (i.e. adding and removing rows or columns of plots) causes a
+crash.  This is because we need to release and then recreate the VBO
+to be larger/smaller according to whether nplots increases or
+decreases.  This may also be an issue when npoints increases/decreaes,
+for example by killing points or (soemday) appending points.  Anyway,
+we will need to rexecute the logic in initializeVBO when things like
+this happen. (i.e. a new call to glBufferDataARB() with more/fewer
+reserved bytes).  It disturbs me that allocation/deallocation is being
+spread around in so many different places.  Sounds like an
+anti-patterm :-(
+
+Later VBO strategy, to save memory.
+   free user vertex memory after copying it to VBO.  Keep only one user vertex array around?
+Another VBO strategy to save time and even more memory
+   or use glMapBuffer() to get ptr to gpu meme, and put (newly computed) vertices directly in it, saving time ad memory.
+And another (potential) speedup:
+   later, use a second vbo, with target GL_ELEMENT_ARAY_BUFFER to hold indices, usage GL_DYNAMIC_DRAW, or GL_STREAM_DRAW
+
+
+Use the following to check for openGL errors:
+#define CHECK_OPENGL_ERROR( cmd ) \
+     cmd; \
+     { GLenum  error; \
+       while ( (error = glGetError()) != GL_NO_ERROR) { \
+         printf( "[%s:%d] '%s' failed with error %s\n", \
+	         __FILE__, __LINE__, #cmd, \ 
+                gluErrorString(error) ); \
+     }
+
+
+To try and debig graphics, eliminate flushes, etc.
+  try mode=FL_SINGLE (seems to be double)
+  try mode=FL_FAKE_SINGLE (fake single using double. ???)
+  try setting damage(0) for Gl_windows.  unset it later.
+
+Forget that.  I just removede the flushes and performance is way better, at least for VBOs on the mac.  
+AND it fixed the spinning screws up selection bugs (even without VBOs)
+
+Here are the performance figures with all FL::flush() calls removed:
+test is: ./vp -f b -i ~/data/stars/tycho.bin -r 5 -c 5
+then seeing how long it takes in seconds to completely rerender 10 inverted selections (press 'i' 10 tiems fast at clock=0)
+
+VBO=no, FAST_APPLE_VERTEX_EXTENSIONS=no  12 secs
+VBO=no, FAST_APPLE_VERTEX_EXTENSIONS=yes 7.5 secs
+VBO=no, FAST_APPLE_VERTEX_EXTENSIONS=yes 4.1 secs
+
+Trying to put indices into a VBO, too.  Hard freeze here on
+tycho.bin. all points=0 on synthetic data.  it seems that
+indices_selected_packed or its mapping is messed up.
+Debugging strategy: use indices_selected_packed as index array without
+VBOS (i.e. using old vertex array) 
+
+Another performance idea (for OSX).  Experiment with  GL_APPLE_flush_render
+http://developer.apple.com/graphicsimaging/opengl/extensions.html#GL_APPLE_flush_render
+inside of FLTK?
+
+do not waste too much time on this......  Need to get on to other
+things.
+
+23:21:07 28 Oct 06
+
+Wasted all afternoon trying to get shared VBOs for indices (GL_ELEMENT_ARAY_BUFFER).  It just doesn't work.
+
+Maybe I should go back to using glColorPointer(), which should be able to be shared more easily.  And not use glDrawElements().
+
+And how should I stash this partially working code?
+
+Need to pull out GL_ELEMENT_ARAY_BUFFER stuff, but leave in my other fixes.
+
+15:09:13 29 Oct 06
+
+Got GL_ELEMENT_ARAY_BUFFER VBOs working by using a separate VBO for indices from each selected set.
+This reserves more space on te GPU thean it needs to, and probably more time.
+There are probablty still crashing problems if one adds and removes plots, etc.
+I'm going to check this in anyway, and back it out or fix it up later
+
+Mon Oct 30 16:11:40 2006
+
+1. Paul must fix RELOAD to use correct axes values.  May have to call extract_and_redraw()
+2. If easy, add a confirm dialog before over-writing files.
+3. After paul makes these patches, we will make a new release.
+4. And we will get him going with Makefile (for e.g. fltk-1.1.x) and win32 svn client.
+
+11:22:25 31 Oct 06
+
+TODO:
+  build script / build instructions
+  compile for powerpc
+    upload to trotsky
+    make tarballs for mac & linux versions    
+  VBOS for indices
+    does glDrawElements() have to start from 0 when indices are in a VBO?  Is this a GL bug?
+    does glBufferSubData() have to start from 0? 
+    Or do multiple calls behave in an unexpected way?
+  VBOs to conserve main memory - can we do it
+  point sprites
+  hls for color selection
+  see bugs & ideas file
+  add back reading from stdin
+  code walkthrough
+  write paper
+    submit to arxiv, NASA TR
+  start opensource proceedure
+  write eric for viewpoints.org?
+  software of the year
+  presentation(s) at arc
+  presentations at fermilab, slac.....
+  FAQ
+  changelog ?
+
+12:45:04 03 Nov 06
+
+why does the linux version crash on xx.to ?
+
+add "blend" button, default=on, which turns blending on/off.
+
+allow different textures (sprites) for different selected sets.
+
+add separate control of point appearance (hue, lum1, lum2, size,
+symbol, alpha?...) for selected and deselected sets. Could have
+"broadcast" switches (default=on, or "local", default=off) which
+controls whether or not the parameter it controls are broacast to
+(i.e. used by) the other windows.  Panels could also have "protect"
+switches which protect them from these broadcasts, similar to "lock
+axis" protection.  When the global panel is active, changes to the
+selected set's appearance affect all selected points in all windows.
+
+could decouple selections from windows: choose a "brush", select
+anywhere, maybe choose another brush, select anywhere.....  Could
+optionally have windows remember the last brush they were using.
+
+need to be able to selectively clear a window's selection without
+clearing everything.  This might be much easier with (per-window)
+brushes - just reset a particular brush to have the characteristcs of
+the non-selected points?
+
+could optionally allow point size to scale with window transformation.
+
+can optionally use glPointarameters() size scaling when third axis is
+active.
+
+Definitely have luminance scale with plot (optionally).
+
+Have optional legend, (on lum, etc, sliders?) that is a fat line drawn
+0,1,2...1000 times, on top of itself, shorter each time, with the
+appropriate color, blending, etc.
+
+can we use fog to change color based on "third" axis in 2D plots?  3D plots?
+
+Ideas for paper:  Good survey at:
+  wiki.eurovotech.org/pub/VOTech/DS6RelatedPublications/DimenReducAlgs.pdf
+  vp may excel at:
+    Data ink ratio = (data ink)/(total ink in the plot) 
+    Data density = (number of entries in data matrix)/(area of graphic) 
+
+ideas from rank ordering (Schneiderman & Seo)
+  univariate orderings (to order axis in axis menu?)
+   Size of the biggest gap (0 to max range of dimensions): 
+   Normality of the distribution (0 to inf): 
+   Uniformity of the distribution (0 to inf): 
+   The number of potential outliers (0 to n): 
+   The number of unique values (0 to n): 
+   Size of the biggest gap (0 to max range of dimensions): 
+   kurtosis
+   skew, etc.
+   entropy, burges entropy, etc...
+  Bivariate orderings
+   pearson
+   entropy
+   # outliers
+   MI, etc, etc
+   # in "region of interest" (see below)
+   Chi^2 (see. p86 of ftp://ftp.cs.umd.edu/pub/hcil/Reports-Abstracts-Bibliography/2005-20html/2005-20.pdf)
+
+  scatterplot browser, esp. axis sliders.  see fig. 3 (& test) of Seo & Schneiderman
+   /www.cs.umd.edu/hcil/multi-cluster/presentations/seo_shneiderman_rff_ivs.pdf
+  or browse in 2D ordering diplay (slide vert, slide horiz...)
+    3rd component?
+  after (or before) doing this, we can generalize to meta-scatterplot.
+    E.g. plot pearson vs. MI where each point represents a bivariate scatterplot.  select in here.
+  
+10:16:24 05 Nov 06
+
+Memory Performance puzzle: (OSX)  Read in 10 million points, six vars.  2 windows.  My calculations are:
+
+ theoretical: 10 M ps * (6+4) var/pt * 2 wd/var * 4 byte/wd  +  2 window * 10 M vert/window * 4 wd/vert * 4 byte/wd = 800Mb + 320Mb = 1120Mb
+
+ but performance monitor (big top) shows: 1900Mb VM (1500 MB resident)
+
+ seems to be using 2-3 x as much memeory as it should.  Bad.  Why?  Attempt to debug using
+
+                                  virtual  resident
+   npoints nvars nplots predicted measured measured
+   10M     6     2     1120MB     1900MB   1500MB
+    1.1M   21    2      210MB      667MB    280MB
+    1.1M   21    25     600MB      953MB    953MB
+    
+ checking with ObjectAlloc tool suggests ranked data is being kept
+ both per plot and globally.  Let's check this.  There are a lot of
+ global arrays, especially having to do with selection.  Do we need
+ *all* of them? identity - do we need it?
+  
+ OK - tried to eliminate the separate ranked data held be each & every
+ plot window, by replacing it with aliases tot he globally raked data,
+ which is kept around anyway.  This seems to work.  But memory s still high:
+  
+ looks like 2M points are allocated, even when npoints<2M
+
+                                  virtual  resident
+   npoints nvars nplots predicted measured measured
+   10M     6     2      1120MB     1700MB   1300MB
+    5M     6    10      1200MB     2250MB   1370MB
+    1M     6    50       900MB     2000MB   1300MB
+    1M     6     1       100MB      600MB    190MB
+   10M     6     1      1000MB     1400MB    873MB
+
+  Well, objectalloc says the last case is only using 900MB, so maybe the resident size is all that matters?
+
+  more investigations later.
+
+  One thing we coud do is eliminate the vertexes from plot_window
+  (when using VBOs).  Just store them in their VBOs, and not in main
+  memory.
+
+15:19:32 30 Nov 06
+
+IDEA: when reading only one column, create a "line number" column.  So that basic plotting works.  
+  perhaps there should always be a line number column.  (It does not need to be sorted).
+  (actually, no.  It could be created, optionally, say via a cmd line argument.  it should be
+  created automatically only when there is but a single column in the input data file.
+
+14:09:41 04 Dec 06
+
+FROM my todo list:
+
+ set up presentations
+    slac, arc, fermilab....
+  build script / build instructions
+  compile for powerpc
+    upload to trotsky
+    make tarballs for mac & linux versions    
+  VBOS for indices
+    glDrawElements() have to start from 0?
+    does glBufferSubData() have to start from 0? 
+    Or do multiple calls behave in an unexpected way?
+  Run time VBO check, cmd line arg.
+  VBOs to conserve main memory - can we do it?
+  More symbols.
+  Histogram filled. (w/alpha).
+  use hls for color selection
+  Brush object - has hls, color, symbol, size, footprint...
+     All points render using brush 0 initially
+     All windows start selecting using brush 1...
+     maybe not
+     Any window can change which brush it uses dynamically
+     Updates to brush properties are implicitly broadcast
+  need "overlap" (multiple selection) brush too
+  Windows also have additional brightness, bkg, size...
+  Windows need overplot button, default=on
+  3 modes for auto-clear selection:
+    always
+    when focus changes
+    when focus returns
+    never
+  "track cursor position" mode - prints numeric posn.
+  merge these w/bugs & ideas file
+  add back reading from stdin
+  code walkthrough
+  write paper
+    submit to arxiv, NASA TR
+  start opensource proceedure
+  write eric for viewpoints.org?
+  software of the year
+  open source approvals.
+  presentation(s) at arc
+  FAQ
+  man page
+  changelog ?
+
+20:19:05 06 Dec 06
+
+  Use Flmm_tabs for tab bar - it allows an arbitrary number of tabs.
+
+  Make organized list of vp tasks/features/fixes.
+
+17:45:19 03 Jan 07
+
+Insstead of plotting x_i_k in column i vs. x_j_k in column j for each row k, create new "virttual" data file (perl?) containing 
+
+
+k i x_k_i and read that in.
+
+12:09:50 04 Jan 07
+
+Meetging w/Paul
+
+priorities:
+
+For intial release:
+
+1) VBO command line argument
+   -- done
+
+3) Fix sprites for selected only or remove them
+
+4) Fix brightness sliders
+
+4.5) window titles: "plot 4, pressure vs. temp"....
+
+5) Documentation is accurate (readme, man page, about.html)
+
+6) remove "line number" from asci/binary output
+   -- done
+
+6.5) fix "sum vs. diff" noralization so data remains (approximately) centered in window.
+   -- done
+
+7) Paul fix bugs in file chooser path
+
+8) test
+
+9) freeze, zip, and post
+
+10) send out email
+
+11) Schedule more talks/demos/marketing
+
+12) Roses proposal
+
+13) if possible, buttons in file dialog for: file type, selected/nonselected/all, line number/not, header modification, selection id.
+
+14) if possible, pop up a confirm quit window when quitting, and when the user closes the control panel window, or the last plot window.
+
+For "official" release
+
+1) Paul one-click svn for windows
+
+2) Paul break dependecy on devc++ devpack
+
+3) fltk 2.0 / remove flews
+
+4) Brushes
+
+5) spreadsheet view?
+
+6) some sort of save state
+
+6) Fix window tiling to eleiminate big spaces between windows, make sure borderless works on mac.
+
+6) mouse cursor tracking (option)
+
+7) selection box dranw w/selection (brush) color
+
+8) more file types
+
+8) axis slider(s) (on plot windows?)
+
+8) mutual info, corelation, etc, ranking in background, fed to change axes
+
+9) axis pair(s) display(s), for selecting pairs based on MI, core, etc.
+
+8) web site
+
+9) freeze, test, zip, post, email.
+
+10) software of the year.
+
+10:54:41 18 Jan 07
+
+"spin" control is too fast.  Scale down rotation angle fro mrot slider before accumulating during spin.
+
+11:47:35 05 Feb 07
+
+ideas for histograms & densities:
+
+1. make histogram stuff per axis
+   on/off, type (none, equiwidth, equidepth, ash...), nbins, scaling, coloring/filling
+2. add new types (equidepth!)
+3. create new variable (or "normalization"/transform): density estimate based on 1-D histogram
+4. then allow user to form conditional estimates and joint estimates and product estimates.
+5. Is conditional estimate P(y|x) something like the x-rank of a point within a particular y-bin?  
+   In any case, that's what I want for voronoi volume of galaxy cluster normalized by distance.
+
+We could do some nice ui things (in opengl windows) with Fl_Menu_Button::type(POPUP[123]).....
+
+23:01:51 09 Feb 07
+
+first attempt at conditional density estimation (overlaoded "polar")
+need to make it real.
+
+should probably order (pairs of) variables by "maximum marginal diversity" see Vasconcelos NIPS 2002
+
+21:59:20 23 Feb 07
+
+Philip (philip@dhapdigital.com) says look at the recent google paper on storage, and at splunk, for vp applications & press.
+
+18:05:25 31 Mar 07
+
+Fixed index VBO bug when number_selected(set)==0
+
+need to add jittering, but first add "real" rank normalization, where
+items with the same value (and hence the same rank) get equal values
+for rank.
+
+Here's how: ad a normalizatio scheme that first ranks the variable,
+then creates a new set of points (like log does) that runs through the
+array in rank order, and increments a counter when ever the real value
+changes, sorting the counter succesively in the new array (idirecting
+through rank, of course).
+
+Then, we can jitter all points with the same rank by
+uniform_rand(-0.5,+0.5)*jitter_slider(?)
+
+13:13:28 04 Apr 07
+
+I think we can do almost all of vp in the GPU, using a vertex program.  We canassemble the vertex coords from different arrays (for x, y, z) check which brush covers each vertex (even for soft brushes), color the vertex appropriately, ksource the vertex component data from separate buffers without overlapping (with separate initial offsets for timeseries), apply per window filters...., source high dimensional vertices and apply high dimensional rotation matrices, do log scaling, use vertex texture lookup for nonlinear transformations (mds, etc)...  
+
+Then use fragment shaders and render to texture to do density estimates, density derivatives, and density functionals (for 2D densities), including on cutting planes (grasmannians) for grand tour projection persuit...
+
+18:39:01 12 Apr 07
+
+IDEA: use multitextures to combine (mix, intersect, etc) mutliple
+selections/brushes.  
+
+IDEA: use generalized Venn diagrams from that
+weird book to specify mixing algorithm.  I.e. color the regions of the
+ven diagram to show how points that are touched by multiple selections
+should be rendered.
+
+IDEA: use GPU to do nearest neighbors and N-body-like forces,
+multipoint statistics, and spherical statistics using multiple buffers
+for accumulation.
+
+IDEA: have points / glyphs that scale with zoom.
+
+17:35:01 24 Apr 07
+
+Keep track of when last window is hidden, and reinitialize sprites.  When last window is destroyed, re-initialize context.
+
+09:57:24 05 May 07
+
+vp should read CDF files
+
+(well, maybe not)
+
+19:49:01 02 Jun 07
+
+got symbols done.  Now on to brushes.  
+Brushes will affect all windows.  Brushes will have
+  symbol, size, color (HLSA), lum1? lum2?, solo
+Windows will have
+  lum1, lum, solo (or mask buttons), scale poinst with xform button
+Selection action will have:
+  replace selection
+  add to selection
+  subtract from selection
+  complement
+perhaps bushes should have, or be governed by, the window tabs (1,2,3... ALL) like other controls.
+  perhaps choosing the brushes tab should choose the ALL tab, but then the user could change it back
+  when selecting a new data window, there are several modes:
+    new brush (with new default color) for each window
+    same brush unless changed <---
+
+21:58:19 04 Jul 07
+
+Ideas:
+
+(simple)
+
+add "dominates" functional - replaces y with fraction_dominated(x,y)
+prepend axis transform ("log", "rank", etc) to vairbale name for axis label
+
+15:01:29 10 Jul 07
+
+For vp to work correctly on a machine, it must be built with some
+libraries linked statically, and others dynamically. The "right" way
+to do this is with explicit commands to the linker, but I don't know
+how to do this yet.  (g++ -l static does not give fine enough control
+for what we need to do, and it seems like g++ does not directly use ld
+for linking, but instead usses collect2, which I do not understand
+yet).  Anyway, here are the libraries that must be statically linked,
+since we cannot assume the user has dynamic versions on their machine:
+
+ libblitz
+ libfltk
+ libfltk_gl
+ libflews
+ libgsl
+ libboost*
+ libm (OSX?, Linux?)???
+
+The safest think to do with the above is to make sure they only exist
+as static libraries (.a files) and not as dynamic libraries (.so or
+.dylib files on linux and OSX respectively).
+
+After a vp executable is built, but before it is released, it is
+important to check and make sure that none it is not accidentally
+linked against any dynamic libraries where static libraries are
+required, and vice versa, since either condition will cause it to
+abort or misbehave on a user's machine while not exhibiting such
+misbahvior on the build machine.
+
+To check this on OSX, run the following commands from the src/vp
+directory:
+
+ % make clean
+ % make
+ % make release
+ % otool -L viewpoints.app/Contents/MacOS/viewpoints
+
+The output from the otool command (on OSX) shows the dynamic libraries
+required by the vp executable.  The output should look very much like:
+
+viewpoints.app/Contents/MacOS/viewpoints:
+	/System/Library/Frameworks/AGL.framework/Versions/A/AGL (compatibility version 1.0.0, current version 1.0.0)
+	/System/Library/Frameworks/OpenGL.framework/Versions/A/OpenGL (compatibility version 1.0.0, current version 1.0.0)
+	/System/Library/Frameworks/Carbon.framework/Versions/A/Carbon (compatibility version 2.0.0, current version 136.0.0)
+	/System/Library/Frameworks/ApplicationServices.framework/Versions/A/ApplicationServices (compatibility version 1.0.0, current version 34.0.0)
+	/System/Library/Frameworks/vecLib.framework/Versions/A/vecLib (compatibility version 1.0.0, current version 242.0.0)
+	/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 111.1.1)
+	/usr/lib/libmx.A.dylib (compatibility version 1.0.0, current version 292.4.0)
+	/usr/lib/libstdc++.6.dylib (compatibility version 7.0.0, current version 7.4.0)
+	/usr/local/lib/libgcc_s.1.dylib (compatibility version 1.0.0, current version 1.0.0)
+	/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices (compatibility version 1.0.0, current version 32.0.0)
+	/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 476.14.0)
+
+(with perhaps higher version numbers, but NO ADDITIONAL dynamic
+libraries.  Be especally way that it does not show any lines with
+libgsl*.dylib, libblitz*.dylib, or libboost*.dylib and if it does,
+delete all dynamic versions of those libraries, and run all the make
+commands and the otool command again.
+
+To perform the check on linux, run the following command:
+
+  ldd vp
+
+the output should look something like the following:
+
+	Libgl.So.1 => /Usr/Lib/Libgl.So.1 (0x00d43000)
+	Libglu.So.1 => /Usr/X11r6/Lib/Libglu.So.1 (0x00c21000)
+	Libxft.So.2 => /Usr/X11r6/Lib/Libxft.So.2 (0x0060f000)
+	Libxext.So.6 => /Usr/X11r6/Lib/Libxext.So.6 (0x00ab8000)
+	Libstdc++.So.6 => /Usr/Lib/Libstdc++.So.6 (0x0076d000)
+	Libm.So.6 => /Lib/Tls/I686/Libm.So.6 (0x00a20000)
+	Libgcc_S.So.1 => /Lib/Libgcc_S.So.1 (0x00605000)
+	Libc.So.6 => /Lib/Tls/I686/Libc.So.6 (0x0090b000)
+	Libx11.So.6 => /Usr/X11r6/Lib/Libx11.So.6 (0x0023c000)
+	Libglcore.So.1 => /Usr/Lib/Libglcore.So.1 (0x04987000)
+	Libnvidia-Tls.So.1 => /Usr/Lib/Tls/Libnvidia-Tls.So.1 (0x00a4b000)
+	Libdl.So.2 => /Lib/Libdl.So.2 (0x00a45000)
+	Libxrender.So.1 => /Usr/X11r6/Lib/Libxrender.So.1 (0x00b0b000)
+	Libfontconfig.So.1 => /Usr/Lib/Libfontconfig.So.1 (0x005b0000)
+	Libexpat.So.0 => /Usr/Lib/Libexpat.So.0 (0x00cee000)
+	Libfreetype.So.6 => /Usr/Lib/Libfreetype.So.6 (0x00111000)
+	/Lib/Ld-Linux.So.2 (0x008f4000)
+	Libz.So.1 => /Usr/Lib/Libz.So.1 (0x00b3c000)
+
+It must NOT contain any reference to dynamically loaded
+blitz, gsl, boost, fltk, or flews libraries.
+
+
+18:09:06 31 Jul 07
+
+Idea: Just addd lines rendering.  end each line when brush ends.
+Add a "group id" column (intger) *sort of like "brush id / selection id" as a column.  break line strips when group changes.  Could use alpha values=0 at boundaries between lines, then just render all lines with one line strip.Alpha test (or stencil test....) could handle  this.  noo... i guess not.
+Q: how does this interact with brushes/selection?
+Groups could be a range (or set) of columns, instead.  Groups could render as, e.g. lines.  Each line could be offset by another column (e.g. class, line number....)
+
+09:04:57 03 Aug 07
+
+Mike says "add tooltips".  And creon says "add a way to turn them off".
+
+// the following commented-out line should be conditional on a "scale points with view" button
+// there should also be minimum and maximum bars on the point size slider
+// the maximum size should clamp or at least warn if pointsize > 1 && pointsize^2*npoints > some graphics board dependent constant
+// i.e. pointize=20, npoints=2e6 -> pointsize^2*npoints=800e6 -> 800 million pixels to rasterize if all points are being displayed.
+// glPointSize(min(zscale*max(cp->pointsize_slider->value(), /*min_pointsize_slider->value()* */1.0),50.0));
+
+Preparing for brush object.
+Will have brushes, selectors, selection, blending
+
+We will start with one brush per plot, and two additional brushes:
+"unselected" (not yet brushed) and "overlap" (brushed with more than
+one brush)
+
+1. Brushes paint attributes onto the points that are selected while
+using the brush.  Atributes include:
+      color
+	predefined distinct default color for each brush.
+	set of 7 discrete hues to select from (R,G,B,C,M,Y,G).  Or continuous hue.
+	lightness, saturation, and alpha.
+	also, perhaps, a constant color?
+      size (with min and max and possible max warning, see above).
+      symbol
+
+2. Selections are made using selectors. As a selection is updated, it
+uses the current brush to paint the selection, and restores the
+previous paint to any points that become unselected as its selection
+changes.  Selectors can be:
+	  a rectangle (basic)
+	    draw with the mouse, or
+	    set using xmin, xmax, center & width sliders for each axis, or
+	    set using typins on those sliders
+	      there will be an "all" setting for the sliders.
+	      the sliders _could_ be on the plot's axes themselves.  Direct manipulation.
+	  an ellipse
+	    as above
+	  a rotated rectangle or ellipse
+	    later
+	  polygon, lasso
+
+Selectors also have a combiner function, such as:
+	  replace previous selection
+	  add to previous selection (union)
+	  subtract from previous selection (difference)
+	  select from previous selection (intersection)
+
+	  undo
+	  invert this brush's selection
+	  clear this brush's selection
+	  clear all selections	  
+
+Selectors also have "mouse actions" such as:
+	  create new selector (default)
+	  translate previous selector (shift key)
+          update selection on drag, or only update on release (for huge data)
+  	  these all have interacts with the sliders, above, i.e. one can translate a selection with the center slider.
+
+3. Blending.  Points (splats) are blended or composited under the control of the "mixer".  The controls include:
+   Drawing order
+     Top, bottom, up, down
+   turn individual brushes on/off
+   solo this brush
+     don't show others
+     show others dimly
+     don't composite others
+     highlight this brush
+   solo next brush
+   solo previous brush
+     skip brush 0
+   compositing:
+     brighten
+     darken
+     saturate
+     ...
+     none
+
+Libraries to add:
+
+  http://fltk.org/links.php?V96+Q   table widget for text view.  Up to 2 billion rows!  (may be obsolete)
+  http://www.seriss.com/people/erco/fltk/Fl_Table/screenshots.html  new table. Can it hadle big data?
+  http://www.osc.edu/archive/FLU/ spinner and cancellable progress meter
+  quaternion trackball rotations
+
+Also add:
+  readouts for:
+    box bundaries
+    mouse position
+    snap to nearest point
+
+Grids & Ticks
+  minor and major lines, thickness, brightness
+  ticks in, out, or full gridlines
+  numbers on ticks
+  decimal places (auto)
+
+Axis
+  replace column heading with log(x1), etc.
+
+IDEA: separate transforms from normalizations.
+  Normalizations are monotonic and transform one axis only (e.g. log, rank)
+  Transforms operate on two or more axes (i.e. conditional probability)
+
+IDEA: use Pauls "merge data" idea to read back in new columns that
+have been created by a filter on existing columns.
+
+IDEA: use fltk::add_handler() to handle global shortcut keys, that
+work in plot windows or control panels, like "clear selection" and
+"reset view", etc.
+
+00:44:26 07 Aug 07
+
+IDEA
+
+each brsuh has "clear my selection" ('c') (except, of course, brush 0, where it is disabled?)
+there is also "clear all selections" ('C')
+in general, shift-cmd should broadcast to all brushes or plot-windows, respectively.
+
+IDEA (tweaked)
+
+Give each brush a "connector" as well as a symbol.  Connectors are GL_POINTS, GL_LINES, GL_LINE_LOOP, GL_QUAD_MESH, etc...
+Use a column as a "sub-brush", which groups the GL_LINES, etc, for drawing - i.e. it breaks them when the subbrush changes.
+This can probably be done with glDrawElements() or glMultiDrawElements(), since there is an implicit glEnd() anter the elements have been drawn. (there are multiple glEnd()s implicit in glMultiDrawElements(). )
+
+01:26:35 11 Aug 07
+
+BUG why does the 'r' key in a plot window work (reset view) but the
+button in the control panel only stops spinning but doesn't reset the
+rest of the view (scale, etc.) ?
+
+IDEA: tootltips
+
+00:15:18 16 Aug 07
+
+from http://www.research.att.com/~bs/bs_faq2.html#coding-standard
+
+Q: Why doesn't C++ have an equivalent to realloc()?
+A:If you want to, you can of course use realloc(). However, realloc() is only guaranteed to work on arrays allocated by malloc() (and similar functions) containing objects without user-defined copy constructors. Also, please remember that contrary to naive expectations, realloc() occationally does copy its argument array.
+
+In C++, a better way of dealing with reallocation is to use a standard library container, such as vector, and let it grow naturally. 
+
+13:13:45 30 Aug 07
+
+Add "do not draw" to (upcoming) "drawing & blending" brush menu:  
+  intensity blending
+  saturation blending (?)
+  overwrite (no blending)
+  low intensity
+  draw first
+  draw last
+  do not draw 
+
+This sould help implement "solo" feature
+
+Add "copy plot parameters" and "paste plot parameters" to allow easy setup of "duplicate" plots.
+
+15:20:00 05 Sep 07
+
+idea: get rid of all c-style IO and then:
+
+   std::ios::sync_with_stdio(false);
+
+should speed things up?
+
+idea: use boost::multi_index to hold conditioning varaible window for quick updates, or use the new libg++ policy based containers.
+
+17:21:34 11 Sep 07
+
+Ideas for cleaning up vp by adding class Data_Column and class Plot_Axis.
+
+Present big 2D data() array will be replaced by a vector (or multi-index-container) holding instances of Data_Column.
+The right number of data columns will be created when vp starts, based on the number of variables in the file header.
+Data_Columns can be dynamically created using internal or external routines, or by reading in more data from pipes or files.
+
+Class Data_Column should probably have:
+  int index (column number)
+  string name
+  float maxval, minval
+  blitz float array of actual values
+  bool sorted
+  blitz int array of sorted indices,
+  bool memory_mapped & associated mapped file data
+  other stuff like hash keys or other variants if it is a non-numerical data column
+  (boost::smart) pointers to all Plot_Axis that depend on this column (I hope we don't need this)
+
+Class Plot_Axis
+  string label
+  Data_Column *dp // if it comes directly from a data column
+  float max, min  // for axis
+  float wmax, wmin  // for window extents
+  blitz 1D float array of values (normalized, xformed, etc)
+  offsets (for timeseries)
+  normalization_style
+  histogram info
+  tick & grid data
+  pointer to Plot_Window(s) displaying this axis.
+
+We shoudl probably split out the view-dependent parts of an axis from the data dependent parts? I.e. to conserve storage & time when several plots are displaying the same values but with different openGL viewing xforms, or displaying different 2nd & 3rd axes? (assuming I can write the magic vertex program to take separate vertex components form separate arrays).
+
+How do VBOs fit in?  Class VBO?  Leave them alone?
+
+16:09:44 13 Sep 07
+
+Simple idea: seprate 2D plots from 3D plots.  2D plots do not need to
+waste vertex mememory with z=0.  This should recover 50% of vertex
+memory on the CPU and the GPU for sploms containing 2D plots only.
+However, this will require VBOs to be handled differently, since
+currently thay are hard-coded to allocate npoints*3*sizeof(GLfloat)
+
+
+16:36:57 14 Sep 07
+
+Paul will work on the data column class.  And the file output/input dialogues, including #of rows, and optional autodetect.
+Creon will work on brush soloing, axis class, and vertex programs.
+
+But the real power is going to come with:
+
+ 1) creating columns by piping existing colmns to external apps (like awk, plastic, etc) and accepting new ones (unix pipe metaphor).
+
+ 2) Merging databases - creating new colmns from non-conforming tables via relational lookup, interpolation, etc.
+
+
+21:31:57 30 Sep 07
+
+presentation possibilities
+  SLAC, Grav probe B, Kavli (Jef Scargle)
+  Stanford - Megan Spencer
+  ARC 
+    aero - Lynda Haines
+    NAS - ?
+    robotics
+    kepler
+    Nano 
+      - Rich Jaffe
+      - Mino Freund
+    Friedeman
+    Ames space policy group (Will)
+    Surdar
+    Coughlan
+  Berkeley astro
+  Other NASA centers
+  
+17:31:53 05 Oct 07
+
+IDEAS
+
+add "zoom to selection" - should be smooth.
+change zoom to use mouse down point as zoom center.
+add collapsing groups (from FLU)
+   find the author
+   will they be in fltk 2.0
+investigate qt4
+add save/restore state
+add "propagate" selection(s) based on equality in column?
+Or, add "folding" of data (on column?), e.g. on time value, to 3d dimension in able, then sweep through 3rd dimension, preserving selections.
+  What else can we do with "folding", or similar reshaping..  Can we replicate (some) columns?  Can we virtualize?  
+Or, is there a more general solution?
+
+09:19:29 10 Oct 07
+
+Add scrols to control panel (vertical).
+
+16:46:12 11 Oct 07
+
+BUG - merge data resets all plots, axes, etc.  Bummer.
+BUG - renrmalizign one axis resets all axes i a plot.  Bummer.
+
+01:48:01 14 Oct 07
+
+IDEA - use strides to do quick folding implementation --stride=<int>,
+and glMultiDrawArrays() (probably glMultiDrawElements() ), first with
+GL_POINTS, then with GL_LINE_STRIP.  Also use blitz where() statement
+to propagate (spread, in *lisp parlence) the selections based in the
+condition in ehe where(), and the selected spread axis.
+
+13:09:12 20 Oct 07
+
+BUG delimiter characters dont work right.  Column headers (and data?) containing blanks get parsed as multiple fields, even when delimiter is, say, a comma.
+
+IDEA: just add mask brush (sets alpha of all points outside to zero), and add spread function, and maybe a +1/-1 slider for mask, for folding points.
+
+18:02:10 24 Oct 07
+
+fixes: 
+
+  move blending menu to plot window, appply per plot rather than per brush
+  same for alpha cutoff (move under bkg).
+  eliminate all2 & all3 blend modes
+  zbuffer test sign reverse
+
+  saturation blending too?
+  brush solo
+  maskout
+  half float framebuffers
+  
+12:47:44 06 Nov 07
+
+IDEA: use stencil buffers to correctly implement single-brush
+blending.  Render brushes from topmost to bottommost, decrementing
+stencil value each time?  Or something like that.  Can also respect
+z-buffer.
+
+PDL:
+ enable stenciling
+ clear stencil buffer to zero
+ for each brush number n, from highest number (topmost) to lowest (0, unselected).
+   // the next two lines cause the stencil test to pass if the current brush has a higher number
+   // than any previous brush which touched the pixel.  If the test passes,
+   // we write n+1 into the stencil buffer.  I.e, if a pixel has not yet been touched, then this brush can 
+   // write to it, over and over, and so composite with itself only..  But if a higher number brush has 
+   // already written into the pixel, the stencil test fails and the pixel is not over-written.
+   call glStencilFunc (GL_GEQUAL, n+1, 0xFFFF);
+   call glStencilOp (GL_KEEP, GL_KEEP, GL_REPLACE);
+   draw brush normally.
+ end for
+
+  
+17:06:07 11 Nov 07
+
+Paul S. says use redmine for open source peorject mgmt.   It looks OK, if we have our own (virtual) server.
+
+18:08:27 16 Nov 07
+
+Use the 3 argument form of istream::getline (see http://www.cplusplus.com/reference/iostream/istream/getline.html ) to read tokens using delimiter?  Q: does it stop at EOL even if \n is not the supplied delimiter?  A: no, it does not.  So, we need to read the whole line, then parse based on delim. char.  Should be a std::string function for this.  string::find_first_of() and substr().
+
+Also see Ttokenize() in http://www.faqs.org/docs/Linux-HOWTO/C++Programming-HOWTO.html
+
+17:39:49 23 Nov 07
+
+Delimiter "none" on write file?  What does that mean?
+Save all data, ascii, save selectio info., delimiter comma, enters loop of repeated fileio panels.
+All file save enters infinite panel loop.
+
+00:29:53 06 Feb 08
+
+Paul's -C option:
+
+histograms don't get saved
+rank norm no save?
+
+07:46:50 04 Mar 08
+
+According to: http://developer.apple.com/documentation/GraphicsImaging/Conceptual/OpenGL-MacProgGuide/opengl_performance/chapter_13_section_2.html#//apple_ref/doc/uid/TP40001987-CH213-SW12
+
+Retrieve Error Information Only When Debugging... During development, it's crucial that your code contains error checking routines, not only for the standard OpenGL calls, but for the Apple-specific functions provided by the AGL and CGL APIs.  If you are developing a performance-critical application, you'll want to retrieve error information in the debugging phase. When you deploy your application you'll want to remove the error-retrieval information for all but the most critical cases. If you retrieve error codes and strings for frequently-called functions, you'll cause performance to slow down.
+
+12:37:21 25 Aug 08
+
+Next to add:  pipe to external process to create new column.
+PDL
+  Display modified version of Paul's column chooser under tools->new column
+  user chooses some columns 
+  user inputs shell command to process columns, e.g. "awk '{print $1/$2}'"
+  write file of chosen columns to tempfile1
+  fork process to execute shell command, stdin from tmpfile1, stdout to tmpfile2
+  merge data using tmpfile2 as data source
+  unlink tmpfile[12] ?
+
+09:24:40 16 Sep 09
+
+trying to build on OSX 10.6 (snow leopard)
+
+building fltk a problem.  succeeded using:
+
+	  setenv CC "/usr/bin/cc" 
+	  setenv CFLAGS "-arch i386 -O3 -isysroot /Developer/SDKs/MacOSX10.6.sdk" 
+	  setenv CXX "/usr/bin/c++" 
+	  setenv CXXFLAGS "-arch i386 -O3 -isysroot /Developer/SDKs/MacOSX10.6.sdk" 
+	  setenv LDFLAGS "-arch i386  -isysroot /Developer/SDKs/MacOSX10.6.sdk"
+
+	  ./configure --enable-gl --enable-quartz --enable-threads
+
+building flews-0.3.1 had problems.  Succeeded by:
+Using the above environment settings.  
+modified Makefile.in to have:
+
+	 CFLAGS	=	@CFLAGS@  -I./ -I/usr/local/include/
+	 CXXFLAGS =	@CXXFLAGS@ -I./ -I/usr/local/include/
+	 #LIBS	=	@LIBS@ -lXext -lX11 -lm `fltk-config --ldflags`
+	 LIBS	=	@LIBS@ -lm `fltk-config --ldflags`
+
+	 ./configure --without-x
+
+To build vp, modified makefile to add the above CXXFLAGS and LDFLAGS when on darwin intel
+Linked with old gsl, boost, etc.  Will probably need to fix these too.
+
+Todo: add new flews to source tree.
+
+BUGS!  kill selection and write selected data seem to write random data??  Bad.
+Fixed it!  See  svn log -r 260
+
+Note: Build process needs a lot of work.  Necessary flews valuators
+and more should probably be moved into vp, to avoid build issues. Need
+to fix all compiler warnings. Elements of c++ style rule: Compile
+cleanly and without warnings.
+
+Note:  It is not clear that fltk is going to survive in the 64 bit apple world.
+
+Note: -m32 added to compiler flags forces 32 bit mode....
+
+Mon Oct  1 10:28:03 PDT 2012
+
+Got it compiled for OSX 10.8, checked in new sources. Had to comment out all save state stuff, since boost serielaization does not seem to compile.
+
+Uploaded new binaries.  Invited Matt the physicsist Matt <mbellis@siena.edu> to join assmebla group and he accepted.
+
+Note vp depends on non-standard flews supplied by flews author.  This should be put into vo source tree?
+
+10:28:50 17 Apr 15
+
+Started trying to compile for Yosemite 10.10.3
+new mac, new system install, new xcode
+trying to use homebrew instead of macports and fink
+installed gsl using brew
+rm /usr/local/lib/libgsl*dylib   (I know this is a hack but I do not know how to force preferential linking to a static library in the Makefile)
+make sure to configure all other libraries to build with the "no-shared" option
+installed fltk 1.3.3 from website
+installed blitz from sourceforge
+	  note its own testuite does not build.   bad.   but it still seems to work for building viewpoints.
+installed cfitsio
+compiled and linked vp
+fixed POSTRBUILD csh sccript
+make clean; make vp 
+make release
+copied vp.tar.z to assmebla
+updated assembla wiki page with link to OSX 10.10 binary release

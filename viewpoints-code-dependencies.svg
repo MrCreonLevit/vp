@@ -1,0 +1,442 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://web.resource.org/cc/"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="612pt"
+   height="792pt"
+   id="svg2178"
+   sodipodi:version="0.32"
+   inkscape:version="0.45.1"
+   sodipodi:docbase="/Users/creon/src/vp"
+   sodipodi:docname="viewpoints-code-dependencies.svg"
+   inkscape:output_extension="org.inkscape.output.svg.inkscape">
+  <defs
+     id="defs2180">
+    <marker
+       inkscape:stockid="Arrow2Lend"
+       orient="auto"
+       refY="0.0"
+       refX="0.0"
+       id="Arrow2Lend"
+       style="overflow:visible;">
+      <path
+         id="path3226"
+         style="font-size:12.0;fill-rule:evenodd;stroke-width:0.62500000;stroke-linejoin:round;"
+         d="M 8.7185878,4.0337352 L -2.2072895,0.016013256 L 8.7185884,-4.0017078 C 6.9730900,-1.6296469 6.9831476,1.6157441 8.7185878,4.0337352 z "
+         transform="scale(1.1) rotate(180) translate(1,0)" />
+    </marker>
+    <marker
+       inkscape:stockid="Arrow1Lend"
+       orient="auto"
+       refY="0.0"
+       refX="0.0"
+       id="Arrow1Lend"
+       style="overflow:visible;">
+      <path
+         id="path3208"
+         d="M 0.0,0.0 L 5.0,-5.0 L -12.5,0.0 L 5.0,5.0 L 0.0,0.0 z "
+         style="fill-rule:evenodd;stroke:#000000;stroke-width:1.0pt;marker-start:none;"
+         transform="scale(0.8) rotate(180) translate(12.5,0)" />
+    </marker>
+  </defs>
+  <sodipodi:namedview
+     inkscape:document-units="in"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="1.1282828"
+     inkscape:cx="363.15677"
+     inkscape:cy="563.30608"
+     inkscape:current-layer="layer1"
+     id="namedview2182"
+     inkscape:window-width="1092"
+     inkscape:window-height="1050"
+     inkscape:window-x="4"
+     inkscape:window-y="22" />
+  <metadata
+     id="metadata2184">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <rect
+       y="436.55893"
+       x="81.762512"
+       height="75.776711"
+       width="173.27002"
+       id="rect4137"
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.86692894;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1" />
+    <rect
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       id="rect4157"
+       width="104.58371"
+       height="76.222023"
+       x="324.22919"
+       y="348.17728" />
+    <text
+       id="text4159"
+       y="367.65265"
+       x="339.0224"
+       style="font-size:12px;font-style:normal;font-weight:normal;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+       xml:space="preserve"><tspan
+         y="367.65265"
+         x="339.0224"
+         id="tspan4161"
+         sodipodi:role="line"
+         style="font-weight:bold">Blitz++</tspan><tspan
+         y="382.65265"
+         x="339.0224"
+         sodipodi:role="line"
+         id="tspan4255">   big arrays</tspan><tspan
+         y="397.65265"
+         x="339.0224"
+         sodipodi:role="line"
+         id="tspan4257">   fast math</tspan><tspan
+         y="412.65265"
+         x="339.0224"
+         sodipodi:role="line"
+         id="tspan4259">   ...</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:12px;font-style:normal;font-weight:normal;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+       x="113.5112"
+       y="456.15967"
+       id="text4175"><tspan
+         sodipodi:role="line"
+         id="tspan4177"
+         x="113.5112"
+         y="456.15967"
+         style="font-weight:bold">OpenGL</tspan><tspan
+         sodipodi:role="line"
+         x="113.5112"
+         y="471.15967"
+         id="tspan4265">   fast 3D rendering</tspan><tspan
+         sodipodi:role="line"
+         x="113.5112"
+         y="486.15967"
+         id="tspan4271">   colors, blending</tspan><tspan
+         sodipodi:role="line"
+         x="113.5112"
+         y="501.15967"
+         id="tspan4273" /><tspan
+         sodipodi:role="line"
+         x="113.5112"
+         y="516.15967"
+         id="tspan4187" /></text>
+    <text
+       xml:space="preserve"
+       style="font-size:12px;font-style:normal;font-weight:normal;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+       x="364.51566"
+       y="455.73499"
+       id="text4179"><tspan
+         sodipodi:role="line"
+         x="364.51566"
+         y="455.73499"
+         id="tspan5290"
+         style="font-weight:bold">C++ standard library</tspan><tspan
+         sodipodi:role="line"
+         x="364.51566"
+         y="470.73499"
+         id="tspan2226">   containers, algorithms, streams...  </tspan><tspan
+         sodipodi:role="line"
+         x="364.51566"
+         y="485.73499"
+         id="tspan4185"
+         style="font-weight:bold">C standard library</tspan><tspan
+         sodipodi:role="line"
+         x="364.51566"
+         y="500.73499"
+         id="tspan3412">   memory mgmt, I/O...</tspan></text>
+    <rect
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       id="rect4191"
+       width="104.58371"
+       height="76.222023"
+       x="203.69203"
+       y="348.17728" />
+    <text
+       id="text4193"
+       y="367.65265"
+       x="222.94005"
+       style="font-size:12px;font-style:normal;font-weight:normal;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+       xml:space="preserve"><tspan
+         y="367.65265"
+         x="222.94005"
+         sodipodi:role="line"
+         id="tspan4243"
+         style="font-weight:bold">FLTK</tspan><tspan
+         y="382.65265"
+         x="222.94005"
+         sodipodi:role="line"
+         id="tspan4245">  events</tspan><tspan
+         y="397.65265"
+         x="222.94005"
+         sodipodi:role="line"
+         id="tspan4247">  gui</tspan><tspan
+         y="412.65265"
+         x="222.94005"
+         sodipodi:role="line"
+         id="tspan4253">  ...</tspan></text>
+    <rect
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.99000001;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+       id="rect4197"
+       width="587.35291"
+       height="75.069992"
+       x="83.002144"
+       y="526.19458" />
+    <rect
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       id="rect4223"
+       width="104.58371"
+       height="76.222023"
+       x="565.30341"
+       y="348.17728" />
+    <text
+       id="text4225"
+       y="367.65265"
+       x="577.68842"
+       style="font-size:12px;font-style:normal;font-weight:normal;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+       xml:space="preserve"><tspan
+         y="367.65265"
+         x="577.68842"
+         id="tspan4227"
+         sodipodi:role="line"
+         style="font-weight:bold">GSL</tspan><tspan
+         y="382.65265"
+         x="577.68842"
+         sodipodi:role="line"
+         id="tspan4261">   probability</tspan><tspan
+         y="397.65265"
+         x="577.68842"
+         sodipodi:role="line"
+         id="tspan4263">   statistics</tspan></text>
+    <rect
+       y="348.17728"
+       x="444.76633"
+       height="76.222023"
+       width="104.58371"
+       id="rect4231"
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1" />
+    <text
+       xml:space="preserve"
+       style="font-size:12px;font-style:normal;font-weight:normal;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+       x="454.44583"
+       y="367.65265"
+       id="text4233"><tspan
+         sodipodi:role="line"
+         id="tspan4235"
+         x="454.44583"
+         y="367.65265"
+         style="font-weight:bold">boost</tspan><tspan
+         sodipodi:role="line"
+         x="454.44583"
+         y="382.65265"
+         id="tspan4239">  serialization</tspan><tspan
+         sodipodi:role="line"
+         x="454.44583"
+         y="397.65265"
+         id="tspan4241">  save/restore</tspan><tspan
+         sodipodi:role="line"
+         x="454.44583"
+         y="412.65265"
+         id="tspan4249">  ...</tspan><tspan
+         sodipodi:role="line"
+         x="454.44583"
+         y="427.65265"
+         id="tspan4237" /></text>
+    <rect
+       y="436.51697"
+       x="268.10159"
+       height="75.345589"
+       width="401.50494"
+       id="rect5280"
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:1.06630981;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1" />
+    <rect
+       y="304.34064"
+       x="80.531326"
+       height="31.264997"
+       width="588.74933"
+       id="rect5282"
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.83177042;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1" />
+    <text
+       xml:space="preserve"
+       style="font-size:12px;font-style:normal;font-weight:normal;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+       x="326.34021"
+       y="567.25159"
+       id="text5284"><tspan
+         sodipodi:role="line"
+         id="tspan5286"
+         x="326.34021"
+         y="567.25159">operating system</tspan><tspan
+         sodipodi:role="line"
+         x="326.34021"
+         y="582.25159"
+         id="tspan5288" /></text>
+    <text
+       xml:space="preserve"
+       style="font-size:12px;font-style:normal;font-weight:normal;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+       x="342.7717"
+       y="323.97314"
+       id="text5292"><tspan
+         sodipodi:role="line"
+         id="tspan5294"
+         x="342.7717"
+         y="323.97314"
+         style="font-weight:bold">viewpoints</tspan></text>
+    <rect
+       style="fill:none;stroke-width:0.99000001;stroke-miterlimit:4;stroke-dasharray:none"
+       id="rect2200"
+       width="438.71979"
+       height="24.816473"
+       x="56.723366"
+       y="298.68396" />
+    <rect
+       style="fill:none;stroke-width:0.99000001;stroke-miterlimit:4;stroke-dasharray:none"
+       id="rect2202"
+       width="54.950764"
+       height="23.93017"
+       x="300.4566"
+       y="841.98749" />
+    <path
+       sodipodi:type="arc"
+       style="fill:none;stroke-width:0.99000001;stroke-miterlimit:4;stroke-dasharray:none"
+       id="path3176"
+       sodipodi:cx="120.98031"
+       sodipodi:cy="224.23454"
+       sodipodi:rx="42.099373"
+       sodipodi:ry="27.475382"
+       d="M 163.07968 224.23454 A 42.099373 27.475382 0 1 1  78.880936,224.23454 A 42.099373 27.475382 0 1 1  163.07968 224.23454 z" />
+    <path
+       sodipodi:type="arc"
+       style="fill:none;stroke-width:0.99000001;stroke-miterlimit:4;stroke-dasharray:none"
+       id="path3178"
+       sodipodi:cx="175.04477"
+       sodipodi:cy="267.22021"
+       sodipodi:rx="49.189796"
+       sodipodi:ry="50.962402"
+       d="M 224.23457 267.22021 A 49.189796 50.962402 0 1 1  125.85497,267.22021 A 49.189796 50.962402 0 1 1  224.23457 267.22021 z" />
+    <path
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:1.79999995;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:7.19999981, 7.19999981;stroke-dashoffset:0;stroke-opacity:1"
+       d="M 56.723368,430.98835 L 693.97495,430.98835"
+       id="path3186" />
+    <rect
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:2, 2;stroke-dashoffset:0;stroke-opacity:1"
+       id="rect3188"
+       width="104.58371"
+       height="76.222023"
+       x="82.175468"
+       y="348.60876" />
+    <text
+       xml:space="preserve"
+       style="font-size:12px;font-style:normal;font-weight:normal;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+       x="88.764549"
+       y="369.33212"
+       id="text3190"><tspan
+         sodipodi:role="line"
+         id="tspan3192"
+         x="88.764549"
+         y="369.33212"
+         style="font-weight:bold">GLEW</tspan><tspan
+         sodipodi:role="line"
+         x="88.764549"
+         y="384.33212"
+         id="tspan3194">  GL ext. mgmt.</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:12px;font-style:normal;font-weight:normal;line-height:125%;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+       x="255.59357"
+       y="87.715286"
+       id="text3196"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan3198"
+         x="255.59357"
+         y="87.715286"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Bitstream Vera Sans">viewpoints code dependencies</tspan></text>
+    <path
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;marker-start:none;marker-mid:none;marker-end:url(#Arrow2Lend);stroke-opacity:1"
+       d="M 704.99808,406.83078 L 704.99808,333.26767"
+       id="path3200" />
+    <text
+       xml:space="preserve"
+       style="font-size:12px;font-style:normal;font-weight:normal;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+       x="685.05273"
+       y="418.35272"
+       id="text3402"><tspan
+         sodipodi:role="line"
+         id="tspan3404"
+         x="685.05273"
+         y="418.35272">source</tspan></text>
+    <path
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;marker-end:url(#Arrow2Lend);stroke-opacity:1"
+       d="M 705.77492,453.37331 L 704.88862,581.00089"
+       id="path3406" />
+    <text
+       xml:space="preserve"
+       style="font-size:12px;font-style:normal;font-weight:normal;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+       x="685.62988"
+       y="448.05548"
+       id="text3408"><tspan
+         sodipodi:role="line"
+         id="tspan3410"
+         x="685.62988"
+         y="448.05548">binary</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:12px;font-style:normal;font-weight:normal;line-height:125%;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+       x="126.51389"
+       y="760.44757"
+       id="text2250"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         x="126.51389"
+         y="760.44757"
+         id="tspan2254"
+         style="font-size:12px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Bitstream Vera Sans Mono">GLEW    - OpenGL Extension Wrangler Library    - glew.sourceforge.net</tspan><tspan
+         sodipodi:role="line"
+         x="126.51389"
+         y="775.44757"
+         id="tspan2260"
+         style="font-size:12px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Bitstream Vera Sans Mono">FLTK    - The Fast Light Toolkit               - fltk.org</tspan><tspan
+         sodipodi:role="line"
+         x="126.51389"
+         y="790.44757"
+         id="tspan2266"
+         style="font-size:12px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Bitstream Vera Sans Mono">Blitz++ - object oriented scientific computing - www.oonumerics.org/blitz</tspan><tspan
+         sodipodi:role="line"
+         x="126.51389"
+         y="805.44757"
+         id="tspan2264"
+         style="font-size:12px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Bitstream Vera Sans Mono">boost   - portable c++ libraries               - www.boost.org</tspan><tspan
+         sodipodi:role="line"
+         x="126.51389"
+         y="820.44757"
+         style="font-size:12px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Bitstream Vera Sans Mono"
+         id="tspan2268">GSL     - GNU Scientific Library               - www.gnu.org/software/gsl</tspan><tspan
+         sodipodi:role="line"
+         x="126.51389"
+         y="835.44757"
+         id="tspan2262" /><tspan
+         sodipodi:role="line"
+         x="126.51389"
+         y="850.44757"
+         id="tspan2258" /></text>
+  </g>
+</svg>

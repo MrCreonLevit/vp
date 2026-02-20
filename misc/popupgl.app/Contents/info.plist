@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist SYSTEM "file://localhost/System/Library/DTDs/PropertyList.dtd">
+<plist version="0.9">
+<dict>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+        <key>CFBundleName</key>
+        <string>popupgl</string>
+        <key>CFBundlePackageType</key>
+        <string>APPL</string>
+        <key>CFBundleVersion</key>
+        <string>1.4</string>
+        <key>CFBundleShortVersionString</key>
+        <string>1.4</string>
+        <key>LSPrefersCarbon</key>
+        <true/>
+        <key>CFBundleSignature</key>
+        <string>none</string>
+</dict>
+</plist>

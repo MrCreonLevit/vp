@@ -1,0 +1,232 @@
+# data file for the Fltk User Interface Designer (fluid)
+version 1.0108 
+header_name {.h} 
+code_name {.cxx}
+Function {make_window()} {open
+} {
+  Fl_Window {} {open
+    xywh {702 236 216 181} type Double visible
+  } {
+    Fl_Choice {} {
+      label symbol
+      user_data 1 open
+      xywh {70 20 90 60} down_box FLAT_BOX
+    } {
+      MenuItem {} {
+        label item selected
+        image {glyphs/64x64/inverted/0.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/1.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/2.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/3.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/4.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/5.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/6.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/7.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/8.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/9.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/10.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/11.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/12.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/13.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/14.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/18.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/19.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_21.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_22.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_23.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_24.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_25.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_26.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_27.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_28.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_29.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_30.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_38.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_39.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_40.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_41.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_42.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_43.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_44.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_45.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_46.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_47.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_48.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_49.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_50.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_51.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_52.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_53.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_54.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_55.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_56.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_57.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_58.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_59.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_60.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_61.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_62.png} xywh {0 0 30 20}
+      }
+      MenuItem {} {
+        label item
+        image {glyphs/64x64/inverted/osaka_63.png} xywh {0 0 30 20}
+      }
+    }
+  }
+  Fl_Window {} {open
+    xywh {649 50 100 100} type Double visible
+  } {}
+} 

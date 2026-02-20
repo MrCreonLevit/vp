@@ -1,0 +1,57 @@
+# macOS
+.DS_Store
+
+# IDE / Editor
+.cdtproject
+.project
+.settings/
+*.swp
+*.swo
+*~
+
+# Version control (legacy)
+.svn/
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+demo1
+demo2
+demo3
+cattest2
+testcats
+file_list
+order-statistics-test
+srtest
+*.out
+
+# Python / pytest
+.pytest_cache/
+__pycache__/
+*.pyc
+pytest.log
+
+# Backups and temp files
+.Backups/
+\#*\#
+.gdb_history
+*.saved
+*.saved1
+*.works
+*.works2
+*.works3
+*.x
+*.244
+*.244M
+*.mod
+*.new
+*.experimental
+
+# Large generated/binary files (uncomment if you don't want these in the repo)
+# sampledata.txt
+# sampledata1000.txt
+# sprite_textures.txt
+# sprite_textures.cpp

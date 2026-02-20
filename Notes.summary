@@ -1,0 +1,89 @@
+NOTE many of these bugs have already been fixed. Need to updgta ethis file to reflect it.
+
+BUG - cancel from quit ater creating more windows deletes soem windows on mac (re-appeared).
+BUG - merge data resets all plots, axes, etc.  Bummer.
+BUG - renormalizing one axis resets all axes i a plot.  Bummer.
+BUG delimiter characters don't work right.  Column headers (and data?) containing blanks get parsed as multiple fields, even when delimiter is, say, a comma.
+BUG - working matlab function
+BUG - keyboard hsortcuts do not work in control panels.
+
+Admin:
+github?
+Integrated open source project mgmt:
+   repository
+   bug tracking
+   forums
+doxygen..?
+
+rewrite:
+consistent coding, naming, and commenting.  - Creon to email to Paul GMAT coding standards
+
+features:
+**solo selection, solo next, solo previous.
+*transpose x-y.
+*duplicate plot (from another plot)
+**write all/write selected option in write file
+**write selection state option in write file
+**save state  -- Pual
+*column class - deferred
+*axis class? - deferred
+**tutorials - Creon
+circular selections
+  (will need to resurrect paint mode for this)
+one-dimensional selections with left, right, center & width(?) slider bars.
+rotated rectangle
+paint w/selection
+folding, spreading, and striding (see Notes.creon 7 Aug 07 & 14 Oct 07)
+lines (instead of just points)
+table view
+expanding sub-panels
+trackball rotation
+"randomized" normalization
+mutual information 2d, 3d
+1D vertex array VBO vertex program
+separate 2D plots from 3D plots.  Save memory.
+separate normalization(s) from transformation(s).  
+separate viewing xforms from "batch" data xforms.
+  diferent viewing xforms can use the same (1D vertex program) vertex data.
+speed up conditional estimates.  Add progress bars wih cancelation.
+half float framebuffers / PBOs.
+fltk 2.0 or wxWidgets
+zoom to selection (smooth)
+zoom center at mouse down.
+tansform by piping columns to external program and reading columns back.
+keyboard shortcuts need to be consistent across the app.
+  r - reset one plot
+  R - reset all plots
+  c - clear one brush... etc.
+Need to have keyboard arrows do the right thing in sliders.
+Need "fine control mode" in sliders.
+Grids
+Smart tickmarks.
+Mouse position readout.
+time series (row#) offsets per axis.
+full GPU implementation (see 4 April 07)
+axis sliders (as opposed to menus) for rapid changing of axes.
+
+presentation possibilities
+  Seti
+  SLAC, Grav probe B, Kavli (Jef Scargle)
+  Stanford - Megan Spencer
+  http://abscicon.seti.org/
+  ARC 
+    yahoo (done)
+    aero - Lynda Haines
+    space sciences
+    NAS - ?
+    robotics
+    kepler
+    Nano 
+      - Rich Jaffe
+      - Mino Freund
+    Ames space policy group (Will)
+    Surdar
+    Coughlan
+    Brian Hamlin?
+    Estele Dodson
+  Berkeley astro guy from Yuri's night.
+  from yahoo talk
+  Other NASA centers

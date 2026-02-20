@@ -1,0 +1,61 @@
+#include <stdio.h>
+#include <time.h>
+#include <FL/Fl.H>
+#include <FL/Fl_Gl_Window.H>
+#include <FL/Fl_Menu_Window.H>
+#include <FL/Fl_Check_Button.H>
+#include <FL/gl.h>
+//
+// Simple GL window with dynamic popup menu
+// erco 01/25/06
+//
+
+Fl_Button *but;
+
+class MyGlWindow : public Fl_Gl_Window {
+    void draw() {
+        if (!valid()) {
+            glLoadIdentity();
+            glViewport(0,0,w(),h());
+            glOrtho(-w(),w(),-h(),h(),-1,1);
+        }
+        glClearColor(0.5, 0.5, 0.5, 0.5);
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
+    int handle(int e) {
+        int ret = Fl_Gl_Window::handle(e);
+        //int ret = Fl_Window::handle(e);
+        switch ( e ) {
+            case FL_PUSH:
+                if ( Fl::event_button() == 3 ) {
+                  printf ("got button 3 PUSH\n");
+                  but->show();
+                }
+                break;
+            case FL_RELEASE:
+                if ( Fl::event_button() == 3 ) {
+                  printf ("got button 3 RELEASE\n");
+                  but->hide();
+                }
+                break;
+        }
+        return(ret);
+    }
+public:
+    // CONSTRUCTOR
+    MyGlWindow(int X,int Y,int W,int H,const char*L=0) : Fl_Gl_Window(X,Y,W,H,L) {
+    }
+};
+
+// MAIN
+int main() {
+     Fl_Window win(500, 300);
+     MyGlWindow mygl(20, 20, win.w()-20, win.h()-20);
+     Fl_Menu_Window mymw(0, 0, 100, 100, "Fl_Menu_Window");
+     but = new Fl_Check_Button(5, 5, 80, 80, "xyzzy");
+     mymw.end();
+     win.end();
+     win.show();
+     //mygl.end();
+     return(Fl::run());
+}
