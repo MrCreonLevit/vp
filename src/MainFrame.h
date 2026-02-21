@@ -46,6 +46,7 @@ private:
     void InvertAllSelections();
 
     void OnOpen(wxCommandEvent& event);
+    void OnSave(bool selectedOnly);
     void OnQuit(wxCommandEvent& event);
     void OnAbout(wxCommandEvent& event);
     void OnAddRow(wxCommandEvent& event);
@@ -89,5 +90,7 @@ private:
         ID_RemoveRow,
         ID_RemoveCol,
         ID_ResetViews,
+        ID_SaveAll,
+        ID_SaveSelected,
     };
 };

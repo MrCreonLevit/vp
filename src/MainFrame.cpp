@@ -57,6 +57,9 @@ void MainFrame::CreateMenuBar() {
     auto* fileMenu = new wxMenu();
     fileMenu->Append(wxID_OPEN, "&Open...\tCtrl+O", "Open a data file");
     fileMenu->AppendSeparator();
+    fileMenu->Append(ID_SaveAll, "Save &All...\tCtrl+S", "Save all data as CSV");
+    fileMenu->Append(ID_SaveSelected, "Save &Selected...\tCtrl+Shift+S", "Save selected points as CSV");
+    fileMenu->AppendSeparator();
     fileMenu->Append(wxID_EXIT, "&Quit\tCtrl+Q", "Quit Viewpoints");
     menuBar->Append(fileMenu, "&File");
 
@@ -77,6 +80,8 @@ void MainFrame::CreateMenuBar() {
     SetMenuBar(menuBar);
 
     Bind(wxEVT_MENU, &MainFrame::OnOpen, this, wxID_OPEN);
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) { OnSave(false); }, ID_SaveAll);
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) { OnSave(true); }, ID_SaveSelected);
     Bind(wxEVT_MENU, &MainFrame::OnQuit, this, wxID_EXIT);
     Bind(wxEVT_MENU, &MainFrame::OnAbout, this, wxID_ABOUT);
     Bind(wxEVT_MENU, &MainFrame::OnAddRow, this, ID_AddRow);
@@ -712,6 +717,40 @@ void MainFrame::OnOpen(wxCommandEvent& event) {
 
     if (result == wxID_OK)
         LoadFile(dialog.GetPath().ToStdString());
+}
+
+void MainFrame::OnSave(bool selectedOnly) {
+    const auto& ds = m_dataManager.dataset();
+    if (ds.numRows == 0) {
+        wxMessageBox("No data to save.", "Save", wxOK | wxICON_INFORMATION, this);
+        return;
+    }
+
+    if (selectedOnly) {
+        int count = 0;
+        for (int s : m_selection) if (s > 0) count++;
+        if (count == 0) {
+            wxMessageBox("No points selected.", "Save Selected", wxOK | wxICON_INFORMATION, this);
+            return;
+        }
+    }
+
+    wxString defaultName = selectedOnly ? "selected.csv" : "data.csv";
+    wxFileDialog dialog(this,
+        selectedOnly ? "Save Selected Points" : "Save All Data",
+        "", defaultName,
+        "CSV files (*.csv)|*.csv|Text files (*.txt)|*.txt|All files (*.*)|*.*",
+        wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+
+    if (dialog.ShowModal() == wxID_OK) {
+        std::string path = dialog.GetPath().ToStdString();
+        bool ok = m_dataManager.saveAsCsv(path, selectedOnly ? m_selection : std::vector<int>{});
+        if (ok) {
+            SetStatusText("Saved: " + dialog.GetPath());
+        } else {
+            wxMessageBox("Failed to save file.", "Save Error", wxOK | wxICON_ERROR, this);
+        }
+    }
 }
 
 void MainFrame::OnQuit(wxCommandEvent& event) { Close(true); }

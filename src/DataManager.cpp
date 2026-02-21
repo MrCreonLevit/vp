@@ -301,3 +301,34 @@ size_t DataManager::removeSelectedRows(const std::vector<int>& selection) {
             removed, m_data.numRows);
     return removed;
 }
+
+bool DataManager::saveAsCsv(const std::string& path, const std::vector<int>& selection) const {
+    std::ofstream file(path);
+    if (!file.is_open())
+        return false;
+
+    bool filterSelected = !selection.empty() && selection.size() == m_data.numRows;
+
+    // Header
+    for (size_t col = 0; col < m_data.numCols; col++) {
+        if (col > 0) file << ',';
+        file << m_data.columnLabels[col];
+    }
+    file << '\n';
+
+    // Data rows
+    size_t written = 0;
+    for (size_t row = 0; row < m_data.numRows; row++) {
+        if (filterSelected && selection[row] == 0)
+            continue;
+        for (size_t col = 0; col < m_data.numCols; col++) {
+            if (col > 0) file << ',';
+            file << m_data.data[row * m_data.numCols + col];
+        }
+        file << '\n';
+        written++;
+    }
+
+    fprintf(stderr, "Saved %zu rows to %s\n", written, path.c_str());
+    return true;
+}
