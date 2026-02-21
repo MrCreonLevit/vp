@@ -3,6 +3,7 @@
 #include <wx/wx.h>
 #include "DataManager.h"
 #include "WebGPUContext.h"
+#include "Normalize.h"
 #include <vector>
 
 class WebGPUCanvas;
@@ -11,6 +12,8 @@ class ControlPanel;
 struct PlotConfig {
     size_t xCol = 0;
     size_t yCol = 1;
+    NormMode xNorm = NormMode::None;
+    NormMode yNorm = NormMode::None;
 };
 
 class MainFrame : public wxFrame {

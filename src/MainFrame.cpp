@@ -74,6 +74,14 @@ void MainFrame::CreateLayout() {
         }
     };
 
+    m_controlPanel->onNormChanged = [this](int xNorm, int yNorm) {
+        if (m_activePlot >= 0 && m_activePlot < (int)m_plotConfigs.size()) {
+            m_plotConfigs[m_activePlot].xNorm = static_cast<NormMode>(xNorm);
+            m_plotConfigs[m_activePlot].yNorm = static_cast<NormMode>(yNorm);
+            UpdatePlot(m_activePlot);
+        }
+    };
+
     m_controlPanel->onPointSizeChanged = [this](float size) {
         for (auto* c : m_canvases) c->SetPointSize(size);
     };
@@ -163,6 +171,9 @@ void MainFrame::SetActivePlot(int plotIndex) {
         m_controlPanel->SetActiveColumns(
             static_cast<int>(m_plotConfigs[plotIndex].xCol),
             static_cast<int>(m_plotConfigs[plotIndex].yCol));
+        m_controlPanel->SetActiveNormModes(
+            static_cast<int>(m_plotConfigs[plotIndex].xNorm),
+            static_cast<int>(m_plotConfigs[plotIndex].yNorm));
     }
 
     int row = plotIndex / m_gridCols;
@@ -179,14 +190,9 @@ void MainFrame::UpdatePlot(int plotIndex) {
     if (cfg.xCol >= ds.numCols) cfg.xCol = 0;
     if (cfg.yCol >= ds.numCols) cfg.yCol = 0;
 
-    float xMin, xMax, yMin, yMax;
-    ds.columnRange(cfg.xCol, xMin, xMax);
-    ds.columnRange(cfg.yCol, yMin, yMax);
-
-    float xRange = (xMax - xMin);
-    float yRange = (yMax - yMin);
-    if (xRange == 0.0f) xRange = 1.0f;
-    if (yRange == 0.0f) yRange = 1.0f;
+    // Normalize each axis according to its per-plot per-axis mode
+    auto xVals = NormalizeColumn(&ds.data[cfg.xCol], ds.numRows, ds.numCols, cfg.xNorm);
+    auto yVals = NormalizeColumn(&ds.data[cfg.yCol], ds.numRows, ds.numCols, cfg.yNorm);
 
     float opacity = m_controlPanel->GetOpacity();
 
@@ -195,8 +201,8 @@ void MainFrame::UpdatePlot(int plotIndex) {
 
     for (size_t r = 0; r < ds.numRows; r++) {
         PointVertex v;
-        v.x = ((ds.value(r, cfg.xCol) - xMin) / xRange) * 1.8f - 0.9f;
-        v.y = ((ds.value(r, cfg.yCol) - yMin) / yRange) * 1.8f - 0.9f;
+        v.x = xVals[r];
+        v.y = yVals[r];
         v.r = 0.4f; v.g = 0.7f; v.b = 1.0f;
         v.a = opacity;
         points.push_back(v);
@@ -220,17 +226,11 @@ void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, flo
         return;
 
     // The brush rect is in the normalized coordinate space of the brushing plot.
-    // We need to test each data row against this rect using that plot's column mapping.
+    // Re-normalize the data using the same normalization to test against the rect.
     auto& cfg = m_plotConfigs[plotIndex];
 
-    float xMin, xMax, yMin, yMax;
-    ds.columnRange(cfg.xCol, xMin, xMax);
-    ds.columnRange(cfg.yCol, yMin, yMax);
-
-    float xRange = (xMax - xMin);
-    float yRange = (yMax - yMin);
-    if (xRange == 0.0f) xRange = 1.0f;
-    if (yRange == 0.0f) yRange = 1.0f;
+    auto xVals = NormalizeColumn(&ds.data[cfg.xCol], ds.numRows, ds.numCols, cfg.xNorm);
+    auto yVals = NormalizeColumn(&ds.data[cfg.yCol], ds.numRows, ds.numCols, cfg.yNorm);
 
     float rectMinX = std::min(x0, x1);
     float rectMaxX = std::max(x0, x1);
@@ -243,10 +243,8 @@ void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, flo
         m_selection.assign(ds.numRows, 0);
 
     for (size_t r = 0; r < ds.numRows; r++) {
-        float nx = ((ds.value(r, cfg.xCol) - xMin) / xRange) * 1.8f - 0.9f;
-        float ny = ((ds.value(r, cfg.yCol) - yMin) / yRange) * 1.8f - 0.9f;
-
-        if (nx >= rectMinX && nx <= rectMaxX && ny >= rectMinY && ny <= rectMaxY) {
+        if (xVals[r] >= rectMinX && xVals[r] <= rectMaxX &&
+            yVals[r] >= rectMinY && yVals[r] <= rectMaxY) {
             m_selection[r] = 1;
         }
     }

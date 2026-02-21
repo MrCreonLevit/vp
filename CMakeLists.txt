@@ -32,6 +32,7 @@ set(VIEWPOINTS_SOURCES
     src/DataManager.cpp
     src/ControlPanel.cpp
     src/WebGPUContext.cpp
+    src/Normalize.cpp
 )
 
 # --- Executable ---

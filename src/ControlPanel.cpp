@@ -1,4 +1,5 @@
 #include "ControlPanel.h"
+#include "Normalize.h"
 #include <wx/statline.h>
 
 ControlPanel::ControlPanel(wxWindow* parent)
@@ -28,14 +29,29 @@ void ControlPanel::CreateControls() {
 
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
-    // X Axis (controls active plot)
+    // X Axis + normalization
     sizer->Add(new wxStaticText(this, wxID_ANY, "X Axis"), 0, wxLEFT | wxTOP, 10);
     m_xAxis = new wxChoice(this, wxID_ANY);
-    sizer->Add(m_xAxis, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
+    sizer->Add(m_xAxis, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
+    sizer->Add(new wxStaticText(this, wxID_ANY, "X Normalization"), 0, wxLEFT | wxTOP, 10);
+    m_xNorm = new wxChoice(this, wxID_ANY);
+    for (const auto& name : AllNormModeNames())
+        m_xNorm->Append(name);
+    m_xNorm->SetSelection(0);
+    sizer->Add(m_xNorm, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
+
+    // Y Axis + normalization
     sizer->Add(new wxStaticText(this, wxID_ANY, "Y Axis"), 0, wxLEFT, 10);
     m_yAxis = new wxChoice(this, wxID_ANY);
-    sizer->Add(m_yAxis, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
+    sizer->Add(m_yAxis, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
+
+    sizer->Add(new wxStaticText(this, wxID_ANY, "Y Normalization"), 0, wxLEFT | wxTOP, 10);
+    m_yNorm = new wxChoice(this, wxID_ANY);
+    for (const auto& name : AllNormModeNames())
+        m_yNorm->Append(name);
+    m_yNorm->SetSelection(0);
+    sizer->Add(m_yNorm, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
 
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
     sizer->AddSpacer(5);
@@ -94,8 +110,11 @@ void ControlPanel::CreateControls() {
     sizer->AddStretchSpacer();
     SetSizer(sizer);
 
+    // Bind events
     m_xAxis->Bind(wxEVT_CHOICE, &ControlPanel::OnAxisChoice, this);
     m_yAxis->Bind(wxEVT_CHOICE, &ControlPanel::OnAxisChoice, this);
+    m_xNorm->Bind(wxEVT_CHOICE, &ControlPanel::OnNormChoice, this);
+    m_yNorm->Bind(wxEVT_CHOICE, &ControlPanel::OnNormChoice, this);
     m_pointSizeSlider->Bind(wxEVT_SLIDER, &ControlPanel::OnPointSizeSlider, this);
     m_opacitySlider->Bind(wxEVT_SLIDER, &ControlPanel::OnOpacitySlider, this);
 
@@ -138,22 +157,38 @@ void ControlPanel::SetActivePlotLabel(int row, int col) {
 }
 
 void ControlPanel::SetActiveColumns(int xCol, int yCol) {
-    m_suppressAxisEvents = true;
+    m_suppressEvents = true;
     if (xCol >= 0 && xCol < (int)m_xAxis->GetCount())
         m_xAxis->SetSelection(xCol);
     if (yCol >= 0 && yCol < (int)m_yAxis->GetCount())
         m_yAxis->SetSelection(yCol);
-    m_suppressAxisEvents = false;
+    m_suppressEvents = false;
+}
+
+void ControlPanel::SetActiveNormModes(int xNorm, int yNorm) {
+    m_suppressEvents = true;
+    if (xNorm >= 0 && xNorm < (int)m_xNorm->GetCount())
+        m_xNorm->SetSelection(xNorm);
+    if (yNorm >= 0 && yNorm < (int)m_yNorm->GetCount())
+        m_yNorm->SetSelection(yNorm);
+    m_suppressEvents = false;
 }
 
 int ControlPanel::GetXColumn() const { return m_xAxis->GetSelection(); }
 int ControlPanel::GetYColumn() const { return m_yAxis->GetSelection(); }
+int ControlPanel::GetXNorm() const { return m_xNorm->GetSelection(); }
+int ControlPanel::GetYNorm() const { return m_yNorm->GetSelection(); }
 float ControlPanel::GetPointSize() const { return static_cast<float>(m_pointSizeSlider->GetValue()); }
 float ControlPanel::GetOpacity() const { return static_cast<float>(m_opacitySlider->GetValue()) / 100.0f; }
 
 void ControlPanel::OnAxisChoice(wxCommandEvent& event) {
-    if (!m_suppressAxisEvents && onAxisChanged)
+    if (!m_suppressEvents && onAxisChanged)
         onAxisChanged(GetXColumn(), GetYColumn());
+}
+
+void ControlPanel::OnNormChoice(wxCommandEvent& event) {
+    if (!m_suppressEvents && onNormChanged)
+        onNormChanged(GetXNorm(), GetYNorm());
 }
 
 void ControlPanel::OnPointSizeSlider(wxCommandEvent& event) {
