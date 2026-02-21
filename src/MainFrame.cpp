@@ -106,21 +106,50 @@ void MainFrame::CreateLayout() {
 }
 
 void MainFrame::RebuildGrid() {
-    // Destroy existing canvases
-    for (auto* c : m_canvases)
-        c->Destroy();
+    // Destroy existing children of grid panel
+    m_gridPanel->DestroyChildren();
     m_canvases.clear();
+    m_xLabels.clear();
+    m_yLabels.clear();
 
     int numPlots = m_gridRows * m_gridCols;
     m_plotConfigs.resize(numPlots);
     m_canvases.resize(numPlots);
+    m_xLabels.resize(numPlots);
+    m_yLabels.resize(numPlots);
 
     auto* gridSizer = new wxGridSizer(m_gridRows, m_gridCols, 2, 2);
 
     for (int i = 0; i < numPlots; i++) {
-        auto* canvas = new WebGPUCanvas(m_gridPanel, &m_gpuContext, i);
+        // Each cell: Y label on left, canvas in center, X label on bottom
+        auto* cellPanel = new wxPanel(m_gridPanel);
+        auto* cellSizer = new wxBoxSizer(wxHORIZONTAL);
+
+        // Y axis label (rotated text on left)
+        auto* yLabel = new VerticalLabel(cellPanel);
+        m_yLabels[i] = yLabel;
+        cellSizer->Add(yLabel, 0, wxEXPAND);
+
+        // Right side: canvas + X label
+        auto* rightSizer = new wxBoxSizer(wxVERTICAL);
+
+        auto* canvas = new WebGPUCanvas(cellPanel, &m_gpuContext, i);
         m_canvases[i] = canvas;
-        gridSizer->Add(canvas, 1, wxEXPAND);
+        rightSizer->Add(canvas, 1, wxEXPAND);
+
+        auto* xLabel = new wxStaticText(cellPanel, wxID_ANY, "",
+            wxDefaultPosition, wxSize(-1, 16), wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
+        xLabel->SetForegroundColour(wxColour(160, 170, 200));
+        auto xFont = xLabel->GetFont();
+        xFont.SetPointSize(xFont.GetPointSize() - 1);
+        xLabel->SetFont(xFont);
+        xLabel->SetBackgroundColour(wxColour(30, 30, 40));
+        m_xLabels[i] = xLabel;
+        rightSizer->Add(xLabel, 0, wxEXPAND);
+
+        cellSizer->Add(rightSizer, 1, wxEXPAND);
+        cellPanel->SetSizer(cellSizer);
+        gridSizer->Add(cellPanel, 1, wxEXPAND);
 
         // Wire callbacks
         canvas->onBrushRect = [this](int pi, float x0, float y0, float x1, float y1, bool ext) {
@@ -129,7 +158,6 @@ void MainFrame::RebuildGrid() {
         canvas->onClearRequested = [this]() { ClearAllSelections(); };
         canvas->onInvertRequested = [this]() { InvertAllSelections(); };
 
-        // Set brush colors on each canvas
         std::vector<BrushColor> colors;
         for (int b = 0; b < NUM_BRUSHES; b++)
             colors.push_back({kDefaultBrushes[b].r, kDefaultBrushes[b].g, kDefaultBrushes[b].b});
@@ -138,10 +166,9 @@ void MainFrame::RebuildGrid() {
             for (auto* c : m_canvases) c->ResetView();
         };
 
-        // Click to set active plot
         canvas->Bind(wxEVT_LEFT_DOWN, [this, i](wxMouseEvent& evt) {
             SetActivePlot(i);
-            evt.Skip();  // let the canvas handle it too
+            evt.Skip();
         });
     }
 
@@ -215,6 +242,14 @@ void MainFrame::UpdatePlot(int plotIndex) {
     }
 
     m_canvases[plotIndex]->SetPoints(std::move(points));
+
+    // Set axis labels
+    if (plotIndex < (int)m_xLabels.size()) {
+        m_xLabels[plotIndex]->SetLabel(ds.columnLabels[cfg.xCol]);
+    }
+    if (plotIndex < (int)m_yLabels.size()) {
+        m_yLabels[plotIndex]->SetLabel(ds.columnLabels[cfg.yCol]);
+    }
 
     // Re-apply current selection
     if (!m_selection.empty())

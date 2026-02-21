@@ -62,6 +62,18 @@ void WebGPUCanvas::SetPoints(std::vector<PointVertex> points) {
     }
 }
 
+void WebGPUCanvas::SetAxisInfo(const std::string& xLabel, const std::string& yLabel,
+                               float xDataMin, float xDataMax,
+                               float yDataMin, float yDataMax) {
+    m_xLabel = xLabel;
+    m_yLabel = yLabel;
+    m_xDataMin = xDataMin;
+    m_xDataMax = xDataMax;
+    m_yDataMin = yDataMin;
+    m_yDataMax = yDataMax;
+    Refresh();
+}
+
 void WebGPUCanvas::SetPointSize(float size) {
     m_pointSize = size;
     Refresh();
@@ -703,23 +715,6 @@ void WebGPUCanvas::Render() {
 void WebGPUCanvas::OnPaint(wxPaintEvent& event) {
     wxPaintDC dc(this);
     Render();
-
-    if (m_selecting) {
-        dc.SetPen(wxPen(*wxWHITE, 1, wxPENSTYLE_DOT));
-        dc.SetBrush(wxBrush(wxColour(255, 255, 255, 30)));
-        int x = std::min(m_selectStart.x, m_selectEnd.x);
-        int y = std::min(m_selectStart.y, m_selectEnd.y);
-        int w = std::abs(m_selectEnd.x - m_selectStart.x);
-        int h = std::abs(m_selectEnd.y - m_selectStart.y);
-        dc.DrawRectangle(x, y, w, h);
-    }
-
-    if (m_isActive) {
-        dc.SetPen(wxPen(wxColour(100, 150, 255), 2));
-        dc.SetBrush(*wxTRANSPARENT_BRUSH);
-        wxSize sz = GetClientSize();
-        dc.DrawRectangle(0, 0, sz.GetWidth(), sz.GetHeight());
-    }
 }
 
 void WebGPUCanvas::OnSize(wxSizeEvent& event) {

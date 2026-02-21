@@ -5,6 +5,7 @@
 #include "WebGPUContext.h"
 #include "Normalize.h"
 #include "Brush.h"
+#include "VerticalLabel.h"
 #include <vector>
 
 class WebGPUCanvas;
@@ -45,6 +46,8 @@ private:
     WebGPUContext m_gpuContext;
 
     std::vector<WebGPUCanvas*> m_canvases;
+    std::vector<wxStaticText*> m_xLabels;
+    std::vector<VerticalLabel*> m_yLabels;
     std::vector<PlotConfig> m_plotConfigs;
     int m_gridRows = 2;
     int m_gridCols = 2;

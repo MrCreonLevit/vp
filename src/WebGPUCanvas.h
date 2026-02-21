@@ -31,6 +31,8 @@ public:
     ~WebGPUCanvas() override;
 
     void SetPoints(std::vector<PointVertex> points);
+    void SetAxisInfo(const std::string& xLabel, const std::string& yLabel,
+                     float xDataMin, float xDataMax, float yDataMin, float yDataMax);
     void SetPointSize(float size);
     void SetOpacity(float alpha);
     void SetBrushColors(const std::vector<BrushColor>& colors);
@@ -100,6 +102,11 @@ private:
     WGPUBuffer m_histBuffer = nullptr;
     size_t m_histVertexCount = 0;
     bool m_showHistograms = true;
+
+    // Axis info for labels/ticks
+    std::string m_xLabel, m_yLabel;
+    float m_xDataMin = 0.0f, m_xDataMax = 1.0f;
+    float m_yDataMin = 0.0f, m_yDataMax = 1.0f;
 
     // Display settings
     float m_pointSize = 6.0f;
