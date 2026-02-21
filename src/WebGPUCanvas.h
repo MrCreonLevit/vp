@@ -80,6 +80,8 @@ private:
     WGPUBuffer m_vertexBuffer = nullptr;
     WGPUBuffer m_uniformBuffer = nullptr;
     WGPUBindGroup m_bindGroup = nullptr;
+    WGPUBuffer m_histUniformBuffer = nullptr;
+    WGPUBindGroup m_histBindGroup = nullptr;
     WGPUTextureFormat m_surfaceFormat = WGPUTextureFormat_Undefined;
 
     bool m_initialized = false;

@@ -210,7 +210,7 @@ void WebGPUCanvas::InitSurface() {
     ubDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
     m_uniformBuffer = wgpuDeviceCreateBuffer(device, &ubDesc);
 
-    // Create bind group
+    // Create bind group for point rendering
     WGPUBindGroupEntry bgEntry = {};
     bgEntry.binding = 0;
     bgEntry.buffer = m_uniformBuffer;
@@ -221,6 +221,29 @@ void WebGPUCanvas::InitSurface() {
     bgDesc.entryCount = 1;
     bgDesc.entries = &bgEntry;
     m_bindGroup = wgpuDeviceCreateBindGroup(device, &bgDesc);
+
+    // Create separate uniform buffer + bind group for histograms (identity projection)
+    WGPUBufferDescriptor hubDesc = {};
+    hubDesc.label = {"hist_uniforms", WGPU_STRLEN};
+    hubDesc.size = sizeof(Uniforms);
+    hubDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+    m_histUniformBuffer = wgpuDeviceCreateBuffer(device, &hubDesc);
+
+    Uniforms histUniforms = {};
+    makeOrtho(histUniforms.projection, -1.0f, 1.0f, -1.0f, 1.0f);
+    wgpuQueueWriteBuffer(m_ctx->GetQueue(), m_histUniformBuffer, 0,
+                         &histUniforms, sizeof(Uniforms));
+
+    WGPUBindGroupEntry hbgEntry = {};
+    hbgEntry.binding = 0;
+    hbgEntry.buffer = m_histUniformBuffer;
+    hbgEntry.offset = 0;
+    hbgEntry.size = sizeof(Uniforms);
+    WGPUBindGroupDescriptor hbgDesc = {};
+    hbgDesc.layout = m_ctx->GetBindGroupLayout();
+    hbgDesc.entryCount = 1;
+    hbgDesc.entries = &hbgEntry;
+    m_histBindGroup = wgpuDeviceCreateBindGroup(device, &hbgDesc);
 
     if (!m_points.empty())
         UpdateVertexBuffer();
@@ -450,44 +473,54 @@ void WebGPUCanvas::UpdateHistograms() {
         return;
 
     constexpr int NUM_BINS = 64;
-    constexpr float HIST_HEIGHT = 0.15f;  // fraction of plot height for histogram
+    constexpr float HIST_HEIGHT = 0.3f;
     size_t numPoints = m_basePositions.size() / 2;
 
-    // Compute X and Y histograms (all points and selected points)
+    // Visible range in data space based on current pan/zoom
+    float hw = 1.0f / m_zoom;
+    float hh = 1.0f / m_zoom;
+    float xViewMin = m_panX - hw;
+    float xViewMax = m_panX + hw;
+    float yViewMin = m_panY - hh;
+    float yViewMax = m_panY + hh;
+
+    float xBinWidth = (xViewMax - xViewMin) / NUM_BINS;
+    float yBinWidth = (yViewMax - yViewMin) / NUM_BINS;
+
+    // Bin points that fall within the visible range
     std::vector<int> xBinsAll(NUM_BINS, 0), yBinsAll(NUM_BINS, 0);
     std::vector<int> xBinsSel(NUM_BINS, 0), yBinsSel(NUM_BINS, 0);
-
-    // Data range is [-0.9, 0.9] (our normalized space)
-    float dataMin = -0.9f, dataMax = 0.9f;
-    float binWidth = (dataMax - dataMin) / NUM_BINS;
 
     for (size_t i = 0; i < numPoints; i++) {
         float px = m_basePositions[i * 2];
         float py = m_basePositions[i * 2 + 1];
+        bool selected = (i < m_selection.size() && m_selection[i] > 0);
 
-        int xBin = static_cast<int>((px - dataMin) / binWidth);
-        int yBin = static_cast<int>((py - dataMin) / binWidth);
-        xBin = std::max(0, std::min(xBin, NUM_BINS - 1));
-        yBin = std::max(0, std::min(yBin, NUM_BINS - 1));
+        // X histogram: bin if within visible Y range (marginal over visible Y)
+        if (px >= xViewMin && px <= xViewMax) {
+            int xBin = static_cast<int>((px - xViewMin) / xBinWidth);
+            xBin = std::max(0, std::min(xBin, NUM_BINS - 1));
+            xBinsAll[xBin]++;
+            if (selected) xBinsSel[xBin]++;
+        }
 
-        xBinsAll[xBin]++;
-        yBinsAll[yBin]++;
-
-        if (i < m_selection.size() && m_selection[i] > 0) {
-            xBinsSel[xBin]++;
-            yBinsSel[yBin]++;
+        // Y histogram: bin if within visible X range (marginal over visible X)
+        if (py >= yViewMin && py <= yViewMax) {
+            int yBin = static_cast<int>((py - yViewMin) / yBinWidth);
+            yBin = std::max(0, std::min(yBin, NUM_BINS - 1));
+            yBinsAll[yBin]++;
+            if (selected) yBinsSel[yBin]++;
         }
     }
 
-    // Find max bin count for scaling
     int xMaxAll = *std::max_element(xBinsAll.begin(), xBinsAll.end());
     int yMaxAll = *std::max_element(yBinsAll.begin(), yBinsAll.end());
     if (xMaxAll == 0) xMaxAll = 1;
     if (yMaxAll == 0) yMaxAll = 1;
 
-    // Build histogram bar vertices (each bar = 2 triangles = 6 vertices)
+    // Build histogram bar vertices in clip space [-1, 1]
     std::vector<PointVertex> histVerts;
-    histVerts.reserve(NUM_BINS * 6 * 4);  // X all + X sel + Y all + Y sel
+    histVerts.reserve(NUM_BINS * 6 * 4);
 
     auto addBar = [&](float x0, float y0, float x1, float y1,
                       float r, float g, float b, float a) {
@@ -503,34 +536,30 @@ void WebGPUCanvas::UpdateHistograms() {
         histVerts.push_back(tl);
     };
 
-    // X histogram (along bottom edge)
-    float xHistBase = -0.95f;  // bottom of plot area
+    float clipBinWidth = 2.0f / NUM_BINS;
+
+    // X histogram (pinned to bottom edge)
     for (int i = 0; i < NUM_BINS; i++) {
-        float bx0 = dataMin + i * binWidth;
-        float bx1 = bx0 + binWidth;
-        // All points (dim)
+        float bx0 = -1.0f + i * clipBinWidth;
+        float bx1 = bx0 + clipBinWidth;
         float hAll = (static_cast<float>(xBinsAll[i]) / xMaxAll) * HIST_HEIGHT;
         if (hAll > 0.001f)
-            addBar(bx0, xHistBase, bx1, xHistBase + hAll, 0.3f, 0.5f, 0.8f, 0.3f);
-        // Selected points (bright)
+            addBar(bx0, -1.0f, bx1, -1.0f + hAll, 0.3f, 0.5f, 0.8f, 0.35f);
         float hSel = (static_cast<float>(xBinsSel[i]) / xMaxAll) * HIST_HEIGHT;
         if (hSel > 0.001f)
-            addBar(bx0, xHistBase, bx1, xHistBase + hSel, 1.0f, 0.5f, 0.2f, 0.5f);
+            addBar(bx0, -1.0f, bx1, -1.0f + hSel, 1.0f, 0.5f, 0.2f, 0.5f);
     }
 
-    // Y histogram (along left edge)
-    float yHistBase = -0.95f;  // left of plot area
+    // Y histogram (pinned to left edge)
     for (int i = 0; i < NUM_BINS; i++) {
-        float by0 = dataMin + i * binWidth;
-        float by1 = by0 + binWidth;
-        // All points (dim)
+        float by0 = -1.0f + i * clipBinWidth;
+        float by1 = by0 + clipBinWidth;
         float hAll = (static_cast<float>(yBinsAll[i]) / yMaxAll) * HIST_HEIGHT;
         if (hAll > 0.001f)
-            addBar(yHistBase, by0, yHistBase + hAll, by1, 0.3f, 0.5f, 0.8f, 0.3f);
-        // Selected points (bright)
+            addBar(-1.0f, by0, -1.0f + hAll, by1, 0.3f, 0.5f, 0.8f, 0.35f);
         float hSel = (static_cast<float>(yBinsSel[i]) / yMaxAll) * HIST_HEIGHT;
         if (hSel > 0.001f)
-            addBar(yHistBase, by0, yHistBase + hSel, by1, 1.0f, 0.5f, 0.2f, 0.5f);
+            addBar(-1.0f, by0, -1.0f + hSel, by1, 1.0f, 0.5f, 0.2f, 0.5f);
     }
 
     m_histVertexCount = histVerts.size();
@@ -595,6 +624,7 @@ void WebGPUCanvas::Render() {
         return;
 
     UpdateUniforms();
+    UpdateHistograms();
 
     WGPUSurfaceTexture surfTex;
     wgpuSurfaceGetCurrentTexture(m_surface, &surfTex);
@@ -645,10 +675,10 @@ void WebGPUCanvas::Render() {
         wgpuRenderPassEncoderDraw(rp, 6, static_cast<uint32_t>(m_points.size()), 0, 0);
     }
 
-    // Draw histograms
+    // Draw histograms with identity projection (fixed to viewport edges)
     if (m_histPipeline && m_histBuffer && m_histVertexCount > 0 && m_showHistograms) {
         wgpuRenderPassEncoderSetPipeline(rp, m_histPipeline);
-        wgpuRenderPassEncoderSetBindGroup(rp, 0, m_bindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(rp, 0, m_histBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(rp, 0, m_histBuffer, 0,
                                               m_histVertexCount * sizeof(PointVertex));
         wgpuRenderPassEncoderDraw(rp, static_cast<uint32_t>(m_histVertexCount), 1, 0, 0);
@@ -787,6 +817,8 @@ void WebGPUCanvas::OnKeyDown(wxKeyEvent& event) {
 void WebGPUCanvas::Cleanup() {
     if (m_histBuffer) { wgpuBufferRelease(m_histBuffer); m_histBuffer = nullptr; }
     if (m_histPipeline) { wgpuRenderPipelineRelease(m_histPipeline); m_histPipeline = nullptr; }
+    if (m_histBindGroup) { wgpuBindGroupRelease(m_histBindGroup); m_histBindGroup = nullptr; }
+    if (m_histUniformBuffer) { wgpuBufferRelease(m_histUniformBuffer); m_histUniformBuffer = nullptr; }
     if (m_bindGroup) { wgpuBindGroupRelease(m_bindGroup); m_bindGroup = nullptr; }
     if (m_pipeline) { wgpuRenderPipelineRelease(m_pipeline); m_pipeline = nullptr; }
     if (m_uniformBuffer) { wgpuBufferRelease(m_uniformBuffer); m_uniformBuffer = nullptr; }
