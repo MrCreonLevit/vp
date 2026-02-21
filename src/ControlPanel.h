@@ -23,6 +23,7 @@ public:
     std::function<void(int plotIndex, int xNorm, int yNorm)> onNormChanged;
     std::function<void(int plotIndex, bool show)> onShowUnselectedChanged;
     std::function<void(int plotIndex, bool show)> onGridLinesChanged;
+    std::function<void(int plotIndex, bool show)> onShowHistogramsChanged;
     std::function<void(int plotIndex, float size)> onPointSizeChanged;
     std::function<void(int plotIndex, float alpha)> onOpacityChanged;
     std::function<void(int plotIndex, int bins)> onHistBinsChanged;
@@ -39,6 +40,7 @@ private:
     wxChoice* m_yNorm = nullptr;
     wxCheckBox* m_showUnselected = nullptr;
     wxCheckBox* m_showGridLines = nullptr;
+    wxCheckBox* m_showHistograms = nullptr;
     wxSlider* m_pointSizeSlider = nullptr;
     wxSlider* m_opacitySlider = nullptr;
     wxSlider* m_histBinsSlider = nullptr;
@@ -63,10 +65,12 @@ public:
     std::function<void(int plotIndex, int xNorm, int yNorm)> onNormChanged;
     std::function<void(int plotIndex, bool show)> onShowUnselectedChanged;
     std::function<void(int plotIndex, bool show)> onGridLinesChanged;
+    std::function<void(int plotIndex, bool show)> onShowHistogramsChanged;
     std::function<void(int plotIndex, float size)> onPlotPointSizeChanged;
     std::function<void(int plotIndex, float alpha)> onPlotOpacityChanged;
     std::function<void(int plotIndex, int bins)> onPlotHistBinsChanged;
     std::function<void(int plotIndex)> onTabSelected;
+    std::function<void()> onAllSelected;
 
     // Global callbacks
     std::function<void(float size)> onPointSizeChanged;

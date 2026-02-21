@@ -38,6 +38,7 @@ public:
     void SetHistBins(int bins);
     void SetShowUnselected(bool show);
     void SetShowGridLines(bool show);
+    void SetShowHistograms(bool show);
     // Set explicit grid line positions in clip space [-1, 1]
     void SetGridLinePositions(const std::vector<float>& xPositions,
                               const std::vector<float>& yPositions);

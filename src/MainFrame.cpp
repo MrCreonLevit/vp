@@ -118,6 +118,13 @@ void MainFrame::CreateLayout() {
         }
     };
 
+    m_controlPanel->onShowHistogramsChanged = [this](int plotIndex, bool show) {
+        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
+            m_plotConfigs[plotIndex].showHistograms = show;
+            m_canvases[plotIndex]->SetShowHistograms(show);
+        }
+    };
+
     // Per-plot rendering callbacks
     m_controlPanel->onPlotPointSizeChanged = [this](int plotIndex, float size) {
         if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
@@ -142,6 +149,10 @@ void MainFrame::CreateLayout() {
 
     m_controlPanel->onTabSelected = [this](int plotIndex) {
         SetActivePlot(plotIndex);
+    };
+
+    m_controlPanel->onAllSelected = [this]() {
+        HighlightAllPlots();
     };
 
     // Global callbacks (from "All" tab) — apply to all plots and update configs
@@ -201,6 +212,7 @@ void MainFrame::RebuildGrid() {
         auto& pw = m_plotWidgets[i];
         auto* cellPanel = new wxPanel(m_gridPanel);
         cellPanel->SetBackgroundColour(bgColor);
+        pw.cellPanel = cellPanel;
         auto* cellSizer = new wxBoxSizer(wxHORIZONTAL);
 
         // Left column: Y label + Y tick panel
@@ -337,11 +349,29 @@ void MainFrame::RebuildGrid() {
 
             m_canvases[pi]->SetGridLinePositions(xClipPositions, yClipPositions);
 
-            // Use the canvas size as reference (clip space maps to canvas pixels)
+            // Use the canvas size and position as reference
             wxSize canvasSize = m_canvases[pi]->GetClientSize();
             int canvasW = canvasSize.GetWidth();
             int canvasH = canvasSize.GetHeight();
-            if (canvasW < 10 || canvasH < 10) return;  // not laid out yet
+            if (canvasW < 10 || canvasH < 10) return;
+
+            // Get canvas position relative to its cell panel to align tick labels
+            // The canvas is inside rightSizer, which is offset from the cell panel
+            // by the Y label + Y tick panel width. The Y tick panel needs the
+            // canvas's vertical offset (top of canvas relative to cell top).
+            wxPoint canvasPos = m_canvases[pi]->GetPosition();
+            // Walk up to find position relative to the cell panel
+            wxWindow* w = m_canvases[pi]->GetParent();
+            while (w && w != pw2.cellPanel && w->GetParent() != pw2.cellPanel) {
+                wxPoint parentPos = w->GetPosition();
+                canvasPos.x += parentPos.x;
+                canvasPos.y += parentPos.y;
+                w = w->GetParent();
+            }
+            // canvasPos.y = vertical offset of canvas top within the cell
+            // The Y tick panel starts at the cell top, so Y tick labels need
+            // this offset to align with the canvas.
+            int canvasTopY = canvasPos.y;
 
             // Position X tick labels at grid line pixel positions
             for (int t = 0; t < MAX_NICE_TICKS; t++) {
@@ -363,11 +393,12 @@ void MainFrame::RebuildGrid() {
             }
 
             // Position Y tick labels at grid line pixel positions
+            // Offset by canvasTopY so labels align with the canvas, not the cell
             for (int t = 0; t < MAX_NICE_TICKS; t++) {
                 if (t < (int)yNiceTicks.size() && t < (int)yClipPositions.size()) {
                     float clipY = yClipPositions[t];
                     if (clipY > -0.9f && clipY < 0.9f) {
-                        int py = static_cast<int>((1.0f - clipY) * 0.5f * canvasH);
+                        int py = canvasTopY + static_cast<int>((1.0f - clipY) * 0.5f * canvasH);
                         pw2.yTicks[t]->SetLabel(wxString::Format("%.4g", yNiceTicks[t]));
                         pw2.yTicks[t]->SetSize(pw2.yTicks[t]->GetBestSize());
                         wxSize tsz = pw2.yTicks[t]->GetSize();
@@ -419,13 +450,45 @@ void MainFrame::SetActivePlot(int plotIndex) {
         return;
 
     m_activePlot = plotIndex;
-    for (int i = 0; i < (int)m_canvases.size(); i++)
-        m_canvases[i]->SetActive(i == plotIndex);
 
-    // Select the corresponding tab and sync its widgets
+    // Highlight label/tick area of active plot (not the canvas itself)
+    wxColour activeBg(50, 50, 70);
+    wxColour normalBg(30, 30, 40);
+    for (int i = 0; i < (int)m_plotWidgets.size(); i++) {
+        auto& pw = m_plotWidgets[i];
+        wxColour bg = (i == plotIndex) ? activeBg : normalBg;
+        if (pw.cellPanel) pw.cellPanel->SetBackgroundColour(bg);
+        if (pw.xTickPanel) pw.xTickPanel->SetBackgroundColour(bg);
+        if (pw.yTickPanel) pw.yTickPanel->SetBackgroundColour(bg);
+        if (pw.xLabel) pw.xLabel->SetBackgroundColour(bg);
+        if (pw.yLabel) pw.yLabel->SetBackgroundColour(bg);
+        // Update tick label backgrounds
+        for (auto* t : pw.xTicks) if (t) t->SetBackgroundColour(bg);
+        for (auto* t : pw.yTicks) if (t) t->SetBackgroundColour(bg);
+        if (pw.cellPanel) pw.cellPanel->Refresh();
+    }
+
+    // Canvas background stays black (no SetActive highlight)
+    for (auto* c : m_canvases) c->SetActive(false);
+
     m_controlPanel->SelectTab(plotIndex);
     if (plotIndex < (int)m_plotConfigs.size())
         m_controlPanel->SetPlotConfig(plotIndex, m_plotConfigs[plotIndex]);
+}
+
+void MainFrame::HighlightAllPlots() {
+    wxColour activeBg(50, 50, 70);
+    for (auto& pw : m_plotWidgets) {
+        if (pw.cellPanel) pw.cellPanel->SetBackgroundColour(activeBg);
+        if (pw.xTickPanel) pw.xTickPanel->SetBackgroundColour(activeBg);
+        if (pw.yTickPanel) pw.yTickPanel->SetBackgroundColour(activeBg);
+        if (pw.xLabel) pw.xLabel->SetBackgroundColour(activeBg);
+        if (pw.yLabel) pw.yLabel->SetBackgroundColour(activeBg);
+        for (auto* t : pw.xTicks) if (t) t->SetBackgroundColour(activeBg);
+        for (auto* t : pw.yTicks) if (t) t->SetBackgroundColour(activeBg);
+        if (pw.cellPanel) pw.cellPanel->Refresh();
+    }
+    for (auto* c : m_canvases) c->SetActive(false);
 }
 
 void MainFrame::UpdatePlot(int plotIndex) {

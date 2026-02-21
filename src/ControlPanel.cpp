@@ -51,11 +51,15 @@ void PlotTab::CreateControls(int row, int col) {
 
     m_showUnselected = new wxCheckBox(this, wxID_ANY, "Show unselected");
     m_showUnselected->SetValue(true);
-    sizer->Add(m_showUnselected, 0, wxALL, 8);
+    sizer->Add(m_showUnselected, 0, wxLEFT | wxRIGHT | wxTOP, 8);
 
     m_showGridLines = new wxCheckBox(this, wxID_ANY, "Grid lines");
     m_showGridLines->SetValue(false);
-    sizer->Add(m_showGridLines, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    sizer->Add(m_showGridLines, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+
+    m_showHistograms = new wxCheckBox(this, wxID_ANY, "Histograms");
+    m_showHistograms->SetValue(true);
+    sizer->Add(m_showHistograms, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 8);
 
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
@@ -101,6 +105,10 @@ void PlotTab::CreateControls(int row, int col) {
         if (onGridLinesChanged)
             onGridLinesChanged(m_plotIndex, m_showGridLines->GetValue());
     });
+    m_showHistograms->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+        if (onShowHistogramsChanged)
+            onShowHistogramsChanged(m_plotIndex, m_showHistograms->GetValue());
+    });
     m_pointSizeSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         if (m_suppress) return;
         int val = m_pointSizeSlider->GetValue();
@@ -142,6 +150,7 @@ void PlotTab::SyncFromConfig(const PlotConfig& cfg) {
     if ((int)cfg.yNorm < m_yNorm->GetCount()) m_yNorm->SetSelection(static_cast<int>(cfg.yNorm));
     m_showUnselected->SetValue(cfg.showUnselected);
     m_showGridLines->SetValue(cfg.showGridLines);
+    m_showHistograms->SetValue(cfg.showHistograms);
     m_pointSizeSlider->SetValue(static_cast<int>(cfg.pointSize));
     m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %d", (int)cfg.pointSize));
     m_opacitySlider->SetValue(static_cast<int>(cfg.opacity * 100));
@@ -185,8 +194,14 @@ ControlPanel::ControlPanel(wxWindow* parent)
     sizer->Add(m_infoLabel, 0, wxLEFT | wxRIGHT, 8);
 
     auto* helpText = new wxStaticText(this, wxID_ANY,
-        "Drag: select | Shift+drag: pan\n"
-        "Scroll: zoom | Cmd+drag: extend");
+        "Drag: select\n"
+        "Shift+drag: pan\n"
+        "Scroll: zoom\n"
+        "Cmd+drag: extend selection\n"
+        "Click plot: activate\n"
+        "C: clear selection\n"
+        "I: invert selection\n"
+        "R: reset all views");
     helpText->SetForegroundColour(wxColour(120, 120, 120));
     auto hFont = helpText->GetFont();
     hFont.SetPointSize(hFont.GetPointSize() - 1);
@@ -206,10 +221,14 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
     m_gridRows = rows;
     m_gridCols = cols;
 
-    // Clear book pages
-    while (m_book->GetPageCount() > 0)
-        m_book->RemovePage(0);
+    // Clear and destroy old book pages
+    m_book->DeleteAllPages();
     m_plotTabs.clear();
+    m_allPage = nullptr;
+    m_pointSizeSlider = nullptr;
+    m_opacitySlider = nullptr;
+    m_histBinsSlider = nullptr;
+    m_selectionLabel = nullptr;
 
     int numPlots = rows * cols;
     for (int i = 0; i < numPlots; i++) {
@@ -233,6 +252,9 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
         };
         tab->onGridLinesChanged = [this](int pi, bool show) {
             if (onGridLinesChanged) onGridLinesChanged(pi, show);
+        };
+        tab->onShowHistogramsChanged = [this](int pi, bool show) {
+            if (onShowHistogramsChanged) onShowHistogramsChanged(pi, show);
         };
         tab->onPointSizeChanged = [this](int pi, float size) {
             if (onPlotPointSizeChanged) onPlotPointSizeChanged(pi, size);
@@ -271,6 +293,7 @@ void ControlPanel::RebuildSelectorGrid() {
     m_allButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         int allIdx = static_cast<int>(m_plotTabs.size());
         SelectPage(allIdx);
+        if (onAllSelected) onAllSelected();
     });
     sizer->Add(m_allButton, 0, wxEXPAND | wxBOTTOM, 2);
 
@@ -367,6 +390,40 @@ void ControlPanel::CreateAllPage() {
     sizer->Add(m_histBinsLabel, 0, wxLEFT | wxTOP, 8);
     m_histBinsSlider = new wxSlider(m_allPage, wxID_ANY, 64, 2, 512);
     sizer->Add(m_histBinsSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
+
+    // Display toggles (apply to all plots)
+    auto* allShowUnselected = new wxCheckBox(m_allPage, wxID_ANY, "Show unselected");
+    allShowUnselected->SetValue(true);
+    sizer->Add(allShowUnselected, 0, wxLEFT, 8);
+
+    auto* allGridLines = new wxCheckBox(m_allPage, wxID_ANY, "Grid lines");
+    allGridLines->SetValue(false);
+    sizer->Add(allGridLines, 0, wxLEFT, 8);
+
+    auto* allHistograms = new wxCheckBox(m_allPage, wxID_ANY, "Histograms");
+    allHistograms->SetValue(true);
+    sizer->Add(allHistograms, 0, wxLEFT | wxBOTTOM, 8);
+
+    allShowUnselected->Bind(wxEVT_CHECKBOX, [this, allShowUnselected](wxCommandEvent&) {
+        bool show = allShowUnselected->GetValue();
+        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
+            if (onShowUnselectedChanged) onShowUnselectedChanged(i, show);
+        }
+    });
+    allGridLines->Bind(wxEVT_CHECKBOX, [this, allGridLines](wxCommandEvent&) {
+        bool show = allGridLines->GetValue();
+        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
+            if (onGridLinesChanged) onGridLinesChanged(i, show);
+        }
+    });
+    allHistograms->Bind(wxEVT_CHECKBOX, [this, allHistograms](wxCommandEvent&) {
+        bool show = allHistograms->GetValue();
+        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
+            if (onShowHistogramsChanged) onShowHistogramsChanged(i, show);
+        }
+    });
 
     sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
 

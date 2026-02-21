@@ -94,6 +94,11 @@ void WebGPUCanvas::SetShowGridLines(bool show) {
     Refresh();
 }
 
+void WebGPUCanvas::SetShowHistograms(bool show) {
+    m_showHistograms = show;
+    Refresh();
+}
+
 void WebGPUCanvas::SetGridLinePositions(const std::vector<float>& xPositions,
                                         const std::vector<float>& yPositions) {
     m_gridXPositions = xPositions;
@@ -881,10 +886,8 @@ void WebGPUCanvas::Render() {
     encDesc.label = {"cmd_enc", WGPU_STRLEN};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device, &encDesc);
 
-    // Black background for additive blending (points accumulate brightness)
-    double bgR = m_isActive ? 0.03 : 0.0;
-    double bgG = m_isActive ? 0.03 : 0.0;
-    double bgB = m_isActive ? 0.05 : 0.0;
+    // Always black background for proper additive blending
+    double bgR = 0.0, bgG = 0.0, bgB = 0.0;
 
     WGPURenderPassColorAttachment colorAtt = {};
     colorAtt.view = view;

@@ -19,6 +19,7 @@ struct PlotConfig {
     NormMode yNorm = NormMode::None;
     bool showUnselected = true;
     bool showGridLines = false;
+    bool showHistograms = true;
     float pointSize = 6.0f;
     float opacity = 0.05f;
     int histBins = 64;
@@ -36,6 +37,7 @@ private:
     void UpdatePlot(int plotIndex);
     void UpdateAllPlots();
     void SetActivePlot(int plotIndex);
+    void HighlightAllPlots();
     void PropagateSelection(const std::vector<int>& selection);
     void HandleBrushRect(int plotIndex, float x0, float y0, float x1, float y1, bool extend);
     void ClearAllSelections();
@@ -56,6 +58,7 @@ private:
     static constexpr int MAX_NICE_TICKS = 10;
 
     struct PlotWidgets {
+        wxPanel* cellPanel = nullptr;
         wxStaticText* xLabel = nullptr;
         VerticalLabel* yLabel = nullptr;
         wxPanel* xTickPanel = nullptr;
