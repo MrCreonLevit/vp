@@ -79,6 +79,11 @@ void WebGPUCanvas::SetPointSize(float size) {
     Refresh();
 }
 
+void WebGPUCanvas::SetHistBins(int bins) {
+    m_histBins = std::max(2, bins);
+    Refresh();
+}
+
 void WebGPUCanvas::SetOpacity(float alpha) {
     m_opacity = alpha;
     UpdatePointColors();
@@ -130,25 +135,50 @@ void WebGPUCanvas::ResetView() {
 }
 
 void WebGPUCanvas::UpdatePointColors() {
+    // All points get the unselected color for the additive pass
+    for (size_t i = 0; i < m_points.size(); i++) {
+        m_points[i].r = 0.15f;
+        m_points[i].g = 0.4f;
+        m_points[i].b = 1.0f;
+        m_points[i].a = m_opacity;
+    }
+
+    // Build a separate buffer of only selected points for the overlay pass
+    std::vector<PointVertex> selPoints;
     for (size_t i = 0; i < m_points.size(); i++) {
         int brushIdx = (i < m_selection.size()) ? m_selection[i] : 0;
         if (brushIdx > 0 && brushIdx <= (int)m_brushColors.size()) {
-            // Selected by a brush: use that brush's color
             const auto& bc = m_brushColors[brushIdx - 1];
-            m_points[i].r = bc.r;
-            m_points[i].g = bc.g;
-            m_points[i].b = bc.b;
-            m_points[i].a = m_opacity * 2.0f;
-        } else {
-            // Unselected: low-luminosity blue for additive buildup
-            m_points[i].r = 0.15f;
-            m_points[i].g = 0.4f;
-            m_points[i].b = 1.0f;
-            m_points[i].a = m_opacity;
+            PointVertex v = m_points[i];  // same position
+            v.r = bc.r;
+            v.g = bc.g;
+            v.b = bc.b;
+            v.a = 0.85f;  // high opacity for clear visibility
+            selPoints.push_back(v);
         }
     }
+    m_selVertexCount = selPoints.size();
+
     if (m_initialized) {
         UpdateVertexBuffer();
+
+        // Update selection vertex buffer
+        auto device = m_ctx->GetDevice();
+        auto queue = m_ctx->GetQueue();
+        if (m_selVertexBuffer) {
+            wgpuBufferRelease(m_selVertexBuffer);
+            m_selVertexBuffer = nullptr;
+        }
+        if (!selPoints.empty()) {
+            size_t dataSize = selPoints.size() * sizeof(PointVertex);
+            WGPUBufferDescriptor sbDesc = {};
+            sbDesc.label = {"sel_instances", WGPU_STRLEN};
+            sbDesc.size = dataSize;
+            sbDesc.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+            m_selVertexBuffer = wgpuDeviceCreateBuffer(device, &sbDesc);
+            wgpuQueueWriteBuffer(queue, m_selVertexBuffer, 0, selPoints.data(), dataSize);
+        }
+
         UpdateHistograms();
         Refresh();
     }
@@ -330,6 +360,41 @@ void WebGPUCanvas::CreatePipeline() {
 
     m_pipeline = wgpuDeviceCreateRenderPipeline(device, &rpDesc);
 
+    // Selection overlay pipeline: same vertex layout but standard alpha blending
+    // so selected points are drawn opaquely on top of the additive background
+    WGPUBlendState selBlend = {};
+    selBlend.color.srcFactor = WGPUBlendFactor_SrcAlpha;
+    selBlend.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+    selBlend.color.operation = WGPUBlendOperation_Add;
+    selBlend.alpha.srcFactor = WGPUBlendFactor_One;
+    selBlend.alpha.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+    selBlend.alpha.operation = WGPUBlendOperation_Add;
+
+    WGPUColorTargetState selColorTarget = {};
+    selColorTarget.format = m_surfaceFormat;
+    selColorTarget.blend = &selBlend;
+    selColorTarget.writeMask = WGPUColorWriteMask_All;
+
+    WGPUFragmentState selFragState = {};
+    selFragState.module = shaderModule;
+    selFragState.entryPoint = {"fs_main", WGPU_STRLEN};
+    selFragState.targetCount = 1;
+    selFragState.targets = &selColorTarget;
+
+    WGPURenderPipelineDescriptor selRpDesc = {};
+    selRpDesc.label = {"sel_pipeline", WGPU_STRLEN};
+    selRpDesc.layout = pipelineLayout;
+    selRpDesc.vertex.module = shaderModule;
+    selRpDesc.vertex.entryPoint = {"vs_main", WGPU_STRLEN};
+    selRpDesc.vertex.bufferCount = 2;
+    selRpDesc.vertex.buffers = vbLayouts;
+    selRpDesc.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+    selRpDesc.fragment = &selFragState;
+    selRpDesc.multisample.count = 1;
+    selRpDesc.multisample.mask = 0xFFFFFFFF;
+
+    m_selPipeline = wgpuDeviceCreateRenderPipeline(device, &selRpDesc);
+
     // Histogram pipeline: simple triangles with per-vertex position+color
     // Reuse the same shader but with a single vertex buffer (no instancing)
     // The histogram vertices are pre-transformed to clip space, so vs_main
@@ -484,11 +549,10 @@ void WebGPUCanvas::UpdateHistograms() {
     if (!m_ctx || m_basePositions.empty() || !m_showHistograms)
         return;
 
-    constexpr int NUM_BINS = 64;
+    int numBins = m_histBins;
     constexpr float HIST_HEIGHT = 0.3f;
     size_t numPoints = m_basePositions.size() / 2;
 
-    // Visible range in data space based on current pan/zoom
     float hw = 1.0f / m_zoom;
     float hh = 1.0f / m_zoom;
     float xViewMin = m_panX - hw;
@@ -496,30 +560,27 @@ void WebGPUCanvas::UpdateHistograms() {
     float yViewMin = m_panY - hh;
     float yViewMax = m_panY + hh;
 
-    float xBinWidth = (xViewMax - xViewMin) / NUM_BINS;
-    float yBinWidth = (yViewMax - yViewMin) / NUM_BINS;
+    float xBinWidth = (xViewMax - xViewMin) / numBins;
+    float yBinWidth = (yViewMax - yViewMin) / numBins;
 
-    // Bin points that fall within the visible range
-    std::vector<int> xBinsAll(NUM_BINS, 0), yBinsAll(NUM_BINS, 0);
-    std::vector<int> xBinsSel(NUM_BINS, 0), yBinsSel(NUM_BINS, 0);
+    std::vector<int> xBinsAll(numBins, 0), yBinsAll(numBins, 0);
+    std::vector<int> xBinsSel(numBins, 0), yBinsSel(numBins, 0);
 
     for (size_t i = 0; i < numPoints; i++) {
         float px = m_basePositions[i * 2];
         float py = m_basePositions[i * 2 + 1];
         bool selected = (i < m_selection.size() && m_selection[i] > 0);
 
-        // X histogram: bin if within visible Y range (marginal over visible Y)
         if (px >= xViewMin && px <= xViewMax) {
             int xBin = static_cast<int>((px - xViewMin) / xBinWidth);
-            xBin = std::max(0, std::min(xBin, NUM_BINS - 1));
+            xBin = std::max(0, std::min(xBin, numBins - 1));
             xBinsAll[xBin]++;
             if (selected) xBinsSel[xBin]++;
         }
 
-        // Y histogram: bin if within visible X range (marginal over visible X)
         if (py >= yViewMin && py <= yViewMax) {
             int yBin = static_cast<int>((py - yViewMin) / yBinWidth);
-            yBin = std::max(0, std::min(yBin, NUM_BINS - 1));
+            yBin = std::max(0, std::min(yBin, numBins - 1));
             yBinsAll[yBin]++;
             if (selected) yBinsSel[yBin]++;
         }
@@ -530,49 +591,91 @@ void WebGPUCanvas::UpdateHistograms() {
     if (xMaxAll == 0) xMaxAll = 1;
     if (yMaxAll == 0) yMaxAll = 1;
 
-    // Build histogram bar vertices in clip space [-1, 1]
     std::vector<PointVertex> histVerts;
-    histVerts.reserve(NUM_BINS * 6 * 4);
+    histVerts.reserve(numBins * 24 * 2);  // outline bars use more vertices
 
-    auto addBar = [&](float x0, float y0, float x1, float y1,
-                      float r, float g, float b, float a) {
+    // Filled rectangle helper
+    auto addFilledBar = [&](float x0, float y0, float x1, float y1,
+                            float r, float g, float b, float a) {
         PointVertex tl = {x0, y1, r, g, b, a};
         PointVertex tr = {x1, y1, r, g, b, a};
         PointVertex bl = {x0, y0, r, g, b, a};
         PointVertex br = {x1, y0, r, g, b, a};
-        histVerts.push_back(bl);
-        histVerts.push_back(br);
-        histVerts.push_back(tr);
-        histVerts.push_back(bl);
-        histVerts.push_back(tr);
-        histVerts.push_back(tl);
+        histVerts.push_back(bl); histVerts.push_back(br); histVerts.push_back(tr);
+        histVerts.push_back(bl); histVerts.push_back(tr); histVerts.push_back(tl);
     };
 
-    float clipBinWidth = 2.0f / NUM_BINS;
+    // Staircase histogram outline: a single polyline that steps up/down
+    // avoiding double-thick lines where adjacent bars share an edge.
+    // Each segment is a thin quad (line segment with thickness).
+    float lineT = 0.003f;  // line thickness in clip space
 
-    // X histogram (pinned to bottom edge)
-    for (int i = 0; i < NUM_BINS; i++) {
-        float bx0 = -1.0f + i * clipBinWidth;
-        float bx1 = bx0 + clipBinWidth;
-        float hAll = (static_cast<float>(xBinsAll[i]) / xMaxAll) * HIST_HEIGHT;
-        if (hAll > 0.001f)
-            addBar(bx0, -1.0f, bx1, -1.0f + hAll, 0.3f, 0.5f, 0.8f, 0.35f);
-        float hSel = (static_cast<float>(xBinsSel[i]) / xMaxAll) * HIST_HEIGHT;
-        if (hSel > 0.001f)
-            addBar(bx0, -1.0f, bx1, -1.0f + hSel, 1.0f, 0.5f, 0.2f, 0.5f);
-    }
+    // Helper: draw a thin horizontal line segment
+    auto addHLine = [&](float x0, float x1, float y,
+                        float r, float g, float b, float a) {
+        addFilledBar(x0, y - lineT * 0.5f, x1, y + lineT * 0.5f, r, g, b, a);
+    };
+    // Helper: draw a thin vertical line segment
+    auto addVLine = [&](float x, float y0, float y1,
+                        float r, float g, float b, float a) {
+        addFilledBar(x - lineT * 0.5f, y0, x + lineT * 0.5f, y1, r, g, b, a);
+    };
 
-    // Y histogram (pinned to left edge)
-    for (int i = 0; i < NUM_BINS; i++) {
-        float by0 = -1.0f + i * clipBinWidth;
-        float by1 = by0 + clipBinWidth;
-        float hAll = (static_cast<float>(yBinsAll[i]) / yMaxAll) * HIST_HEIGHT;
-        if (hAll > 0.001f)
-            addBar(-1.0f, by0, -1.0f + hAll, by1, 0.3f, 0.5f, 0.8f, 0.35f);
-        float hSel = (static_cast<float>(yBinsSel[i]) / yMaxAll) * HIST_HEIGHT;
-        if (hSel > 0.001f)
-            addBar(-1.0f, by0, -1.0f + hSel, by1, 1.0f, 0.5f, 0.2f, 0.5f);
-    }
+    // Draw a staircase histogram outline for a horizontal histogram (bars go up from base)
+    auto addStaircaseX = [&](const std::vector<int>& bins, int maxBin, float base,
+                             float r, float g, float b, float a) {
+        float binW = 2.0f / numBins;
+        float prevH = 0.0f;
+        for (int i = 0; i < numBins; i++) {
+            float h = (static_cast<float>(bins[i]) / maxBin) * HIST_HEIGHT;
+            float x = -1.0f + i * binW;
+            // Vertical step from previous height to this height
+            if (std::abs(h - prevH) > 0.001f) {
+                float lo = base + std::min(prevH, h);
+                float hi = base + std::max(prevH, h);
+                addVLine(x, lo, hi, r, g, b, a);
+            }
+            // Horizontal top of this bin
+            if (h > 0.001f)
+                addHLine(x, x + binW, base + h, r, g, b, a);
+            prevH = h;
+        }
+        // Final right edge back to baseline
+        if (prevH > 0.001f)
+            addVLine(1.0f, base, base + prevH, r, g, b, a);
+    };
+
+    // Draw a staircase histogram outline for a vertical histogram (bars go right from base)
+    auto addStaircaseY = [&](const std::vector<int>& bins, int maxBin, float base,
+                             float r, float g, float b, float a) {
+        float binW = 2.0f / numBins;
+        float prevH = 0.0f;
+        for (int i = 0; i < numBins; i++) {
+            float h = (static_cast<float>(bins[i]) / maxBin) * HIST_HEIGHT;
+            float y = -1.0f + i * binW;
+            // Horizontal step from previous height to this height
+            if (std::abs(h - prevH) > 0.001f) {
+                float lo = base + std::min(prevH, h);
+                float hi = base + std::max(prevH, h);
+                addHLine(lo, hi, y, r, g, b, a);
+            }
+            // Vertical right edge of this bin
+            if (h > 0.001f)
+                addVLine(base + h, y, y + binW, r, g, b, a);
+            prevH = h;
+        }
+        // Final top edge back to baseline
+        if (prevH > 0.001f)
+            addHLine(base, base + prevH, 1.0f, r, g, b, a);
+    };
+
+    // X histogram (bottom edge)
+    addStaircaseX(xBinsAll, xMaxAll, -1.0f, 0.3f, 0.5f, 0.8f, 0.5f);
+    addStaircaseX(xBinsSel, xMaxAll, -1.0f, 1.0f, 0.5f, 0.2f, 0.7f);
+
+    // Y histogram (left edge)
+    addStaircaseY(yBinsAll, yMaxAll, -1.0f, 0.3f, 0.5f, 0.8f, 0.5f);
+    addStaircaseY(yBinsSel, yMaxAll, -1.0f, 1.0f, 0.5f, 0.2f, 0.7f);
 
     m_histVertexCount = histVerts.size();
 
@@ -638,6 +741,13 @@ void WebGPUCanvas::Render() {
     UpdateUniforms();
     UpdateHistograms();
 
+    // Notify MainFrame of current viewport for tick value labels
+    if (onViewportChanged) {
+        float hw = 1.0f / m_zoom;
+        float hh = 1.0f / m_zoom;
+        onViewportChanged(m_plotIndex, m_panX - hw, m_panX + hw, m_panY - hh, m_panY + hh);
+    }
+
     WGPUSurfaceTexture surfTex;
     wgpuSurfaceGetCurrentTexture(m_surface, &surfTex);
 
@@ -685,6 +795,17 @@ void WebGPUCanvas::Render() {
         wgpuRenderPassEncoderSetVertexBuffer(rp, 1, m_vertexBuffer, 0,
                                               m_points.size() * sizeof(PointVertex));
         wgpuRenderPassEncoderDraw(rp, 6, static_cast<uint32_t>(m_points.size()), 0, 0);
+    }
+
+    // Draw selected points on top with alpha blending (not additive)
+    // so they stand out clearly against dense overplotted regions
+    if (m_selPipeline && m_selVertexBuffer && m_selVertexCount > 0) {
+        wgpuRenderPassEncoderSetPipeline(rp, m_selPipeline);
+        wgpuRenderPassEncoderSetBindGroup(rp, 0, m_bindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetVertexBuffer(rp, 0, quadBuf, 0, 6 * 2 * sizeof(float));
+        wgpuRenderPassEncoderSetVertexBuffer(rp, 1, m_selVertexBuffer, 0,
+                                              m_selVertexCount * sizeof(PointVertex));
+        wgpuRenderPassEncoderDraw(rp, 6, static_cast<uint32_t>(m_selVertexCount), 0, 0);
     }
 
     // Draw histograms with identity projection (fixed to viewport edges)
@@ -814,6 +935,8 @@ void WebGPUCanvas::Cleanup() {
     if (m_histPipeline) { wgpuRenderPipelineRelease(m_histPipeline); m_histPipeline = nullptr; }
     if (m_histBindGroup) { wgpuBindGroupRelease(m_histBindGroup); m_histBindGroup = nullptr; }
     if (m_histUniformBuffer) { wgpuBufferRelease(m_histUniformBuffer); m_histUniformBuffer = nullptr; }
+    if (m_selVertexBuffer) { wgpuBufferRelease(m_selVertexBuffer); m_selVertexBuffer = nullptr; }
+    if (m_selPipeline) { wgpuRenderPipelineRelease(m_selPipeline); m_selPipeline = nullptr; }
     if (m_bindGroup) { wgpuBindGroupRelease(m_bindGroup); m_bindGroup = nullptr; }
     if (m_pipeline) { wgpuRenderPipelineRelease(m_pipeline); m_pipeline = nullptr; }
     if (m_uniformBuffer) { wgpuBufferRelease(m_uniformBuffer); m_uniformBuffer = nullptr; }

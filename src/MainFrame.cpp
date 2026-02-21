@@ -90,6 +90,10 @@ void MainFrame::CreateLayout() {
         for (auto* c : m_canvases) c->SetOpacity(alpha);
     };
 
+    m_controlPanel->onHistBinsChanged = [this](int bins) {
+        for (auto* c : m_canvases) c->SetHistBins(bins);
+    };
+
     m_controlPanel->onClearSelection = [this]() {
         ClearAllSelections();
     };
@@ -106,46 +110,82 @@ void MainFrame::CreateLayout() {
 }
 
 void MainFrame::RebuildGrid() {
-    // Destroy existing children of grid panel
     m_gridPanel->DestroyChildren();
     m_canvases.clear();
-    m_xLabels.clear();
-    m_yLabels.clear();
+    m_plotWidgets.clear();
 
     int numPlots = m_gridRows * m_gridCols;
     m_plotConfigs.resize(numPlots);
     m_canvases.resize(numPlots);
-    m_xLabels.resize(numPlots);
-    m_yLabels.resize(numPlots);
+    m_plotWidgets.resize(numPlots);
+
+    wxFont tickFont(7, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+    wxColour tickTextColor(130, 140, 160);
+    wxColour bgColor(30, 30, 40);
 
     auto* gridSizer = new wxGridSizer(m_gridRows, m_gridCols, 2, 2);
 
     for (int i = 0; i < numPlots; i++) {
-        // Each cell: Y label on left, canvas in center, X label on bottom
+        auto& pw = m_plotWidgets[i];
         auto* cellPanel = new wxPanel(m_gridPanel);
+        cellPanel->SetBackgroundColour(bgColor);
         auto* cellSizer = new wxBoxSizer(wxHORIZONTAL);
 
-        // Y axis label (rotated text on left)
-        auto* yLabel = new VerticalLabel(cellPanel);
-        m_yLabels[i] = yLabel;
-        cellSizer->Add(yLabel, 0, wxEXPAND);
+        // Left column: Y tick values + Y label
+        auto* leftSizer = new wxBoxSizer(wxHORIZONTAL);
 
-        // Right side: canvas + X label
+        // Y axis label (rotated)
+        pw.yLabel = new VerticalLabel(cellPanel);
+        leftSizer->Add(pw.yLabel, 0, wxEXPAND);
+
+        // Y tick values (vertical stack, bottom to top)
+        auto* yTickSizer = new wxBoxSizer(wxVERTICAL);
+        for (int t = 0; t < NUM_TICKS; t++) {
+            auto* tickLabel = new wxStaticText(cellPanel, wxID_ANY, "",
+                wxDefaultPosition, wxSize(42, -1),
+                wxALIGN_RIGHT | wxST_NO_AUTORESIZE);
+            tickLabel->SetFont(tickFont);
+            tickLabel->SetForegroundColour(tickTextColor);
+            tickLabel->SetBackgroundColour(bgColor);
+            pw.yTicks[t] = tickLabel;
+            // Top tick first (high values), bottom tick last (low values)
+            yTickSizer->Add(tickLabel, 1, wxALIGN_RIGHT | wxRIGHT, 2);
+        }
+        leftSizer->Add(yTickSizer, 0, wxEXPAND);
+
+        cellSizer->Add(leftSizer, 0, wxEXPAND);
+
+        // Right side: canvas + X ticks + X label
         auto* rightSizer = new wxBoxSizer(wxVERTICAL);
 
         auto* canvas = new WebGPUCanvas(cellPanel, &m_gpuContext, i);
         m_canvases[i] = canvas;
         rightSizer->Add(canvas, 1, wxEXPAND);
 
-        auto* xLabel = new wxStaticText(cellPanel, wxID_ANY, "",
-            wxDefaultPosition, wxSize(-1, 16), wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
-        xLabel->SetForegroundColour(wxColour(160, 170, 200));
-        auto xFont = xLabel->GetFont();
+        // X tick values (horizontal row)
+        auto* xTickSizer = new wxBoxSizer(wxHORIZONTAL);
+        for (int t = 0; t < NUM_TICKS; t++) {
+            auto* tickLabel = new wxStaticText(cellPanel, wxID_ANY, "",
+                wxDefaultPosition, wxDefaultSize,
+                wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
+            tickLabel->SetFont(tickFont);
+            tickLabel->SetForegroundColour(tickTextColor);
+            tickLabel->SetBackgroundColour(bgColor);
+            pw.xTicks[t] = tickLabel;
+            xTickSizer->Add(tickLabel, 1, wxALIGN_CENTRE_HORIZONTAL);
+        }
+        rightSizer->Add(xTickSizer, 0, wxEXPAND);
+
+        // X axis label
+        pw.xLabel = new wxStaticText(cellPanel, wxID_ANY, "",
+            wxDefaultPosition, wxSize(-1, 14),
+            wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
+        pw.xLabel->SetForegroundColour(wxColour(160, 170, 200));
+        auto xFont = pw.xLabel->GetFont();
         xFont.SetPointSize(xFont.GetPointSize() - 1);
-        xLabel->SetFont(xFont);
-        xLabel->SetBackgroundColour(wxColour(30, 30, 40));
-        m_xLabels[i] = xLabel;
-        rightSizer->Add(xLabel, 0, wxEXPAND);
+        pw.xLabel->SetFont(xFont);
+        pw.xLabel->SetBackgroundColour(bgColor);
+        rightSizer->Add(pw.xLabel, 0, wxEXPAND);
 
         cellSizer->Add(rightSizer, 1, wxEXPAND);
         cellPanel->SetSizer(cellSizer);
@@ -164,6 +204,35 @@ void MainFrame::RebuildGrid() {
         canvas->SetBrushColors(colors);
         canvas->onResetViewRequested = [this]() {
             for (auto* c : m_canvases) c->ResetView();
+        };
+
+        // Viewport change callback: update tick value labels
+        canvas->onViewportChanged = [this](int pi, float vxMin, float vxMax, float vyMin, float vyMax) {
+            if (pi < 0 || pi >= (int)m_plotWidgets.size()) return;
+            auto& pw2 = m_plotWidgets[pi];
+            auto& cfg = m_plotConfigs[pi];
+            const auto& ds = m_dataManager.dataset();
+            if (ds.numCols == 0) return;
+
+            float xDataMin, xDataMax, yDataMin, yDataMax;
+            ds.columnRange(cfg.xCol, xDataMin, xDataMax);
+            ds.columnRange(cfg.yCol, yDataMin, yDataMax);
+            float xRange = xDataMax - xDataMin;
+            float yRange = yDataMax - yDataMin;
+            if (xRange == 0.0f) xRange = 1.0f;
+            if (yRange == 0.0f) yRange = 1.0f;
+
+            for (int t = 0; t < NUM_TICKS; t++) {
+                float frac = static_cast<float>(t) / (NUM_TICKS - 1);
+                // X tick values (left to right)
+                float normX = vxMin + frac * (vxMax - vxMin);
+                float dataX = xDataMin + ((normX + 0.9f) / 1.8f) * xRange;
+                pw2.xTicks[t]->SetLabel(wxString::Format("%.3g", dataX));
+                // Y tick values (top to bottom in widget order = high to low)
+                float normY = vyMax - frac * (vyMax - vyMin);
+                float dataY = yDataMin + ((normY + 0.9f) / 1.8f) * yRange;
+                pw2.yTicks[t]->SetLabel(wxString::Format("%.3g", dataY));
+            }
         };
 
         canvas->Bind(wxEVT_LEFT_DOWN, [this, i](wxMouseEvent& evt) {
@@ -244,11 +313,9 @@ void MainFrame::UpdatePlot(int plotIndex) {
     m_canvases[plotIndex]->SetPoints(std::move(points));
 
     // Set axis labels
-    if (plotIndex < (int)m_xLabels.size()) {
-        m_xLabels[plotIndex]->SetLabel(ds.columnLabels[cfg.xCol]);
-    }
-    if (plotIndex < (int)m_yLabels.size()) {
-        m_yLabels[plotIndex]->SetLabel(ds.columnLabels[cfg.yCol]);
+    if (plotIndex < (int)m_plotWidgets.size()) {
+        m_plotWidgets[plotIndex].xLabel->SetLabel(ds.columnLabels[cfg.xCol]);
+        m_plotWidgets[plotIndex].yLabel->SetLabel(ds.columnLabels[cfg.yCol]);
     }
 
     // Re-apply current selection

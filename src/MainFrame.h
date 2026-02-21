@@ -7,6 +7,7 @@
 #include "Brush.h"
 #include "VerticalLabel.h"
 #include <vector>
+#include <array>
 
 class WebGPUCanvas;
 class ControlPanel;
@@ -45,9 +46,17 @@ private:
 
     WebGPUContext m_gpuContext;
 
+    static constexpr int NUM_TICKS = 5;
+
+    struct PlotWidgets {
+        wxStaticText* xLabel = nullptr;
+        VerticalLabel* yLabel = nullptr;
+        std::array<wxStaticText*, 5> xTicks = {};
+        std::array<wxStaticText*, 5> yTicks = {};
+    };
+
     std::vector<WebGPUCanvas*> m_canvases;
-    std::vector<wxStaticText*> m_xLabels;
-    std::vector<VerticalLabel*> m_yLabels;
+    std::vector<PlotWidgets> m_plotWidgets;
     std::vector<PlotConfig> m_plotConfigs;
     int m_gridRows = 2;
     int m_gridCols = 2;

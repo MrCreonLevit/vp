@@ -66,6 +66,11 @@ void ControlPanel::CreateControls() {
     m_opacitySlider = new wxSlider(this, wxID_ANY, 5, 1, 100);
     sizer->Add(m_opacitySlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
+    m_histBinsLabel = new wxStaticText(this, wxID_ANY, "Hist Bins: 64");
+    sizer->Add(m_histBinsLabel, 0, wxLEFT | wxTOP, 10);
+    m_histBinsSlider = new wxSlider(this, wxID_ANY, 64, 2, 512);
+    sizer->Add(m_histBinsSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
+
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxALL, 10);
 
     // Brush selector — colored buttons
@@ -134,6 +139,11 @@ void ControlPanel::CreateControls() {
     m_yNorm->Bind(wxEVT_CHOICE, &ControlPanel::OnNormChoice, this);
     m_pointSizeSlider->Bind(wxEVT_SLIDER, &ControlPanel::OnPointSizeSlider, this);
     m_opacitySlider->Bind(wxEVT_SLIDER, &ControlPanel::OnOpacitySlider, this);
+    m_histBinsSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
+        int val = m_histBinsSlider->GetValue();
+        m_histBinsLabel->SetLabel(wxString::Format("Hist Bins: %d", val));
+        if (onHistBinsChanged) onHistBinsChanged(val);
+    });
 
     clearBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         if (onClearSelection) onClearSelection();

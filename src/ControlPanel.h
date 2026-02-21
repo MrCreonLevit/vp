@@ -25,6 +25,7 @@ public:
     std::function<void()> onClearSelection;
     std::function<void()> onInvertSelection;
     std::function<void(int brushIndex)> onBrushChanged;
+    std::function<void(int bins)> onHistBinsChanged;
 
     int GetXColumn() const;
     int GetYColumn() const;
@@ -51,8 +52,10 @@ private:
     wxChoice* m_yNorm = nullptr;
     wxSlider* m_pointSizeSlider = nullptr;
     wxSlider* m_opacitySlider = nullptr;
+    wxSlider* m_histBinsSlider = nullptr;
     wxStaticText* m_pointSizeLabel = nullptr;
     wxStaticText* m_opacityLabel = nullptr;
+    wxStaticText* m_histBinsLabel = nullptr;
     wxStaticText* m_infoLabel = nullptr;
     wxStaticText* m_selectionLabel = nullptr;
     std::array<wxButton*, CP_NUM_BRUSHES> m_brushButtons = {};

@@ -35,6 +35,7 @@ public:
                      float xDataMin, float xDataMax, float yDataMin, float yDataMax);
     void SetPointSize(float size);
     void SetOpacity(float alpha);
+    void SetHistBins(int bins);
     void SetBrushColors(const std::vector<BrushColor>& colors);
     void SetSelection(const std::vector<int>& sel);
     void ClearSelection();
@@ -52,6 +53,8 @@ public:
     std::function<void()> onClearRequested;
     std::function<void()> onInvertRequested;
     std::function<void()> onResetViewRequested;
+    // Called on each render with current visible range in normalized coords
+    std::function<void(int plotIndex, float xMin, float xMax, float yMin, float yMax)> onViewportChanged;
 
 private:
     void InitSurface();
@@ -78,8 +81,11 @@ private:
     // Per-canvas WebGPU objects
     WGPUSurface m_surface = nullptr;
     WGPUSurfaceConfiguration m_surfaceConfig = {};
-    WGPURenderPipeline m_pipeline = nullptr;
+    WGPURenderPipeline m_pipeline = nullptr;       // additive blending for all/unselected
+    WGPURenderPipeline m_selPipeline = nullptr;     // alpha blending for selected (on top)
     WGPUBuffer m_vertexBuffer = nullptr;
+    WGPUBuffer m_selVertexBuffer = nullptr;
+    size_t m_selVertexCount = 0;
     WGPUBuffer m_uniformBuffer = nullptr;
     WGPUBindGroup m_bindGroup = nullptr;
     WGPUBuffer m_histUniformBuffer = nullptr;
@@ -102,6 +108,7 @@ private:
     WGPUBuffer m_histBuffer = nullptr;
     size_t m_histVertexCount = 0;
     bool m_showHistograms = true;
+    int m_histBins = 64;
 
     // Axis info for labels/ticks
     std::string m_xLabel, m_yLabel;
