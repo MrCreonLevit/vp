@@ -29,6 +29,13 @@ void PlotTab::CreateControls(int row, int col) {
 
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
+    auto* randBtn = new wxButton(this, wxID_ANY, "Randomize Axes",
+                                  wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    sizer->Add(randBtn, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+    randBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (onRandomizeAxes) onRandomizeAxes(m_plotIndex);
+    });
+
     sizer->Add(new wxStaticText(this, wxID_ANY, "X Axis"), 0, wxLEFT | wxTOP, 8);
     m_xAxis = new wxChoice(this, wxID_ANY);
     sizer->Add(m_xAxis, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
@@ -196,14 +203,16 @@ ControlPanel::ControlPanel(wxWindow* parent)
     sizer->Add(m_infoLabel, 0, wxLEFT | wxRIGHT, 8);
 
     auto* helpText = new wxStaticText(this, wxID_ANY,
+        "Click plot: activate\n"
         "Drag: select\n"
+        "Opt+drag: move selection\n"
+        "Cmd+drag: extend selection\n"
         "Shift+drag: pan\n"
         "Scroll: zoom\n"
-        "Cmd+drag: extend selection\n"
-        "Click plot: activate\n"
         "C: clear selection\n"
         "I: invert selection\n"
-        "R: reset all views");
+        "R: reset all views\n"
+        "Q: quit");
     helpText->SetForegroundColour(wxColour(120, 120, 120));
     auto hFont = helpText->GetFont();
     hFont.SetPointSize(hFont.GetPointSize() - 1);
@@ -243,6 +252,9 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
         if (!m_columnNames.empty())
             tab->SetColumns(m_columnNames);
 
+        tab->onRandomizeAxes = [this](int pi) {
+            if (onRandomizeAxes) onRandomizeAxes(pi);
+        };
         tab->onAxisChanged = [this](int pi, int x, int y) {
             if (onAxisChanged) onAxisChanged(pi, x, y);
         };

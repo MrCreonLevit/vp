@@ -221,11 +221,57 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
         return false;
     }
 
-    // Shrink to fit
-    m_data.data.shrink_to_fit();
-
     fprintf(stderr, "Loaded %s: %zu rows x %zu columns\n",
             path.c_str(), m_data.numRows, m_data.numCols);
+
+    // Remove constant columns (all values identical)
+    {
+        std::vector<bool> keep(m_data.numCols, true);
+        int removed = 0;
+        for (size_t col = 0; col < m_data.numCols; col++) {
+            float first = m_data.data[col];
+            bool constant = true;
+            for (size_t row = 1; row < m_data.numRows; row++) {
+                if (m_data.data[row * m_data.numCols + col] != first) {
+                    constant = false;
+                    break;
+                }
+            }
+            if (constant) {
+                keep[col] = false;
+                removed++;
+                fprintf(stderr, "  Removing constant column '%s' (value=%.6g)\n",
+                        m_data.columnLabels[col].c_str(), first);
+            }
+        }
+
+        if (removed > 0) {
+            size_t newCols = m_data.numCols - removed;
+            std::vector<std::string> newLabels;
+            std::vector<float> newData;
+            newData.reserve(m_data.numRows * newCols);
+
+            for (size_t col = 0; col < m_data.numCols; col++) {
+                if (keep[col])
+                    newLabels.push_back(m_data.columnLabels[col]);
+            }
+
+            for (size_t row = 0; row < m_data.numRows; row++) {
+                for (size_t col = 0; col < m_data.numCols; col++) {
+                    if (keep[col])
+                        newData.push_back(m_data.data[row * m_data.numCols + col]);
+                }
+            }
+
+            m_data.columnLabels = std::move(newLabels);
+            m_data.data = std::move(newData);
+            m_data.numCols = newCols;
+            fprintf(stderr, "  Removed %d constant columns, %zu columns remaining\n",
+                    removed, m_data.numCols);
+        }
+    }
+
+    m_data.data.shrink_to_fit();
 
     return true;
 }

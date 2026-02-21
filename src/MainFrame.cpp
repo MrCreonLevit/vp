@@ -4,6 +4,7 @@
 #include <wx/progdlg.h>
 #include <algorithm>
 #include <cmath>
+#include <random>
 
 // Compute "nice" tick values (1, 2, 5 × 10^n series)
 static std::vector<float> computeNiceTicks(float rangeMin, float rangeMax, int approxCount) {
@@ -26,8 +27,15 @@ static std::vector<float> computeNiceTicks(float rangeMin, float rangeMax, int a
 }
 
 MainFrame::MainFrame()
-    : wxFrame(nullptr, wxID_ANY, "Viewpoints", wxDefaultPosition, wxSize(1200, 800))
+    : wxFrame(nullptr, wxID_ANY, "Viewpoints")
 {
+    // Size window to ~85% of usable screen area
+    wxRect clientArea = wxGetClientDisplayRect();  // excludes dock/menubar
+    int w = std::min(static_cast<int>(clientArea.width * 0.85), 1500);
+    int h = std::min(static_cast<int>(clientArea.height * 0.85), 960);
+    SetSize(w, h);
+    Centre();
+
     // Initialize default brush colors
     for (int i = 0; i < NUM_BRUSHES; i++)
         m_brushColors.push_back({kDefaultBrushes[i].r, kDefaultBrushes[i].g, kDefaultBrushes[i].b});
@@ -92,6 +100,23 @@ void MainFrame::CreateLayout() {
     SetSizer(mainSizer);
 
     // Wire control panel callbacks — per-plot (carry plotIndex)
+    m_controlPanel->onRandomizeAxes = [this](int plotIndex) {
+        const auto& ds = m_dataManager.dataset();
+        if (ds.numCols < 2 || plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size())
+            return;
+        std::random_device rd;
+        std::mt19937 rng(rd());
+        std::uniform_int_distribution<size_t> dist(0, ds.numCols - 1);
+        size_t xCol = dist(rng);
+        size_t yCol = dist(rng);
+        while (yCol == xCol && ds.numCols > 1)
+            yCol = dist(rng);
+        m_plotConfigs[plotIndex].xCol = xCol;
+        m_plotConfigs[plotIndex].yCol = yCol;
+        m_controlPanel->SetPlotConfig(plotIndex, m_plotConfigs[plotIndex]);
+        UpdatePlot(plotIndex);
+    };
+
     m_controlPanel->onAxisChanged = [this](int plotIndex, int xCol, int yCol) {
         if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
             m_plotConfigs[plotIndex].xCol = static_cast<size_t>(xCol);
@@ -562,10 +587,14 @@ void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, flo
     float rectMinY = std::min(y0, y1);
     float rectMaxY = std::max(y0, y1);
 
-    if (!extend)
+    if (m_selection.size() != ds.numRows)
         m_selection.assign(ds.numRows, 0);
-    else if (m_selection.size() != ds.numRows)
-        m_selection.assign(ds.numRows, 0);
+
+    if (!extend) {
+        // Clear only the current brush's selections, preserve other brushes
+        for (auto& s : m_selection)
+            if (s == m_activeBrush) s = 0;
+    }
 
     for (size_t r = 0; r < ds.numRows; r++) {
         if (xVals[r] >= rectMinX && xVals[r] <= rectMaxX &&

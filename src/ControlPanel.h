@@ -19,6 +19,7 @@ public:
     void SetColumns(const std::vector<std::string>& names);
     void SyncFromConfig(const PlotConfig& cfg);
 
+    std::function<void(int plotIndex)> onRandomizeAxes;
     std::function<void(int plotIndex, int xCol, int yCol)> onAxisChanged;
     std::function<void(int plotIndex, int xNorm, int yNorm)> onNormChanged;
     std::function<void(int plotIndex, bool show)> onShowUnselectedChanged;
@@ -61,6 +62,7 @@ public:
     void SetPlotConfig(int plotIndex, const PlotConfig& cfg);
 
     // Per-plot callbacks
+    std::function<void(int plotIndex)> onRandomizeAxes;
     std::function<void(int plotIndex, int xCol, int yCol)> onAxisChanged;
     std::function<void(int plotIndex, int xNorm, int yNorm)> onNormChanged;
     std::function<void(int plotIndex, bool show)> onShowUnselectedChanged;
