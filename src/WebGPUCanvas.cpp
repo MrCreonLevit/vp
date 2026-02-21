@@ -5,6 +5,22 @@
 #include <cstring>
 #include <algorithm>
 
+const char* SymbolName(int symbol) {
+    switch (symbol) {
+        case SYMBOL_CIRCLE:         return "Circle";
+        case SYMBOL_SQUARE:         return "Square";
+        case SYMBOL_DIAMOND:        return "Diamond";
+        case SYMBOL_TRIANGLE_UP:    return "Triangle Up";
+        case SYMBOL_TRIANGLE_DOWN:  return "Triangle Down";
+        case SYMBOL_CROSS:          return "Cross";
+        case SYMBOL_PLUS:           return "Plus";
+        case SYMBOL_STAR:           return "Star";
+        case SYMBOL_RING:           return "Ring";
+        case SYMBOL_SQUARE_OUTLINE: return "Square Outline";
+        default:                    return "Circle";
+    }
+}
+
 #ifdef __WXMAC__
 #include <Cocoa/Cocoa.h>
 #include <QuartzCore/CAMetalLayer.h>
@@ -162,22 +178,24 @@ void WebGPUCanvas::UpdatePointColors() {
     for (size_t i = 0; i < m_points.size(); i++) {
         int brushIdx = (i < m_selection.size()) ? m_selection[i] : 0;
         if (brushIdx > 0 && brushIdx <= (int)m_brushColors.size()) {
-            // Selected: brush color with brush-specific alpha for additive compositing
             const auto& bc = m_brushColors[brushIdx - 1];
             m_points[i].r = bc.r;
             m_points[i].g = bc.g;
             m_points[i].b = bc.b;
             m_points[i].a = m_opacity * bc.a;
+            m_points[i].symbol = static_cast<float>(bc.symbol);
         } else if (!m_showUnselected) {
             m_points[i].r = 0.0f;
             m_points[i].g = 0.0f;
             m_points[i].b = 0.0f;
             m_points[i].a = 0.0f;
+            m_points[i].symbol = 0.0f;
         } else {
             m_points[i].r = 0.15f;
             m_points[i].g = 0.4f;
             m_points[i].b = 1.0f;
             m_points[i].a = m_opacity;
+            m_points[i].symbol = 0.0f;  // circle for unselected
         }
     }
 
@@ -351,13 +369,16 @@ void WebGPUCanvas::CreatePipeline() {
     quadAttr.offset = 0;
     quadAttr.shaderLocation = 0;
 
-    WGPUVertexAttribute instanceAttrs[2] = {};
-    instanceAttrs[0].format = WGPUVertexFormat_Float32x2;
+    WGPUVertexAttribute instanceAttrs[3] = {};
+    instanceAttrs[0].format = WGPUVertexFormat_Float32x2;  // position
     instanceAttrs[0].offset = offsetof(PointVertex, x);
     instanceAttrs[0].shaderLocation = 1;
-    instanceAttrs[1].format = WGPUVertexFormat_Float32x4;
+    instanceAttrs[1].format = WGPUVertexFormat_Float32x4;  // color
     instanceAttrs[1].offset = offsetof(PointVertex, r);
     instanceAttrs[1].shaderLocation = 2;
+    instanceAttrs[2].format = WGPUVertexFormat_Float32;    // symbol
+    instanceAttrs[2].offset = offsetof(PointVertex, symbol);
+    instanceAttrs[2].shaderLocation = 3;
 
     WGPUVertexBufferLayout vbLayouts[2] = {};
     vbLayouts[0].arrayStride = 2 * sizeof(float);
@@ -366,7 +387,7 @@ void WebGPUCanvas::CreatePipeline() {
     vbLayouts[0].attributes = &quadAttr;
     vbLayouts[1].arrayStride = sizeof(PointVertex);
     vbLayouts[1].stepMode = WGPUVertexStepMode_Instance;
-    vbLayouts[1].attributeCount = 2;
+    vbLayouts[1].attributeCount = 3;
     vbLayouts[1].attributes = instanceAttrs;
 
     WGPUBlendState blend = {};

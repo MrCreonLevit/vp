@@ -2,6 +2,7 @@
 #include "Normalize.h"
 #include "Brush.h"
 #include "MainFrame.h"
+#include "WebGPUCanvas.h"  // for SymbolName, SYMBOL_COUNT
 #include <wx/statline.h>
 #include <wx/colordlg.h>
 
@@ -491,6 +492,19 @@ void ControlPanel::CreateAllPage() {
     }
     sizer->Add(brushSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
     SelectBrush(0);
+
+    // Symbol chooser for active brush
+    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Brush Symbol"), 0, wxLEFT | wxTOP, 8);
+    auto* symbolChoice = new wxChoice(m_allPage, wxID_ANY);
+    for (int s = 0; s < SYMBOL_COUNT; s++)
+        symbolChoice->Append(SymbolName(s));
+    symbolChoice->SetSelection(0);
+    sizer->Add(symbolChoice, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+    symbolChoice->Bind(wxEVT_CHOICE, [this, symbolChoice](wxCommandEvent&) {
+        int sym = symbolChoice->GetSelection();
+        if (onBrushSymbolChanged)
+            onBrushSymbolChanged(m_activeBrush, sym);
+    });
 
     m_selectionLabel = new wxStaticText(m_allPage, wxID_ANY, "No selection");
     sizer->Add(m_selectionLabel, 0, wxLEFT | wxTOP, 8);

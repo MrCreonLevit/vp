@@ -11,6 +11,7 @@ class WebGPUContext;
 struct PointVertex {
     float x, y;
     float r, g, b, a;
+    float symbol;  // 0=circle, 1=square, 2=diamond, 3=triangle, etc.
 };
 
 struct Uniforms {
@@ -21,9 +22,27 @@ struct Uniforms {
     float _pad;
 };
 
+// Symbol types
+enum PointSymbol {
+    SYMBOL_CIRCLE = 0,
+    SYMBOL_SQUARE,
+    SYMBOL_DIAMOND,
+    SYMBOL_TRIANGLE_UP,
+    SYMBOL_TRIANGLE_DOWN,
+    SYMBOL_CROSS,
+    SYMBOL_PLUS,
+    SYMBOL_STAR,
+    SYMBOL_RING,
+    SYMBOL_SQUARE_OUTLINE,
+    SYMBOL_COUNT
+};
+
+const char* SymbolName(int symbol);
+
 struct BrushColor {
     float r, g, b;
-    float a = 1.0f;  // per-brush opacity (1.0 = use default, lower = additive composite)
+    float a = 1.0f;
+    int symbol = SYMBOL_CIRCLE;
 };
 
 class WebGPUCanvas : public wxWindow {

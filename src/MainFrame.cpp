@@ -38,7 +38,7 @@ MainFrame::MainFrame()
 
     // Initialize default brush colors
     for (int i = 0; i < NUM_BRUSHES; i++)
-        m_brushColors.push_back({kDefaultBrushes[i].r, kDefaultBrushes[i].g, kDefaultBrushes[i].b});
+        m_brushColors.push_back({kDefaultBrushes[i].r, kDefaultBrushes[i].g, kDefaultBrushes[i].b, 1.0f, i % SYMBOL_COUNT});
 
     // Initialize shared GPU context before creating any canvases
     if (!m_gpuContext.Initialize()) {
@@ -229,7 +229,16 @@ void MainFrame::CreateLayout() {
 
     m_controlPanel->onBrushColorEdited = [this](int brushIndex, float r, float g, float b, float a) {
         if (brushIndex >= 0 && brushIndex < (int)m_brushColors.size()) {
-            m_brushColors[brushIndex] = {r, g, b, a};
+            int sym = m_brushColors[brushIndex].symbol;  // preserve symbol
+            m_brushColors[brushIndex] = {r, g, b, a, sym};
+            for (auto* c : m_canvases)
+                c->SetBrushColors(m_brushColors);
+        }
+    };
+
+    m_controlPanel->onBrushSymbolChanged = [this](int brushIndex, int symbol) {
+        if (brushIndex >= 0 && brushIndex < (int)m_brushColors.size()) {
+            m_brushColors[brushIndex].symbol = symbol;
             for (auto* c : m_canvases)
                 c->SetBrushColors(m_brushColors);
         }

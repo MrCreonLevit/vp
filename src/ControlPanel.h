@@ -83,6 +83,7 @@ public:
     std::function<void()> onKillSelected;
     std::function<void(int brushIndex)> onBrushChanged;
     std::function<void(int brushIndex, float r, float g, float b, float a)> onBrushColorEdited;
+    std::function<void(int brushIndex, int symbol)> onBrushSymbolChanged;
 
     float GetPointSize() const;
     float GetOpacity() const;

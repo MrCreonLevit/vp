@@ -19,6 +19,7 @@ struct VertexOutput {
     @builtin(position) position: vec4f,
     @location(0) color: vec4f,
     @location(1) uv: vec2f,
+    @location(2) symbol: f32,
 }
 
 @vertex
@@ -26,6 +27,7 @@ fn vs_main(
     @location(0) quad_pos: vec2f,
     @location(1) point_pos: vec2f,
     @location(2) point_color: vec4f,
+    @location(3) point_symbol: f32,
 ) -> VertexOutput {
     let clip = uniforms.projection * vec4f(point_pos, 0.0, 1.0);
     let pixel_offset = quad_pos * uniforms.point_size;
@@ -38,12 +40,93 @@ fn vs_main(
     output.position = vec4f(clip.xy + ndc_offset * clip.w, clip.z, clip.w);
     output.color = point_color;
     output.uv = quad_pos + 0.5;
+    output.symbol = point_symbol;
     return output;
+}
+
+// SDF shape functions — all work in centered UV space where (0,0) is center, range [-0.5, 0.5]
+fn sdf_circle(p: vec2f) -> f32 {
+    return length(p) * 2.0;
+}
+
+fn sdf_square(p: vec2f) -> f32 {
+    let d = abs(p);
+    return max(d.x, d.y) * 2.0;
+}
+
+fn sdf_diamond(p: vec2f) -> f32 {
+    let d = abs(p);
+    return (d.x + d.y) * 1.42;
+}
+
+fn sdf_triangle_up(p: vec2f) -> f32 {
+    let q = vec2f(abs(p.x), p.y + 0.15);
+    return max(q.x * 1.73 + q.y, -q.y * 2.0 + 0.5) * 1.3;
+}
+
+fn sdf_triangle_down(p: vec2f) -> f32 {
+    let q = vec2f(abs(p.x), -p.y + 0.15);
+    return max(q.x * 1.73 + q.y, -q.y * 2.0 + 0.5) * 1.3;
+}
+
+fn sdf_cross(p: vec2f) -> f32 {
+    let d = abs(p);
+    let arm = 0.14;
+    if (d.x < arm || d.y < arm) { return max(d.x, d.y) * 2.0; }
+    return 2.0;  // outside
+}
+
+fn sdf_plus(p: vec2f) -> f32 {
+    let d = abs(p);
+    let arm = 0.1;
+    if (d.x < arm || d.y < arm) { return max(d.x, d.y) * 2.0; }
+    return 2.0;
+}
+
+fn sdf_star(p: vec2f) -> f32 {
+    let d = abs(p);
+    let diag = (d.x + d.y) * 0.707;
+    let arm = 0.1;
+    if (d.x < arm || d.y < arm || abs(d.x - d.y) < arm * 1.4) {
+        return max(d.x, d.y) * 2.0;
+    }
+    return 2.0;
+}
+
+fn sdf_ring(p: vec2f) -> f32 {
+    let dist = length(p) * 2.0;
+    if (abs(dist - 0.7) < 0.2) { return dist; }
+    return 2.0;
+}
+
+fn sdf_square_outline(p: vec2f) -> f32 {
+    let d = abs(p);
+    let outer = max(d.x, d.y) * 2.0;
+    let inner = max(d.x, d.y) * 2.0;
+    if (outer < 1.0 && inner > 0.65) { return outer; }
+    if (outer >= 1.0) { return 2.0; }
+    return 2.0;
 }
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    let dist = length(input.uv - vec2f(0.5, 0.5)) * 2.0;
+    let p = input.uv - vec2f(0.5, 0.5);
+    let sym = i32(input.symbol + 0.5);
+
+    var dist: f32;
+    switch (sym) {
+        case 1:  { dist = sdf_square(p); }
+        case 2:  { dist = sdf_diamond(p); }
+        case 3:  { dist = sdf_triangle_up(p); }
+        case 4:  { dist = sdf_triangle_down(p); }
+        case 5:  { dist = sdf_cross(p); }
+        case 6:  { dist = sdf_plus(p); }
+        case 7:  { dist = sdf_star(p); }
+        case 8:  { dist = sdf_ring(p); }
+        case 9:  { dist = sdf_square_outline(p); }
+        default: { dist = sdf_circle(p); }
+    }
+
     if (dist > 1.0) {
         discard;
     }
