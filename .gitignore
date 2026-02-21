@@ -56,8 +56,5 @@ pytest.log
 *.new
 *.experimental
 
-# Large generated/binary files (uncomment if you don't want these in the repo)
-# sampledata.txt
-# sampledata1000.txt
-# sprite_textures.txt
-# sprite_textures.cpp
+# Large data files
+data/tycho2/
