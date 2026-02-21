@@ -3,6 +3,27 @@
 #include "ControlPanel.h"
 #include <wx/progdlg.h>
 #include <algorithm>
+#include <cmath>
+
+// Compute "nice" tick values (1, 2, 5 × 10^n series)
+static std::vector<float> computeNiceTicks(float rangeMin, float rangeMax, int approxCount) {
+    float range = rangeMax - rangeMin;
+    if (range <= 0.0f) return {};
+    float roughStep = range / approxCount;
+    float mag = std::pow(10.0f, std::floor(std::log10(roughStep)));
+    float residual = roughStep / mag;
+    float niceStep;
+    if (residual <= 1.5f) niceStep = mag;
+    else if (residual <= 3.5f) niceStep = 2.0f * mag;
+    else if (residual <= 7.5f) niceStep = 5.0f * mag;
+    else niceStep = 10.0f * mag;
+
+    float start = std::ceil(rangeMin / niceStep) * niceStep;
+    std::vector<float> ticks;
+    for (float v = start; v <= rangeMax + niceStep * 0.001f; v += niceStep)
+        ticks.push_back(v);
+    return ticks;
+}
 
 MainFrame::MainFrame()
     : wxFrame(nullptr, wxID_ANY, "Viewpoints", wxDefaultPosition, wxSize(1200, 800))
@@ -66,23 +87,42 @@ void MainFrame::CreateLayout() {
 
     SetSizer(mainSizer);
 
-    // Wire control panel callbacks
-    m_controlPanel->onAxisChanged = [this](int xCol, int yCol) {
-        if (m_activePlot >= 0 && m_activePlot < (int)m_plotConfigs.size()) {
-            m_plotConfigs[m_activePlot].xCol = static_cast<size_t>(xCol);
-            m_plotConfigs[m_activePlot].yCol = static_cast<size_t>(yCol);
-            UpdatePlot(m_activePlot);
+    // Wire control panel callbacks — per-plot (carry plotIndex)
+    m_controlPanel->onAxisChanged = [this](int plotIndex, int xCol, int yCol) {
+        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
+            m_plotConfigs[plotIndex].xCol = static_cast<size_t>(xCol);
+            m_plotConfigs[plotIndex].yCol = static_cast<size_t>(yCol);
+            UpdatePlot(plotIndex);
         }
     };
 
-    m_controlPanel->onNormChanged = [this](int xNorm, int yNorm) {
-        if (m_activePlot >= 0 && m_activePlot < (int)m_plotConfigs.size()) {
-            m_plotConfigs[m_activePlot].xNorm = static_cast<NormMode>(xNorm);
-            m_plotConfigs[m_activePlot].yNorm = static_cast<NormMode>(yNorm);
-            UpdatePlot(m_activePlot);
+    m_controlPanel->onNormChanged = [this](int plotIndex, int xNorm, int yNorm) {
+        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
+            m_plotConfigs[plotIndex].xNorm = static_cast<NormMode>(xNorm);
+            m_plotConfigs[plotIndex].yNorm = static_cast<NormMode>(yNorm);
+            UpdatePlot(plotIndex);
         }
     };
 
+    m_controlPanel->onShowUnselectedChanged = [this](int plotIndex, bool show) {
+        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
+            m_plotConfigs[plotIndex].showUnselected = show;
+            m_canvases[plotIndex]->SetShowUnselected(show);
+        }
+    };
+
+    m_controlPanel->onGridLinesChanged = [this](int plotIndex, bool show) {
+        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
+            m_plotConfigs[plotIndex].showGridLines = show;
+            m_canvases[plotIndex]->SetShowGridLines(show);
+        }
+    };
+
+    m_controlPanel->onTabSelected = [this](int plotIndex) {
+        SetActivePlot(plotIndex);
+    };
+
+    // Global callbacks (from "All" tab)
     m_controlPanel->onPointSizeChanged = [this](float size) {
         for (auto* c : m_canvases) c->SetPointSize(size);
     };
@@ -132,50 +172,50 @@ void MainFrame::RebuildGrid() {
         cellPanel->SetBackgroundColour(bgColor);
         auto* cellSizer = new wxBoxSizer(wxHORIZONTAL);
 
-        // Left column: Y tick values + Y label
+        // Left column: Y label + Y tick panel
         auto* leftSizer = new wxBoxSizer(wxHORIZONTAL);
 
-        // Y axis label (rotated)
         pw.yLabel = new VerticalLabel(cellPanel);
         leftSizer->Add(pw.yLabel, 0, wxEXPAND);
 
-        // Y tick values (vertical stack, bottom to top)
-        auto* yTickSizer = new wxBoxSizer(wxVERTICAL);
-        for (int t = 0; t < NUM_TICKS; t++) {
-            auto* tickLabel = new wxStaticText(cellPanel, wxID_ANY, "",
-                wxDefaultPosition, wxSize(42, -1),
-                wxALIGN_RIGHT | wxST_NO_AUTORESIZE);
+        // Y tick panel: manually positioned labels
+        pw.yTickPanel = new wxPanel(cellPanel, wxID_ANY, wxDefaultPosition, wxSize(46, -1));
+        pw.yTickPanel->SetMinSize(wxSize(46, -1));
+        pw.yTickPanel->SetBackgroundColour(bgColor);
+        for (int t = 0; t < MAX_NICE_TICKS; t++) {
+            auto* tickLabel = new wxStaticText(pw.yTickPanel, wxID_ANY, "",
+                wxDefaultPosition, wxDefaultSize, wxST_NO_AUTORESIZE);
             tickLabel->SetFont(tickFont);
             tickLabel->SetForegroundColour(tickTextColor);
             tickLabel->SetBackgroundColour(bgColor);
+            tickLabel->Hide();
             pw.yTicks[t] = tickLabel;
-            // Top tick first (high values), bottom tick last (low values)
-            yTickSizer->Add(tickLabel, 1, wxALIGN_RIGHT | wxRIGHT, 2);
         }
-        leftSizer->Add(yTickSizer, 0, wxEXPAND);
+        leftSizer->Add(pw.yTickPanel, 0, wxEXPAND);
 
         cellSizer->Add(leftSizer, 0, wxEXPAND);
 
-        // Right side: canvas + X ticks + X label
+        // Right side: canvas + X tick panel + X label
         auto* rightSizer = new wxBoxSizer(wxVERTICAL);
 
         auto* canvas = new WebGPUCanvas(cellPanel, &m_gpuContext, i);
         m_canvases[i] = canvas;
         rightSizer->Add(canvas, 1, wxEXPAND);
 
-        // X tick values (horizontal row)
-        auto* xTickSizer = new wxBoxSizer(wxHORIZONTAL);
-        for (int t = 0; t < NUM_TICKS; t++) {
-            auto* tickLabel = new wxStaticText(cellPanel, wxID_ANY, "",
-                wxDefaultPosition, wxDefaultSize,
-                wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
+        // X tick panel: manually positioned labels
+        pw.xTickPanel = new wxPanel(cellPanel, wxID_ANY, wxDefaultPosition, wxSize(-1, 14));
+        pw.xTickPanel->SetMinSize(wxSize(-1, 14));
+        pw.xTickPanel->SetBackgroundColour(bgColor);
+        for (int t = 0; t < MAX_NICE_TICKS; t++) {
+            auto* tickLabel = new wxStaticText(pw.xTickPanel, wxID_ANY, "",
+                wxDefaultPosition, wxDefaultSize, wxST_NO_AUTORESIZE);
             tickLabel->SetFont(tickFont);
             tickLabel->SetForegroundColour(tickTextColor);
             tickLabel->SetBackgroundColour(bgColor);
+            tickLabel->Hide();
             pw.xTicks[t] = tickLabel;
-            xTickSizer->Add(tickLabel, 1, wxALIGN_CENTRE_HORIZONTAL);
         }
-        rightSizer->Add(xTickSizer, 0, wxEXPAND);
+        rightSizer->Add(pw.xTickPanel, 0, wxEXPAND);
 
         // X axis label
         pw.xLabel = new wxStaticText(cellPanel, wxID_ANY, "",
@@ -207,9 +247,10 @@ void MainFrame::RebuildGrid() {
             for (auto* c : m_canvases) c->ResetView();
         };
 
-        // Viewport change callback: update tick value labels
+        // Viewport change callback: compute nice ticks, update labels and grid lines
         canvas->onViewportChanged = [this](int pi, float vxMin, float vxMax, float vyMin, float vyMax) {
             if (pi < 0 || pi >= (int)m_plotWidgets.size()) return;
+            if (pi >= (int)m_plotConfigs.size() || pi >= (int)m_canvases.size()) return;
             auto& pw2 = m_plotWidgets[pi];
             auto& cfg = m_plotConfigs[pi];
             const auto& ds = m_dataManager.dataset();
@@ -223,16 +264,90 @@ void MainFrame::RebuildGrid() {
             if (xRange == 0.0f) xRange = 1.0f;
             if (yRange == 0.0f) yRange = 1.0f;
 
-            for (int t = 0; t < NUM_TICKS; t++) {
-                float frac = static_cast<float>(t) / (NUM_TICKS - 1);
-                // X tick values (left to right)
-                float normX = vxMin + frac * (vxMax - vxMin);
-                float dataX = xDataMin + ((normX + 0.9f) / 1.8f) * xRange;
-                pw2.xTicks[t]->SetLabel(wxString::Format("%.3g", dataX));
-                // Y tick values (top to bottom in widget order = high to low)
-                float normY = vyMax - frac * (vyMax - vyMin);
-                float dataY = yDataMin + ((normY + 0.9f) / 1.8f) * yRange;
-                pw2.yTicks[t]->SetLabel(wxString::Format("%.3g", dataY));
+            // Map normalized coords to data space
+            auto normToDataX = [&](float normX) {
+                return xDataMin + ((normX + 0.9f) / 1.8f) * xRange;
+            };
+            auto normToDataY = [&](float normY) {
+                return yDataMin + ((normY + 0.9f) / 1.8f) * yRange;
+            };
+            // Map data space back to normalized coords
+            auto dataToNormX = [&](float dataX) {
+                return ((dataX - xDataMin) / xRange) * 1.8f - 0.9f;
+            };
+            auto dataToNormY = [&](float dataY) {
+                return ((dataY - yDataMin) / yRange) * 1.8f - 0.9f;
+            };
+
+            float viewW = vxMax - vxMin;
+            float viewH = vyMax - vyMin;
+
+            // Compute nice ticks in data space for visible range
+            float visDataXMin = normToDataX(vxMin);
+            float visDataXMax = normToDataX(vxMax);
+            float visDataYMin = normToDataY(vyMin);
+            float visDataYMax = normToDataY(vyMax);
+
+            auto xNiceTicks = computeNiceTicks(visDataXMin, visDataXMax, NUM_TICKS + 1);
+            auto yNiceTicks = computeNiceTicks(visDataYMin, visDataYMax, NUM_TICKS + 1);
+
+            // Map nice tick data values to clip space for grid lines
+            std::vector<float> xClipPositions, yClipPositions;
+            for (float dataX : xNiceTicks) {
+                float normX = dataToNormX(dataX);
+                float clipX = (normX - vxMin) / viewW * 2.0f - 1.0f;
+                xClipPositions.push_back(clipX);
+            }
+            for (float dataY : yNiceTicks) {
+                float normY = dataToNormY(dataY);
+                float clipY = (normY - vyMin) / viewH * 2.0f - 1.0f;
+                yClipPositions.push_back(clipY);
+            }
+
+            m_canvases[pi]->SetGridLinePositions(xClipPositions, yClipPositions);
+
+            // Use the canvas size as reference (clip space maps to canvas pixels)
+            wxSize canvasSize = m_canvases[pi]->GetClientSize();
+            int canvasW = canvasSize.GetWidth();
+            int canvasH = canvasSize.GetHeight();
+            if (canvasW < 10 || canvasH < 10) return;  // not laid out yet
+
+            // Position X tick labels at grid line pixel positions
+            for (int t = 0; t < MAX_NICE_TICKS; t++) {
+                if (t < (int)xNiceTicks.size() && t < (int)xClipPositions.size()) {
+                    float clipX = xClipPositions[t];
+                    if (clipX > -0.9f && clipX < 0.9f) {
+                        int px = static_cast<int>((clipX + 1.0f) * 0.5f * canvasW);
+                        pw2.xTicks[t]->SetLabel(wxString::Format("%.4g", xNiceTicks[t]));
+                        pw2.xTicks[t]->SetSize(pw2.xTicks[t]->GetBestSize());
+                        wxSize tsz = pw2.xTicks[t]->GetSize();
+                        pw2.xTicks[t]->SetPosition(wxPoint(px - tsz.GetWidth() / 2, 0));
+                        pw2.xTicks[t]->Show();
+                    } else {
+                        pw2.xTicks[t]->Hide();
+                    }
+                } else {
+                    pw2.xTicks[t]->Hide();
+                }
+            }
+
+            // Position Y tick labels at grid line pixel positions
+            for (int t = 0; t < MAX_NICE_TICKS; t++) {
+                if (t < (int)yNiceTicks.size() && t < (int)yClipPositions.size()) {
+                    float clipY = yClipPositions[t];
+                    if (clipY > -0.9f && clipY < 0.9f) {
+                        int py = static_cast<int>((1.0f - clipY) * 0.5f * canvasH);
+                        pw2.yTicks[t]->SetLabel(wxString::Format("%.4g", yNiceTicks[t]));
+                        pw2.yTicks[t]->SetSize(pw2.yTicks[t]->GetBestSize());
+                        wxSize tsz = pw2.yTicks[t]->GetSize();
+                        pw2.yTicks[t]->SetPosition(wxPoint(46 - tsz.GetWidth() - 2, py - tsz.GetHeight() / 2));
+                        pw2.yTicks[t]->Show();
+                    } else {
+                        pw2.yTicks[t]->Hide();
+                    }
+                } else {
+                    pw2.yTicks[t]->Hide();
+                }
             }
         };
 
@@ -245,6 +360,9 @@ void MainFrame::RebuildGrid() {
     m_gridPanel->SetSizer(gridSizer);
     m_gridPanel->Layout();
 
+    // Rebuild control panel tabs to match grid
+    m_controlPanel->RebuildTabs(m_gridRows, m_gridCols);
+
     // Auto-assign columns
     const auto& ds = m_dataManager.dataset();
     if (ds.numCols > 0) {
@@ -254,6 +372,10 @@ void MainFrame::RebuildGrid() {
             m_plotConfigs[i] = {col1, col2};
         }
     }
+
+    // Sync each tab's widgets with its config
+    for (int i = 0; i < numPlots; i++)
+        m_controlPanel->SetPlotConfig(i, m_plotConfigs[i]);
 
     SetActivePlot(0);
 
@@ -269,19 +391,10 @@ void MainFrame::SetActivePlot(int plotIndex) {
     for (int i = 0; i < (int)m_canvases.size(); i++)
         m_canvases[i]->SetActive(i == plotIndex);
 
-    const auto& ds = m_dataManager.dataset();
-    if (ds.numCols > 0 && plotIndex < (int)m_plotConfigs.size()) {
-        m_controlPanel->SetActiveColumns(
-            static_cast<int>(m_plotConfigs[plotIndex].xCol),
-            static_cast<int>(m_plotConfigs[plotIndex].yCol));
-        m_controlPanel->SetActiveNormModes(
-            static_cast<int>(m_plotConfigs[plotIndex].xNorm),
-            static_cast<int>(m_plotConfigs[plotIndex].yNorm));
-    }
-
-    int row = plotIndex / m_gridCols;
-    int col = plotIndex % m_gridCols;
-    m_controlPanel->SetActivePlotLabel(row, col);
+    // Select the corresponding tab and sync its widgets
+    m_controlPanel->SelectTab(plotIndex);
+    if (plotIndex < (int)m_plotConfigs.size())
+        m_controlPanel->SetPlotConfig(plotIndex, m_plotConfigs[plotIndex]);
 }
 
 void MainFrame::UpdatePlot(int plotIndex) {

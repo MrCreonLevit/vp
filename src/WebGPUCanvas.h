@@ -36,6 +36,11 @@ public:
     void SetPointSize(float size);
     void SetOpacity(float alpha);
     void SetHistBins(int bins);
+    void SetShowUnselected(bool show);
+    void SetShowGridLines(bool show);
+    // Set explicit grid line positions in clip space [-1, 1]
+    void SetGridLinePositions(const std::vector<float>& xPositions,
+                              const std::vector<float>& yPositions);
     void SetBrushColors(const std::vector<BrushColor>& colors);
     void SetSelection(const std::vector<int>& sel);
     void ClearSelection();
@@ -63,6 +68,7 @@ private:
     void UpdateVertexBuffer();
     void UpdatePointColors();
     void UpdateHistograms();
+    void UpdateGridLines();
     void UpdateUniforms();
     void Render();
     void Cleanup();
@@ -115,7 +121,15 @@ private:
     float m_xDataMin = 0.0f, m_xDataMax = 1.0f;
     float m_yDataMin = 0.0f, m_yDataMax = 1.0f;
 
+    // Grid lines
+    bool m_showGridLines = false;
+    std::vector<float> m_gridXPositions;  // clip space positions
+    std::vector<float> m_gridYPositions;
+    WGPUBuffer m_gridLineBuffer = nullptr;
+    size_t m_gridLineVertexCount = 0;
+
     // Display settings
+    bool m_showUnselected = true;
     float m_pointSize = 6.0f;
     float m_opacity = 0.05f;
 

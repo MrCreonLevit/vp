@@ -17,6 +17,8 @@ struct PlotConfig {
     size_t yCol = 1;
     NormMode xNorm = NormMode::None;
     NormMode yNorm = NormMode::None;
+    bool showUnselected = true;
+    bool showGridLines = false;
 };
 
 class MainFrame : public wxFrame {
@@ -48,11 +50,15 @@ private:
 
     static constexpr int NUM_TICKS = 5;
 
+    static constexpr int MAX_NICE_TICKS = 10;
+
     struct PlotWidgets {
         wxStaticText* xLabel = nullptr;
         VerticalLabel* yLabel = nullptr;
-        std::array<wxStaticText*, 5> xTicks = {};
-        std::array<wxStaticText*, 5> yTicks = {};
+        wxPanel* xTickPanel = nullptr;
+        wxPanel* yTickPanel = nullptr;
+        std::array<wxStaticText*, MAX_NICE_TICKS> xTicks = {};
+        std::array<wxStaticText*, MAX_NICE_TICKS> yTicks = {};
     };
 
     std::vector<WebGPUCanvas*> m_canvases;

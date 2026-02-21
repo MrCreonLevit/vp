@@ -84,6 +84,23 @@ void WebGPUCanvas::SetHistBins(int bins) {
     Refresh();
 }
 
+void WebGPUCanvas::SetShowUnselected(bool show) {
+    m_showUnselected = show;
+    UpdatePointColors();
+}
+
+void WebGPUCanvas::SetShowGridLines(bool show) {
+    m_showGridLines = show;
+    Refresh();
+}
+
+void WebGPUCanvas::SetGridLinePositions(const std::vector<float>& xPositions,
+                                        const std::vector<float>& yPositions) {
+    m_gridXPositions = xPositions;
+    m_gridYPositions = yPositions;
+    Refresh();
+}
+
 void WebGPUCanvas::SetOpacity(float alpha) {
     m_opacity = alpha;
     UpdatePointColors();
@@ -137,10 +154,19 @@ void WebGPUCanvas::ResetView() {
 void WebGPUCanvas::UpdatePointColors() {
     // All points get the unselected color for the additive pass
     for (size_t i = 0; i < m_points.size(); i++) {
-        m_points[i].r = 0.15f;
-        m_points[i].g = 0.4f;
-        m_points[i].b = 1.0f;
-        m_points[i].a = m_opacity;
+        bool isSelected = (i < m_selection.size() && m_selection[i] > 0);
+        if (!isSelected && !m_showUnselected) {
+            // Hide unselected points
+            m_points[i].r = 0.0f;
+            m_points[i].g = 0.0f;
+            m_points[i].b = 0.0f;
+            m_points[i].a = 0.0f;
+        } else {
+            m_points[i].r = 0.15f;
+            m_points[i].g = 0.4f;
+            m_points[i].b = 1.0f;
+            m_points[i].a = m_opacity;
+        }
     }
 
     // Build a separate buffer of only selected points for the overlay pass
@@ -699,6 +725,75 @@ void WebGPUCanvas::UpdateHistograms() {
     wgpuQueueWriteBuffer(queue, m_histBuffer, 0, histVerts.data(), dataSize);
 }
 
+static std::vector<float> computeNiceTicks(float rangeMin, float rangeMax, int approxCount) {
+    float range = rangeMax - rangeMin;
+    if (range <= 0.0f) return {};
+    float roughStep = range / approxCount;
+    float mag = std::pow(10.0f, std::floor(std::log10(roughStep)));
+    float residual = roughStep / mag;
+    float niceStep;
+    if (residual <= 1.5f) niceStep = mag;
+    else if (residual <= 3.5f) niceStep = 2.0f * mag;
+    else if (residual <= 7.5f) niceStep = 5.0f * mag;
+    else niceStep = 10.0f * mag;
+
+    float start = std::ceil(rangeMin / niceStep) * niceStep;
+    std::vector<float> ticks;
+    for (float v = start; v <= rangeMax; v += niceStep)
+        ticks.push_back(v);
+    return ticks;
+}
+
+void WebGPUCanvas::UpdateGridLines() {
+    if (!m_ctx || !m_showGridLines ||
+        (m_gridXPositions.empty() && m_gridYPositions.empty())) {
+        m_gridLineVertexCount = 0;
+        return;
+    }
+
+    std::vector<PointVertex> lineVerts;
+    float lineT = 0.002f;
+    float r = 0.3f, g = 0.3f, b = 0.4f, a = 0.5f;
+
+    auto addFilledBar = [&](float x0, float y0, float x1, float y1) {
+        PointVertex tl = {x0, y1, r, g, b, a};
+        PointVertex tr = {x1, y1, r, g, b, a};
+        PointVertex bl = {x0, y0, r, g, b, a};
+        PointVertex br = {x1, y0, r, g, b, a};
+        lineVerts.push_back(bl); lineVerts.push_back(br); lineVerts.push_back(tr);
+        lineVerts.push_back(bl); lineVerts.push_back(tr); lineVerts.push_back(tl);
+    };
+
+    // Grid lines at explicit clip-space positions (set by MainFrame)
+    for (float xClip : m_gridXPositions) {
+        if (xClip > -0.99f && xClip < 0.99f)
+            addFilledBar(xClip - lineT, -1.0f, xClip + lineT, 1.0f);
+    }
+    for (float yClip : m_gridYPositions) {
+        if (yClip > -0.99f && yClip < 0.99f)
+            addFilledBar(-1.0f, yClip - lineT, 1.0f, yClip + lineT);
+    }
+
+    m_gridLineVertexCount = lineVerts.size();
+    if (m_gridLineVertexCount == 0) return;
+
+    auto device = m_ctx->GetDevice();
+    auto queue = m_ctx->GetQueue();
+
+    if (m_gridLineBuffer) {
+        wgpuBufferRelease(m_gridLineBuffer);
+        m_gridLineBuffer = nullptr;
+    }
+
+    size_t dataSize = m_gridLineVertexCount * sizeof(PointVertex);
+    WGPUBufferDescriptor glDesc = {};
+    glDesc.label = {"grid_lines", WGPU_STRLEN};
+    glDesc.size = dataSize;
+    glDesc.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+    m_gridLineBuffer = wgpuDeviceCreateBuffer(device, &glDesc);
+    wgpuQueueWriteBuffer(queue, m_gridLineBuffer, 0, lineVerts.data(), dataSize);
+}
+
 void WebGPUCanvas::UpdateUniforms() {
     float hw = 1.0f / m_zoom;
     float hh = 1.0f / m_zoom;
@@ -738,8 +833,26 @@ void WebGPUCanvas::Render() {
     if (!m_initialized || !m_pipeline || !m_ctx)
         return;
 
+    // Ensure Metal layer frame matches current view bounds
+#ifdef __WXMAC__
+    {
+        NSView* nsView = (NSView*)GetHandle();
+        CAMetalLayer* metalLayer = (__bridge CAMetalLayer*)m_metalLayer;
+        if (metalLayer && nsView) {
+            CGRect bounds = nsView.bounds;
+            if (!CGRectEqualToRect(metalLayer.frame, bounds)) {
+                metalLayer.frame = bounds;
+                double scale = GetContentScaleFactor();
+                ConfigureSurface(static_cast<int>(bounds.size.width * scale),
+                                 static_cast<int>(bounds.size.height * scale));
+            }
+        }
+    }
+#endif
+
     UpdateUniforms();
     UpdateHistograms();
+    UpdateGridLines();
 
     // Notify MainFrame of current viewport for tick value labels
     if (onViewportChanged) {
@@ -806,6 +919,15 @@ void WebGPUCanvas::Render() {
         wgpuRenderPassEncoderSetVertexBuffer(rp, 1, m_selVertexBuffer, 0,
                                               m_selVertexCount * sizeof(PointVertex));
         wgpuRenderPassEncoderDraw(rp, 6, static_cast<uint32_t>(m_selVertexCount), 0, 0);
+    }
+
+    // Draw grid lines on top of data (using identity projection)
+    if (m_showGridLines && m_histPipeline && m_gridLineBuffer && m_gridLineVertexCount > 0) {
+        wgpuRenderPassEncoderSetPipeline(rp, m_histPipeline);
+        wgpuRenderPassEncoderSetBindGroup(rp, 0, m_histBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetVertexBuffer(rp, 0, m_gridLineBuffer, 0,
+                                              m_gridLineVertexCount * sizeof(PointVertex));
+        wgpuRenderPassEncoderDraw(rp, static_cast<uint32_t>(m_gridLineVertexCount), 1, 0, 0);
     }
 
     // Draw histograms with identity projection (fixed to viewport edges)
@@ -941,6 +1063,7 @@ void WebGPUCanvas::OnKeyDown(wxKeyEvent& event) {
 }
 
 void WebGPUCanvas::Cleanup() {
+    if (m_gridLineBuffer) { wgpuBufferRelease(m_gridLineBuffer); m_gridLineBuffer = nullptr; }
     if (m_histBuffer) { wgpuBufferRelease(m_histBuffer); m_histBuffer = nullptr; }
     if (m_histPipeline) { wgpuRenderPipelineRelease(m_histPipeline); m_histPipeline = nullptr; }
     if (m_histBindGroup) { wgpuBindGroupRelease(m_histBindGroup); m_histBindGroup = nullptr; }
