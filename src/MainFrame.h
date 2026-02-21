@@ -19,6 +19,9 @@ struct PlotConfig {
     NormMode yNorm = NormMode::None;
     bool showUnselected = true;
     bool showGridLines = false;
+    float pointSize = 6.0f;
+    float opacity = 0.05f;
+    int histBins = 64;
 };
 
 class MainFrame : public wxFrame {

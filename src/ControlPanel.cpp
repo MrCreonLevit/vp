@@ -1,14 +1,14 @@
 #include "ControlPanel.h"
 #include "Normalize.h"
 #include "Brush.h"
-#include "MainFrame.h"  // for PlotConfig
+#include "MainFrame.h"
 #include <wx/statline.h>
 
 // ============================================================
-// PlotTab — one per plot, lives as a page in the notebook
+// PlotTab
 // ============================================================
 
-PlotTab::PlotTab(wxNotebook* parent, int plotIndex, int row, int col)
+PlotTab::PlotTab(wxWindow* parent, int plotIndex, int row, int col)
     : wxPanel(parent)
     , m_plotIndex(plotIndex)
 {
@@ -27,33 +27,28 @@ void PlotTab::CreateControls(int row, int col) {
 
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
-    // X Axis
     sizer->Add(new wxStaticText(this, wxID_ANY, "X Axis"), 0, wxLEFT | wxTOP, 8);
     m_xAxis = new wxChoice(this, wxID_ANY);
     sizer->Add(m_xAxis, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
     sizer->Add(new wxStaticText(this, wxID_ANY, "X Norm"), 0, wxLEFT | wxTOP, 8);
     m_xNorm = new wxChoice(this, wxID_ANY);
-    for (const auto& name : AllNormModeNames())
-        m_xNorm->Append(name);
+    for (const auto& name : AllNormModeNames()) m_xNorm->Append(name);
     m_xNorm->SetSelection(0);
     sizer->Add(m_xNorm, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
-    // Y Axis
     sizer->Add(new wxStaticText(this, wxID_ANY, "Y Axis"), 0, wxLEFT, 8);
     m_yAxis = new wxChoice(this, wxID_ANY);
     sizer->Add(m_yAxis, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
     sizer->Add(new wxStaticText(this, wxID_ANY, "Y Norm"), 0, wxLEFT | wxTOP, 8);
     m_yNorm = new wxChoice(this, wxID_ANY);
-    for (const auto& name : AllNormModeNames())
-        m_yNorm->Append(name);
+    for (const auto& name : AllNormModeNames()) m_yNorm->Append(name);
     m_yNorm->SetSelection(0);
     sizer->Add(m_yNorm, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
-    // Display toggles
     m_showUnselected = new wxCheckBox(this, wxID_ANY, "Show unselected");
     m_showUnselected->SetValue(true);
     sizer->Add(m_showUnselected, 0, wxALL, 8);
@@ -62,10 +57,26 @@ void PlotTab::CreateControls(int row, int col) {
     m_showGridLines->SetValue(false);
     sizer->Add(m_showGridLines, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
+    sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    m_pointSizeLabel = new wxStaticText(this, wxID_ANY, "Point Size: 6");
+    sizer->Add(m_pointSizeLabel, 0, wxLEFT | wxTOP, 8);
+    m_pointSizeSlider = new wxSlider(this, wxID_ANY, 6, 1, 30);
+    sizer->Add(m_pointSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    m_opacityLabel = new wxStaticText(this, wxID_ANY, "Opacity: 5%");
+    sizer->Add(m_opacityLabel, 0, wxLEFT | wxTOP, 8);
+    m_opacitySlider = new wxSlider(this, wxID_ANY, 5, 1, 100);
+    sizer->Add(m_opacitySlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    m_histBinsLabel = new wxStaticText(this, wxID_ANY, "Hist Bins: 64");
+    sizer->Add(m_histBinsLabel, 0, wxLEFT | wxTOP, 8);
+    m_histBinsSlider = new wxSlider(this, wxID_ANY, 64, 2, 512);
+    sizer->Add(m_histBinsSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
     sizer->AddStretchSpacer();
     SetSizer(sizer);
 
-    // Bind events
     m_xAxis->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
         if (!m_suppress && onAxisChanged)
             onAxisChanged(m_plotIndex, m_xAxis->GetSelection(), m_yAxis->GetSelection());
@@ -90,18 +101,32 @@ void PlotTab::CreateControls(int row, int col) {
         if (onGridLinesChanged)
             onGridLinesChanged(m_plotIndex, m_showGridLines->GetValue());
     });
+    m_pointSizeSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
+        if (m_suppress) return;
+        int val = m_pointSizeSlider->GetValue();
+        m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %d", val));
+        if (onPointSizeChanged) onPointSizeChanged(m_plotIndex, static_cast<float>(val));
+    });
+    m_opacitySlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
+        if (m_suppress) return;
+        int val = m_opacitySlider->GetValue();
+        m_opacityLabel->SetLabel(wxString::Format("Opacity: %d%%", val));
+        if (onOpacityChanged) onOpacityChanged(m_plotIndex, static_cast<float>(val) / 100.0f);
+    });
+    m_histBinsSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
+        if (m_suppress) return;
+        int val = m_histBinsSlider->GetValue();
+        m_histBinsLabel->SetLabel(wxString::Format("Hist Bins: %d", val));
+        if (onHistBinsChanged) onHistBinsChanged(m_plotIndex, val);
+    });
 }
 
 void PlotTab::SetColumns(const std::vector<std::string>& names) {
     m_suppress = true;
     int xSel = m_xAxis->GetSelection();
     int ySel = m_yAxis->GetSelection();
-    m_xAxis->Clear();
-    m_yAxis->Clear();
-    for (const auto& name : names) {
-        m_xAxis->Append(name);
-        m_yAxis->Append(name);
-    }
+    m_xAxis->Clear(); m_yAxis->Clear();
+    for (const auto& name : names) { m_xAxis->Append(name); m_yAxis->Append(name); }
     if (xSel >= 0 && xSel < (int)names.size()) m_xAxis->SetSelection(xSel);
     else if (!names.empty()) m_xAxis->SetSelection(0);
     if (ySel >= 0 && ySel < (int)names.size()) m_yAxis->SetSelection(ySel);
@@ -117,11 +142,17 @@ void PlotTab::SyncFromConfig(const PlotConfig& cfg) {
     if ((int)cfg.yNorm < m_yNorm->GetCount()) m_yNorm->SetSelection(static_cast<int>(cfg.yNorm));
     m_showUnselected->SetValue(cfg.showUnselected);
     m_showGridLines->SetValue(cfg.showGridLines);
+    m_pointSizeSlider->SetValue(static_cast<int>(cfg.pointSize));
+    m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %d", (int)cfg.pointSize));
+    m_opacitySlider->SetValue(static_cast<int>(cfg.opacity * 100));
+    m_opacityLabel->SetLabel(wxString::Format("Opacity: %d%%", (int)(cfg.opacity * 100)));
+    m_histBinsSlider->SetValue(cfg.histBins);
+    m_histBinsLabel->SetLabel(wxString::Format("Hist Bins: %d", cfg.histBins));
     m_suppress = false;
 }
 
 // ============================================================
-// ControlPanel — outer container with wxNotebook
+// ControlPanel
 // ============================================================
 
 ControlPanel::ControlPanel(wxWindow* parent)
@@ -131,20 +162,25 @@ ControlPanel::ControlPanel(wxWindow* parent)
 
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
-    auto* title = new wxStaticText(this, wxID_ANY, "Plot Controls");
+    auto* title = new wxStaticText(this, wxID_ANY, "Plot Selection");
     auto titleFont = title->GetFont();
     titleFont.SetWeight(wxFONTWEIGHT_BOLD);
     titleFont.SetPointSize(titleFont.GetPointSize() + 2);
     title->SetFont(titleFont);
     sizer->Add(title, 0, wxALL, 8);
 
-    // Notebook fills most of the panel
-    m_notebook = new wxNotebook(this, wxID_ANY);
-    sizer->Add(m_notebook, 1, wxEXPAND | wxLEFT | wxRIGHT, 4);
+    // Plot selector grid panel (rebuilt dynamically)
+    m_selectorPanel = new wxPanel(this);
+    sizer->Add(m_selectorPanel, 0, wxEXPAND | wxLEFT | wxRIGHT, 4);
+
+    sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 4);
+
+    // Simplebook for content pages (no built-in tab UI)
+    m_book = new wxSimplebook(this);
+    sizer->Add(m_book, 1, wxEXPAND | wxLEFT | wxRIGHT, 4);
 
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxALL, 4);
 
-    // Info and help below the notebook
     m_infoLabel = new wxStaticText(this, wxID_ANY, "No data loaded");
     sizer->Add(m_infoLabel, 0, wxLEFT | wxRIGHT, 8);
 
@@ -158,45 +194,34 @@ ControlPanel::ControlPanel(wxWindow* parent)
     sizer->Add(helpText, 0, wxALL, 8);
 
     SetSizer(sizer);
-
-    // Build default tabs
     RebuildTabs(2, 2);
-
-    // Tab change event
-    m_notebook->Bind(wxEVT_NOTEBOOK_PAGE_CHANGED, [this](wxBookCtrlEvent& evt) {
-        int page = evt.GetSelection();
-        if (page >= 0 && page < (int)m_plotTabs.size() && onTabSelected)
-            onTabSelected(page);
-        evt.Skip();
-    });
 }
 
 void ControlPanel::RebuildTabs(int rows, int cols) {
-    // Save global state
     float savedSize = m_pointSizeSlider ? m_pointSizeSlider->GetValue() : 6;
     float savedOpacity = m_opacitySlider ? m_opacitySlider->GetValue() : 5;
     int savedBins = m_histBinsSlider ? m_histBinsSlider->GetValue() : 64;
     int savedBrush = m_activeBrush;
 
-    m_savedGridRows = rows;
-    m_savedGridCols = cols;
+    m_gridRows = rows;
+    m_gridCols = cols;
 
-    m_notebook->DeleteAllPages();
+    // Clear book pages
+    while (m_book->GetPageCount() > 0)
+        m_book->RemovePage(0);
     m_plotTabs.clear();
 
     int numPlots = rows * cols;
     for (int i = 0; i < numPlots; i++) {
         int r = i / cols;
         int c = i % cols;
-        auto* tab = new PlotTab(m_notebook, i, r, c);
-        m_notebook->AddPage(tab, wxString::Format("%d,%d", r, c));
+        auto* tab = new PlotTab(m_book, i, r, c);
+        m_book->AddPage(tab, "");
         m_plotTabs.push_back(tab);
 
-        // Populate columns if we have them
         if (!m_columnNames.empty())
             tab->SetColumns(m_columnNames);
 
-        // Wire per-plot callbacks through
         tab->onAxisChanged = [this](int pi, int x, int y) {
             if (onAxisChanged) onAxisChanged(pi, x, y);
         };
@@ -209,52 +234,143 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
         tab->onGridLinesChanged = [this](int pi, bool show) {
             if (onGridLinesChanged) onGridLinesChanged(pi, show);
         };
+        tab->onPointSizeChanged = [this](int pi, float size) {
+            if (onPlotPointSizeChanged) onPlotPointSizeChanged(pi, size);
+        };
+        tab->onOpacityChanged = [this](int pi, float alpha) {
+            if (onPlotOpacityChanged) onPlotOpacityChanged(pi, alpha);
+        };
+        tab->onHistBinsChanged = [this](int pi, int bins) {
+            if (onPlotHistBinsChanged) onPlotHistBinsChanged(pi, bins);
+        };
     }
 
-    // Create "All" tab
-    CreateAllTab();
+    // "All" page (last)
+    CreateAllPage();
 
     // Restore global state
     if (m_pointSizeSlider) m_pointSizeSlider->SetValue(savedSize);
     if (m_opacitySlider) m_opacitySlider->SetValue(savedOpacity);
     if (m_histBinsSlider) m_histBinsSlider->SetValue(savedBins);
     SelectBrush(savedBrush);
+
+    // Rebuild selector buttons
+    RebuildSelectorGrid();
+    SelectPage(0);
 }
 
-void ControlPanel::CreateAllTab() {
-    m_allTab = new wxPanel(m_notebook);
+void ControlPanel::RebuildSelectorGrid() {
+    m_selectorPanel->DestroyChildren();
+    m_plotButtons.clear();
+
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
-    auto* header = new wxStaticText(m_allTab, wxID_ANY, "Global Settings");
+    // "All" button row
+    m_allButton = new wxButton(m_selectorPanel, wxID_ANY, "All",
+                                wxDefaultPosition, wxSize(-1, 24), wxBU_EXACTFIT);
+    m_allButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        int allIdx = static_cast<int>(m_plotTabs.size());
+        SelectPage(allIdx);
+    });
+    sizer->Add(m_allButton, 0, wxEXPAND | wxBOTTOM, 2);
+
+    // Plot button grid
+    auto* gridSizer = new wxGridSizer(m_gridRows, m_gridCols, 2, 2);
+    int numPlots = m_gridRows * m_gridCols;
+    for (int i = 0; i < numPlots; i++) {
+        int r = i / m_gridCols;
+        int c = i % m_gridCols;
+        auto* btn = new wxButton(m_selectorPanel, wxID_ANY,
+                                  wxString::Format("%d,%d", r, c),
+                                  wxDefaultPosition, wxSize(-1, 24), wxBU_EXACTFIT);
+        btn->Bind(wxEVT_BUTTON, [this, i](wxCommandEvent&) {
+            SelectPage(i);
+            if (onTabSelected) onTabSelected(i);
+        });
+        gridSizer->Add(btn, 1, wxEXPAND);
+        m_plotButtons.push_back(btn);
+    }
+    sizer->Add(gridSizer, 0, wxEXPAND);
+
+    m_selectorPanel->SetSizer(sizer);
+    m_selectorPanel->Layout();
+    GetSizer()->Layout();
+}
+
+void ControlPanel::SelectPage(int pageIndex) {
+    m_selectedPage = pageIndex;
+    int numPlots = static_cast<int>(m_plotTabs.size());
+
+    if (pageIndex >= 0 && pageIndex <= numPlots) {
+        m_book->SetSelection(pageIndex);
+    }
+
+    // Update button highlights
+    wxColour activeBg(80, 120, 200);
+    wxColour normalBg = wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE);
+
+    for (int i = 0; i < (int)m_plotButtons.size(); i++) {
+        m_plotButtons[i]->SetBackgroundColour(i == pageIndex ? activeBg : normalBg);
+        m_plotButtons[i]->Refresh();
+    }
+    if (m_allButton) {
+        m_allButton->SetBackgroundColour(pageIndex == numPlots ? activeBg : normalBg);
+        m_allButton->Refresh();
+    }
+}
+
+void ControlPanel::SelectTab(int plotIndex) {
+    SelectPage(plotIndex);
+}
+
+void ControlPanel::SetPlotConfig(int plotIndex, const PlotConfig& cfg) {
+    if (plotIndex >= 0 && plotIndex < (int)m_plotTabs.size())
+        m_plotTabs[plotIndex]->SyncFromConfig(cfg);
+}
+
+void ControlPanel::SetColumns(const std::vector<std::string>& names) {
+    m_columnNames = names;
+    for (auto* tab : m_plotTabs) tab->SetColumns(names);
+    m_infoLabel->SetLabel(wxString::Format("%zu columns", names.size()));
+}
+
+void ControlPanel::SetSelectionInfo(int selected, int total) {
+    if (m_selectionLabel) {
+        m_selectionLabel->SetLabel(selected > 0 ?
+            wxString::Format("Selected: %d / %d", selected, total) : "No selection");
+    }
+}
+
+void ControlPanel::CreateAllPage() {
+    m_allPage = new wxPanel(m_book);
+    auto* sizer = new wxBoxSizer(wxVERTICAL);
+
+    auto* header = new wxStaticText(m_allPage, wxID_ANY, "Global Settings");
     auto font = header->GetFont();
     font.SetWeight(wxFONTWEIGHT_BOLD);
     header->SetFont(font);
     sizer->Add(header, 0, wxALL, 8);
 
-    sizer->Add(new wxStaticLine(m_allTab), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+    sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
-    // Point Size
-    m_pointSizeLabel = new wxStaticText(m_allTab, wxID_ANY, "Point Size: 6");
+    m_pointSizeLabel = new wxStaticText(m_allPage, wxID_ANY, "Point Size: 6");
     sizer->Add(m_pointSizeLabel, 0, wxLEFT | wxTOP, 8);
-    m_pointSizeSlider = new wxSlider(m_allTab, wxID_ANY, 6, 1, 30);
+    m_pointSizeSlider = new wxSlider(m_allPage, wxID_ANY, 6, 1, 30);
     sizer->Add(m_pointSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
-    // Opacity
-    m_opacityLabel = new wxStaticText(m_allTab, wxID_ANY, "Opacity: 5%");
+    m_opacityLabel = new wxStaticText(m_allPage, wxID_ANY, "Opacity: 5%");
     sizer->Add(m_opacityLabel, 0, wxLEFT | wxTOP, 8);
-    m_opacitySlider = new wxSlider(m_allTab, wxID_ANY, 5, 1, 100);
+    m_opacitySlider = new wxSlider(m_allPage, wxID_ANY, 5, 1, 100);
     sizer->Add(m_opacitySlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
-    // Histogram Bins
-    m_histBinsLabel = new wxStaticText(m_allTab, wxID_ANY, "Hist Bins: 64");
+    m_histBinsLabel = new wxStaticText(m_allPage, wxID_ANY, "Hist Bins: 64");
     sizer->Add(m_histBinsLabel, 0, wxLEFT | wxTOP, 8);
-    m_histBinsSlider = new wxSlider(m_allTab, wxID_ANY, 64, 2, 512);
+    m_histBinsSlider = new wxSlider(m_allPage, wxID_ANY, 64, 2, 512);
     sizer->Add(m_histBinsSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
-    sizer->Add(new wxStaticLine(m_allTab), 0, wxEXPAND | wxALL, 8);
+    sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
 
-    // Brush selector
-    auto* brushLabel = new wxStaticText(m_allTab, wxID_ANY, "Brush (1-7)");
+    auto* brushLabel = new wxStaticText(m_allPage, wxID_ANY, "Brush (1-7)");
     auto bFont = brushLabel->GetFont();
     bFont.SetWeight(wxFONTWEIGHT_BOLD);
     brushLabel->SetFont(bFont);
@@ -262,7 +378,7 @@ void ControlPanel::CreateAllTab() {
 
     auto* brushSizer = new wxGridSizer(1, CP_NUM_BRUSHES, 2, 2);
     for (int i = 0; i < CP_NUM_BRUSHES; i++) {
-        auto* btn = new wxButton(m_allTab, wxID_ANY, wxString::Format("%d", i + 1),
+        auto* btn = new wxButton(m_allPage, wxID_ANY, wxString::Format("%d", i + 1),
                                   wxDefaultPosition, wxSize(26, 26), wxBU_EXACTFIT);
         wxColour col(static_cast<unsigned char>(kDefaultBrushes[i].r * 255),
                      static_cast<unsigned char>(kDefaultBrushes[i].g * 255),
@@ -271,32 +387,27 @@ void ControlPanel::CreateAllTab() {
         btn->SetForegroundColour(*wxWHITE);
         m_brushButtons[i] = btn;
         brushSizer->Add(btn, 0, wxEXPAND);
-
-        btn->Bind(wxEVT_BUTTON, [this, i](wxCommandEvent&) {
-            SelectBrush(i);
-        });
+        btn->Bind(wxEVT_BUTTON, [this, i](wxCommandEvent&) { SelectBrush(i); });
     }
     sizer->Add(brushSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
     SelectBrush(0);
 
-    // Selection info
-    m_selectionLabel = new wxStaticText(m_allTab, wxID_ANY, "No selection");
+    m_selectionLabel = new wxStaticText(m_allPage, wxID_ANY, "No selection");
     sizer->Add(m_selectionLabel, 0, wxLEFT | wxTOP, 8);
 
     auto* btnSizer = new wxBoxSizer(wxHORIZONTAL);
-    auto* clearBtn = new wxButton(m_allTab, wxID_ANY, "Clear (C)",
+    auto* clearBtn = new wxButton(m_allPage, wxID_ANY, "Clear (C)",
                                    wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-    auto* invertBtn = new wxButton(m_allTab, wxID_ANY, "Invert (I)",
+    auto* invertBtn = new wxButton(m_allPage, wxID_ANY, "Invert (I)",
                                     wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
     btnSizer->Add(clearBtn, 1, wxRIGHT, 4);
     btnSizer->Add(invertBtn, 1);
     sizer->Add(btnSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
     sizer->AddStretchSpacer();
-    m_allTab->SetSizer(sizer);
-    m_notebook->AddPage(m_allTab, "All");
+    m_allPage->SetSizer(sizer);
+    m_book->AddPage(m_allPage, "");
 
-    // Bind events
     m_pointSizeSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         int val = m_pointSizeSlider->GetValue();
         m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %d", val));
@@ -320,39 +431,12 @@ void ControlPanel::CreateAllTab() {
     });
 }
 
-void ControlPanel::SelectTab(int plotIndex) {
-    if (plotIndex >= 0 && plotIndex < (int)m_plotTabs.size())
-        m_notebook->SetSelection(plotIndex);
-}
-
-void ControlPanel::SetPlotConfig(int plotIndex, const PlotConfig& cfg) {
-    if (plotIndex >= 0 && plotIndex < (int)m_plotTabs.size())
-        m_plotTabs[plotIndex]->SyncFromConfig(cfg);
-}
-
-void ControlPanel::SetColumns(const std::vector<std::string>& names) {
-    m_columnNames = names;
-    for (auto* tab : m_plotTabs)
-        tab->SetColumns(names);
-    m_infoLabel->SetLabel(wxString::Format("%zu columns", names.size()));
-}
-
-void ControlPanel::SetSelectionInfo(int selected, int total) {
-    if (m_selectionLabel) {
-        if (selected > 0)
-            m_selectionLabel->SetLabel(wxString::Format("Selected: %d / %d", selected, total));
-        else
-            m_selectionLabel->SetLabel("No selection");
-    }
-}
-
 void ControlPanel::SelectBrush(int index) {
     m_activeBrush = index;
     for (int i = 0; i < CP_NUM_BRUSHES; i++) {
-        if (m_brushButtons[i]) {
+        if (m_brushButtons[i])
             m_brushButtons[i]->SetLabel(
                 i == index ? wxString::Format("[%d]", i + 1) : wxString::Format("%d", i + 1));
-        }
     }
     if (onBrushChanged) onBrushChanged(index);
 }

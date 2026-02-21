@@ -118,21 +118,52 @@ void MainFrame::CreateLayout() {
         }
     };
 
+    // Per-plot rendering callbacks
+    m_controlPanel->onPlotPointSizeChanged = [this](int plotIndex, float size) {
+        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
+            m_plotConfigs[plotIndex].pointSize = size;
+            m_canvases[plotIndex]->SetPointSize(size);
+        }
+    };
+
+    m_controlPanel->onPlotOpacityChanged = [this](int plotIndex, float alpha) {
+        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
+            m_plotConfigs[plotIndex].opacity = alpha;
+            m_canvases[plotIndex]->SetOpacity(alpha);
+        }
+    };
+
+    m_controlPanel->onPlotHistBinsChanged = [this](int plotIndex, int bins) {
+        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
+            m_plotConfigs[plotIndex].histBins = bins;
+            m_canvases[plotIndex]->SetHistBins(bins);
+        }
+    };
+
     m_controlPanel->onTabSelected = [this](int plotIndex) {
         SetActivePlot(plotIndex);
     };
 
-    // Global callbacks (from "All" tab)
+    // Global callbacks (from "All" tab) — apply to all plots and update configs
     m_controlPanel->onPointSizeChanged = [this](float size) {
-        for (auto* c : m_canvases) c->SetPointSize(size);
+        for (int i = 0; i < (int)m_canvases.size(); i++) {
+            m_plotConfigs[i].pointSize = size;
+            m_canvases[i]->SetPointSize(size);
+        }
     };
 
     m_controlPanel->onOpacityChanged = [this](float alpha) {
-        for (auto* c : m_canvases) c->SetOpacity(alpha);
+        for (int i = 0; i < (int)m_canvases.size(); i++) {
+            m_plotConfigs[i].opacity = alpha;
+            m_canvases[i]->SetOpacity(alpha);
+        }
     };
 
     m_controlPanel->onHistBinsChanged = [this](int bins) {
-        for (auto* c : m_canvases) c->SetHistBins(bins);
+        for (int i = 0; i < (int)m_canvases.size(); i++) {
+            m_plotConfigs[i].histBins = bins;
+            m_canvases[i]->SetHistBins(bins);
+        }
     };
 
     m_controlPanel->onClearSelection = [this]() {

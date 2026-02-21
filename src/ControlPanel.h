@@ -1,30 +1,31 @@
 #pragma once
 
 #include <wx/wx.h>
-#include <wx/notebook.h>
+#include <wx/simplebook.h>
 #include <vector>
 #include <string>
 #include <functional>
 #include <array>
 
-// Forward declare PlotConfig to avoid circular include
 struct PlotConfig;
 
 constexpr int CP_NUM_BRUSHES = 7;
 
-// Per-plot tab page
+// Per-plot settings page
 class PlotTab : public wxPanel {
 public:
-    PlotTab(wxNotebook* parent, int plotIndex, int row, int col);
+    PlotTab(wxWindow* parent, int plotIndex, int row, int col);
 
     void SetColumns(const std::vector<std::string>& names);
     void SyncFromConfig(const PlotConfig& cfg);
 
-    // Per-plot callbacks (carry plotIndex)
     std::function<void(int plotIndex, int xCol, int yCol)> onAxisChanged;
     std::function<void(int plotIndex, int xNorm, int yNorm)> onNormChanged;
     std::function<void(int plotIndex, bool show)> onShowUnselectedChanged;
     std::function<void(int plotIndex, bool show)> onGridLinesChanged;
+    std::function<void(int plotIndex, float size)> onPointSizeChanged;
+    std::function<void(int plotIndex, float alpha)> onOpacityChanged;
+    std::function<void(int plotIndex, int bins)> onHistBinsChanged;
 
 private:
     void CreateControls(int row, int col);
@@ -38,9 +39,15 @@ private:
     wxChoice* m_yNorm = nullptr;
     wxCheckBox* m_showUnselected = nullptr;
     wxCheckBox* m_showGridLines = nullptr;
+    wxSlider* m_pointSizeSlider = nullptr;
+    wxSlider* m_opacitySlider = nullptr;
+    wxSlider* m_histBinsSlider = nullptr;
+    wxStaticText* m_pointSizeLabel = nullptr;
+    wxStaticText* m_opacityLabel = nullptr;
+    wxStaticText* m_histBinsLabel = nullptr;
 };
 
-// Main control panel with tabbed interface
+// Main control panel with grid-based plot selector
 class ControlPanel : public wxPanel {
 public:
     explicit ControlPanel(wxWindow* parent);
@@ -51,14 +58,17 @@ public:
     void SelectTab(int plotIndex);
     void SetPlotConfig(int plotIndex, const PlotConfig& cfg);
 
-    // Per-plot callbacks (routed from PlotTab)
+    // Per-plot callbacks
     std::function<void(int plotIndex, int xCol, int yCol)> onAxisChanged;
     std::function<void(int plotIndex, int xNorm, int yNorm)> onNormChanged;
     std::function<void(int plotIndex, bool show)> onShowUnselectedChanged;
     std::function<void(int plotIndex, bool show)> onGridLinesChanged;
+    std::function<void(int plotIndex, float size)> onPlotPointSizeChanged;
+    std::function<void(int plotIndex, float alpha)> onPlotOpacityChanged;
+    std::function<void(int plotIndex, int bins)> onPlotHistBinsChanged;
     std::function<void(int plotIndex)> onTabSelected;
 
-    // Global callbacks (from "All" tab)
+    // Global callbacks
     std::function<void(float size)> onPointSizeChanged;
     std::function<void(float alpha)> onOpacityChanged;
     std::function<void(int bins)> onHistBinsChanged;
@@ -70,17 +80,26 @@ public:
     float GetOpacity() const;
 
 private:
-    void CreateAllTab();
+    void CreateAllPage();
     void SelectBrush(int index);
+    void SelectPage(int pageIndex);  // 0..N-1 = plot, N = "All"
+    void RebuildSelectorGrid();
 
-    wxNotebook* m_notebook = nullptr;
+    wxSimplebook* m_book = nullptr;
     std::vector<PlotTab*> m_plotTabs;
-    wxPanel* m_allTab = nullptr;
+    wxPanel* m_allPage = nullptr;
 
-    // Column names (cached for rebuilding tabs)
+    // Plot selector grid
+    wxPanel* m_selectorPanel = nullptr;
+    wxButton* m_allButton = nullptr;
+    std::vector<wxButton*> m_plotButtons;
+    int m_selectedPage = -1;
+    int m_gridRows = 2;
+    int m_gridCols = 2;
+
     std::vector<std::string> m_columnNames;
 
-    // "All" tab widgets
+    // "All" page widgets
     wxSlider* m_pointSizeSlider = nullptr;
     wxSlider* m_opacitySlider = nullptr;
     wxSlider* m_histBinsSlider = nullptr;
@@ -91,8 +110,4 @@ private:
     wxStaticText* m_infoLabel = nullptr;
     std::array<wxButton*, CP_NUM_BRUSHES> m_brushButtons = {};
     int m_activeBrush = 0;
-
-    // Saved state for rebuild
-    int m_savedGridRows = 2;
-    int m_savedGridCols = 2;
 };
