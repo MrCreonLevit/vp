@@ -119,13 +119,16 @@ void WebGPUCanvas::ResetView() {
 void WebGPUCanvas::UpdatePointColors() {
     for (size_t i = 0; i < m_points.size(); i++) {
         if (i < m_selection.size() && m_selection[i] > 0) {
+            // Selected: full saturated brush color, slightly boosted
             m_points[i].r = m_brushColor.r;
             m_points[i].g = m_brushColor.g;
             m_points[i].b = m_brushColor.b;
-            m_points[i].a = m_opacity * 3.0f;
+            m_points[i].a = m_opacity * 2.0f;
         } else {
-            m_points[i].r = 0.4f;
-            m_points[i].g = 0.7f;
+            // Unselected: saturated blue, low luminosity
+            // With additive blending over black: dark → saturated → white
+            m_points[i].r = 0.15f;
+            m_points[i].g = 0.4f;
             m_points[i].b = 1.0f;
             m_points[i].a = m_opacity;
         }
@@ -372,9 +375,10 @@ void WebGPUCanvas::Render() {
     encDesc.label = {"cmd_enc", WGPU_STRLEN};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device, &encDesc);
 
-    double bgR = m_isActive ? 0.12 : 0.08;
-    double bgG = m_isActive ? 0.12 : 0.08;
-    double bgB = m_isActive ? 0.18 : 0.12;
+    // Black background for additive blending (points accumulate brightness)
+    double bgR = m_isActive ? 0.03 : 0.0;
+    double bgG = m_isActive ? 0.03 : 0.0;
+    double bgB = m_isActive ? 0.05 : 0.0;
 
     WGPURenderPassColorAttachment colorAtt = {};
     colorAtt.view = view;

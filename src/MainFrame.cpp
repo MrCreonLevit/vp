@@ -203,7 +203,7 @@ void MainFrame::UpdatePlot(int plotIndex) {
         PointVertex v;
         v.x = xVals[r];
         v.y = yVals[r];
-        v.r = 0.4f; v.g = 0.7f; v.b = 1.0f;
+        v.r = 0.15f; v.g = 0.4f; v.b = 1.0f;
         v.a = opacity;
         points.push_back(v);
     }

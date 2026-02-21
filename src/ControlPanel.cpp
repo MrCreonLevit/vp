@@ -61,9 +61,9 @@ void ControlPanel::CreateControls() {
     m_pointSizeSlider = new wxSlider(this, wxID_ANY, 6, 1, 30);
     sizer->Add(m_pointSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
-    m_opacityLabel = new wxStaticText(this, wxID_ANY, "Opacity: 15%");
+    m_opacityLabel = new wxStaticText(this, wxID_ANY, "Opacity: 5%");
     sizer->Add(m_opacityLabel, 0, wxLEFT | wxTOP, 10);
-    m_opacitySlider = new wxSlider(this, wxID_ANY, 15, 1, 100);
+    m_opacitySlider = new wxSlider(this, wxID_ANY, 5, 1, 100);
     sizer->Add(m_opacitySlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxALL, 10);

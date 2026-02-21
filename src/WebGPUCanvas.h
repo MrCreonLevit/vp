@@ -94,7 +94,7 @@ private:
 
     // Display settings
     float m_pointSize = 6.0f;
-    float m_opacity = 0.15f;
+    float m_opacity = 0.05f;
 
     // View state
     float m_panX = 0.0f, m_panY = 0.0f;
