@@ -23,6 +23,7 @@ struct Uniforms {
 
 struct BrushColor {
     float r, g, b;
+    float a = 1.0f;  // per-brush opacity (1.0 = use default, lower = additive composite)
 };
 
 class WebGPUCanvas : public wxWindow {
@@ -141,9 +142,15 @@ private:
     // Mouse interaction
     bool m_panning = false;
     bool m_selecting = false;
+    bool m_translating = false;  // option+drag moves existing selection
     wxPoint m_lastMouse;
     wxPoint m_selectStart;
     wxPoint m_selectEnd;
+
+    // Last selection rect in world space (for translating)
+    float m_lastRectX0 = 0, m_lastRectY0 = 0;
+    float m_lastRectX1 = 0, m_lastRectY1 = 0;
+    bool m_hasLastRect = false;
 
     // Platform-specific
     void* m_metalLayer = nullptr;

@@ -12,7 +12,7 @@ struct PlotConfig;
 constexpr int CP_NUM_BRUSHES = 7;
 
 // Per-plot settings page
-class PlotTab : public wxPanel {
+class PlotTab : public wxScrolledWindow {
 public:
     PlotTab(wxWindow* parent, int plotIndex, int row, int col);
 
@@ -79,6 +79,7 @@ public:
     std::function<void()> onClearSelection;
     std::function<void()> onInvertSelection;
     std::function<void(int brushIndex)> onBrushChanged;
+    std::function<void(int brushIndex, float r, float g, float b, float a)> onBrushColorEdited;
 
     float GetPointSize() const;
     float GetOpacity() const;

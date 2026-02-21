@@ -157,11 +157,18 @@ void WebGPUCanvas::ResetView() {
 }
 
 void WebGPUCanvas::UpdatePointColors() {
-    // All points get the unselected color for the additive pass
+    // Set colors in the main additive buffer.
+    // Selected points get their brush color; unselected get default blue.
     for (size_t i = 0; i < m_points.size(); i++) {
-        bool isSelected = (i < m_selection.size() && m_selection[i] > 0);
-        if (!isSelected && !m_showUnselected) {
-            // Hide unselected points
+        int brushIdx = (i < m_selection.size()) ? m_selection[i] : 0;
+        if (brushIdx > 0 && brushIdx <= (int)m_brushColors.size()) {
+            // Selected: brush color with brush-specific alpha for additive compositing
+            const auto& bc = m_brushColors[brushIdx - 1];
+            m_points[i].r = bc.r;
+            m_points[i].g = bc.g;
+            m_points[i].b = bc.b;
+            m_points[i].a = m_opacity * bc.a;
+        } else if (!m_showUnselected) {
             m_points[i].r = 0.0f;
             m_points[i].g = 0.0f;
             m_points[i].b = 0.0f;
@@ -174,18 +181,22 @@ void WebGPUCanvas::UpdatePointColors() {
         }
     }
 
-    // Build a separate buffer of only selected points for the overlay pass
+    // Build overlay buffer for high-alpha brushes (so selected points
+    // remain visible even in dense white additive regions)
     std::vector<PointVertex> selPoints;
     for (size_t i = 0; i < m_points.size(); i++) {
         int brushIdx = (i < m_selection.size()) ? m_selection[i] : 0;
         if (brushIdx > 0 && brushIdx <= (int)m_brushColors.size()) {
             const auto& bc = m_brushColors[brushIdx - 1];
-            PointVertex v = m_points[i];  // same position
-            v.r = bc.r;
-            v.g = bc.g;
-            v.b = bc.b;
-            v.a = 0.85f;  // high opacity for clear visibility
-            selPoints.push_back(v);
+            // Only use overlay for high-alpha brushes (default behavior)
+            if (bc.a > 0.5f) {
+                PointVertex v = m_points[i];
+                v.r = bc.r;
+                v.g = bc.g;
+                v.b = bc.b;
+                v.a = bc.a * 0.85f;
+                selPoints.push_back(v);
+            }
         }
     }
     m_selVertexCount = selPoints.size();
@@ -981,11 +992,14 @@ void WebGPUCanvas::OnSize(wxSizeEvent& event) {
 
 void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
     bool isPan = event.ShiftDown() || event.MiddleIsDown() || event.RightIsDown();
+    bool isTranslate = event.AltDown() && m_hasLastRect;
 
     if (event.LeftDown() || event.MiddleDown() || event.RightDown()) {
         SetFocus();
         if (isPan || event.MiddleDown() || event.RightDown()) {
             m_panning = true;
+        } else if (isTranslate) {
+            m_translating = true;
         } else {
             m_selecting = true;
             m_selectStart = event.GetPosition();
@@ -1004,9 +1018,16 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
                 bool extend = event.CmdDown() || event.ControlDown();
                 if (onBrushRect)
                     onBrushRect(m_plotIndex, wx0, wy0, wx1, wy1, extend);
+                // Save the rect for later translation
+                m_lastRectX0 = std::min(wx0, wx1);
+                m_lastRectY0 = std::min(wy0, wy1);
+                m_lastRectX1 = std::max(wx0, wx1);
+                m_lastRectY1 = std::max(wy0, wy1);
+                m_hasLastRect = true;
             }
             m_selecting = false;
         }
+        m_translating = false;
         m_panning = false;
         if (HasCapture()) ReleaseMouse();
         Refresh();
@@ -1020,9 +1041,24 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             m_panY += dy * 2.0f / m_zoom;
             m_lastMouse = pos;
             Refresh();
+        } else if (m_translating && m_hasLastRect) {
+            // Option+drag: translate the existing selection rect
+            wxSize size = GetClientSize();
+            float hw = 1.0f / m_zoom;
+            float hh = 1.0f / m_zoom;
+            float dx = static_cast<float>(pos.x - m_lastMouse.x) / size.GetWidth() * 2.0f * hw;
+            float dy = -static_cast<float>(pos.y - m_lastMouse.y) / size.GetHeight() * 2.0f * hh;
+            m_lastRectX0 += dx;
+            m_lastRectX1 += dx;
+            m_lastRectY0 += dy;
+            m_lastRectY1 += dy;
+            m_lastMouse = pos;
+            bool extend = event.CmdDown() || event.ControlDown();
+            if (onBrushRect)
+                onBrushRect(m_plotIndex, m_lastRectX0, m_lastRectY0, m_lastRectX1, m_lastRectY1, extend);
+            Refresh();
         } else if (m_selecting) {
             m_selectEnd = pos;
-            // Live update: fire brush rect during drag for real-time linked brushing
             float wx0, wy0, wx1, wy1;
             ScreenToWorld(m_selectStart.x, m_selectStart.y, wx0, wy0);
             ScreenToWorld(m_selectEnd.x, m_selectEnd.y, wx1, wy1);
@@ -1031,6 +1067,12 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
                 bool extend = event.CmdDown() || event.ControlDown();
                 if (onBrushRect)
                     onBrushRect(m_plotIndex, wx0, wy0, wx1, wy1, extend);
+                // Update saved rect during drag too
+                m_lastRectX0 = std::min(wx0, wx1);
+                m_lastRectY0 = std::min(wy0, wy1);
+                m_lastRectX1 = std::max(wx0, wx1);
+                m_lastRectY1 = std::max(wy0, wy1);
+                m_hasLastRect = true;
             }
             Refresh();
         }

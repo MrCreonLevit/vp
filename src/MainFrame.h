@@ -11,6 +11,7 @@
 
 class WebGPUCanvas;
 class ControlPanel;
+struct BrushColor;
 
 struct PlotConfig {
     size_t xCol = 0;
@@ -78,7 +79,8 @@ private:
     ControlPanel* m_controlPanel = nullptr;
     DataManager m_dataManager;
     std::vector<int> m_selection;
-    int m_activeBrush = 1;  // 1-based brush index (1-7)
+    int m_activeBrush = 1;
+    std::vector<BrushColor> m_brushColors;  // current brush colors (customizable)
 
     enum {
         ID_AddRow = wxID_HIGHEST + 1,

@@ -28,6 +28,10 @@ static std::vector<float> computeNiceTicks(float rangeMin, float rangeMax, int a
 MainFrame::MainFrame()
     : wxFrame(nullptr, wxID_ANY, "Viewpoints", wxDefaultPosition, wxSize(1200, 800))
 {
+    // Initialize default brush colors
+    for (int i = 0; i < NUM_BRUSHES; i++)
+        m_brushColors.push_back({kDefaultBrushes[i].r, kDefaultBrushes[i].g, kDefaultBrushes[i].b});
+
     // Initialize shared GPU context before creating any canvases
     if (!m_gpuContext.Initialize()) {
         wxMessageBox("Failed to initialize WebGPU", "Fatal Error", wxOK | wxICON_ERROR);
@@ -186,7 +190,15 @@ void MainFrame::CreateLayout() {
     };
 
     m_controlPanel->onBrushChanged = [this](int brushIndex) {
-        m_activeBrush = brushIndex + 1;  // UI is 0-based, internal is 1-based
+        m_activeBrush = brushIndex + 1;
+    };
+
+    m_controlPanel->onBrushColorEdited = [this](int brushIndex, float r, float g, float b, float a) {
+        if (brushIndex >= 0 && brushIndex < (int)m_brushColors.size()) {
+            m_brushColors[brushIndex] = {r, g, b, a};
+            for (auto* c : m_canvases)
+                c->SetBrushColors(m_brushColors);
+        }
     };
 
     RebuildGrid();
@@ -282,10 +294,7 @@ void MainFrame::RebuildGrid() {
         canvas->onClearRequested = [this]() { ClearAllSelections(); };
         canvas->onInvertRequested = [this]() { InvertAllSelections(); };
 
-        std::vector<BrushColor> colors;
-        for (int b = 0; b < NUM_BRUSHES; b++)
-            colors.push_back({kDefaultBrushes[b].r, kDefaultBrushes[b].g, kDefaultBrushes[b].b});
-        canvas->SetBrushColors(colors);
+        canvas->SetBrushColors(m_brushColors);
         canvas->onResetViewRequested = [this]() {
             for (auto* c : m_canvases) c->ResetView();
         };
@@ -586,7 +595,7 @@ void MainFrame::ClearAllSelections() {
 
 void MainFrame::InvertAllSelections() {
     for (auto& s : m_selection)
-        s = (s == 0) ? 1 : 0;
+        s = (s == 0) ? m_activeBrush : 0;
     PropagateSelection(m_selection);
 }
 

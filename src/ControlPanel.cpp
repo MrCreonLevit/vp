@@ -3,15 +3,17 @@
 #include "Brush.h"
 #include "MainFrame.h"
 #include <wx/statline.h>
+#include <wx/colordlg.h>
 
 // ============================================================
 // PlotTab
 // ============================================================
 
 PlotTab::PlotTab(wxWindow* parent, int plotIndex, int row, int col)
-    : wxPanel(parent)
+    : wxScrolledWindow(parent)
     , m_plotIndex(plotIndex)
 {
+    SetScrollRate(0, 10);
     CreateControls(row, col);
 }
 
@@ -365,7 +367,8 @@ void ControlPanel::SetSelectionInfo(int selected, int total) {
 }
 
 void ControlPanel::CreateAllPage() {
-    m_allPage = new wxPanel(m_book);
+    m_allPage = new wxScrolledWindow(m_book);
+    static_cast<wxScrolledWindow*>(m_allPage)->SetScrollRate(0, 10);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
     auto* header = new wxStaticText(m_allPage, wxID_ANY, "Global Settings");
@@ -445,6 +448,27 @@ void ControlPanel::CreateAllPage() {
         m_brushButtons[i] = btn;
         brushSizer->Add(btn, 0, wxEXPAND);
         btn->Bind(wxEVT_BUTTON, [this, i](wxCommandEvent&) { SelectBrush(i); });
+        // Right-click to edit brush color
+        btn->Bind(wxEVT_RIGHT_DOWN, [this, i](wxMouseEvent&) {
+            wxColourData colData;
+            colData.SetChooseFull(true);
+            colData.SetChooseAlpha(true);
+            colData.SetColour(m_brushButtons[i]->GetBackgroundColour());
+            wxColourDialog dlg(this, &colData);
+            dlg.SetTitle(wxString::Format("Brush %d Color & Opacity", i + 1));
+            if (dlg.ShowModal() == wxID_OK) {
+                wxColour c = dlg.GetColourData().GetColour();
+                float r = c.Red() / 255.0f;
+                float g = c.Green() / 255.0f;
+                float b = c.Blue() / 255.0f;
+                // Alpha from color picker: low alpha = additive glow, high alpha = solid overlay
+                float a = c.Alpha() / 255.0f;
+                m_brushButtons[i]->SetBackgroundColour(wxColour(c.Red(), c.Green(), c.Blue()));
+                m_brushButtons[i]->Refresh();
+                if (onBrushColorEdited)
+                    onBrushColorEdited(i, r, g, b, a);
+            }
+        });
     }
     sizer->Add(brushSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
     SelectBrush(0);
