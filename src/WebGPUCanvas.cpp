@@ -866,6 +866,59 @@ void WebGPUCanvas::UpdateGridLines() {
     wgpuQueueWriteBuffer(queue, m_gridLineBuffer, 0, lineVerts.data(), dataSize);
 }
 
+void WebGPUCanvas::UpdateSelectionRect() {
+    if (!m_ctx || !m_selecting) {
+        m_selRectVertexCount = 0;
+        return;
+    }
+
+    float wx0, wy0, wx1, wy1;
+    ScreenToWorld(m_selectStart.x, m_selectStart.y, wx0, wy0);
+    ScreenToWorld(m_selectEnd.x, m_selectEnd.y, wx1, wy1);
+
+    // Fire coordinate callback
+    if (onSelectionDrag)
+        onSelectionDrag(m_plotIndex, std::min(wx0, wx1), std::min(wy0, wy1),
+                        std::max(wx0, wx1), std::max(wy0, wy1));
+
+    // Build outline as 4 thin quads in world space (rendered with main projection)
+    float t = 0.003f / m_zoomX;  // scale thickness by zoom so it stays visible
+    float tY = 0.003f / m_zoomY;
+    float left = std::min(wx0, wx1), right = std::max(wx0, wx1);
+    float bottom = std::min(wy0, wy1), top = std::max(wy0, wy1);
+
+    std::vector<PointVertex> verts;
+    float r = 1.0f, g = 1.0f, b = 1.0f, a = 0.8f;
+    auto addBar = [&](float x0, float y0, float x1, float y1) {
+        PointVertex tl = {x0, y1, r, g, b, a, 1.0f, 1.0f};
+        PointVertex tr = {x1, y1, r, g, b, a, 1.0f, 1.0f};
+        PointVertex bl = {x0, y0, r, g, b, a, 1.0f, 1.0f};
+        PointVertex br = {x1, y0, r, g, b, a, 1.0f, 1.0f};
+        verts.push_back(bl); verts.push_back(br); verts.push_back(tr);
+        verts.push_back(bl); verts.push_back(tr); verts.push_back(tl);
+    };
+
+    addBar(left, bottom - tY, right, bottom + tY);   // bottom
+    addBar(left, top - tY, right, top + tY);          // top
+    addBar(left - t, bottom, left + t, top);           // left
+    addBar(right - t, bottom, right + t, top);         // right
+
+    m_selRectVertexCount = verts.size();
+
+    auto device = m_ctx->GetDevice();
+    auto queue = m_ctx->GetQueue();
+
+    if (m_selRectBuffer) { wgpuBufferRelease(m_selRectBuffer); m_selRectBuffer = nullptr; }
+
+    size_t dataSize = m_selRectVertexCount * sizeof(PointVertex);
+    WGPUBufferDescriptor desc = {};
+    desc.label = {"sel_rect", WGPU_STRLEN};
+    desc.size = dataSize;
+    desc.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+    m_selRectBuffer = wgpuDeviceCreateBuffer(device, &desc);
+    wgpuQueueWriteBuffer(queue, m_selRectBuffer, 0, verts.data(), dataSize);
+}
+
 void WebGPUCanvas::RecomputeDensityColors() {
     if (m_colorMap == 0 || m_basePositions.empty()) return;
 
@@ -996,6 +1049,7 @@ void WebGPUCanvas::Render() {
     UpdateUniforms();
     UpdateHistograms();
     UpdateGridLines();
+    UpdateSelectionRect();
 
     // Notify MainFrame of current viewport for tick value labels
     if (onViewportChanged) {
@@ -1061,6 +1115,15 @@ void WebGPUCanvas::Render() {
         wgpuRenderPassEncoderSetVertexBuffer(rp, 1, m_selVertexBuffer, 0,
                                               m_selVertexCount * sizeof(PointVertex));
         wgpuRenderPassEncoderDraw(rp, 6, static_cast<uint32_t>(m_selVertexCount), 0, 0);
+    }
+
+    // Draw selection rectangle outline (world space, main projection)
+    if (m_selecting && m_histPipeline && m_selRectBuffer && m_selRectVertexCount > 0) {
+        wgpuRenderPassEncoderSetPipeline(rp, m_histPipeline);
+        wgpuRenderPassEncoderSetBindGroup(rp, 0, m_bindGroup, 0, nullptr);  // main projection
+        wgpuRenderPassEncoderSetVertexBuffer(rp, 0, m_selRectBuffer, 0,
+                                              m_selRectVertexCount * sizeof(PointVertex));
+        wgpuRenderPassEncoderDraw(rp, static_cast<uint32_t>(m_selRectVertexCount), 1, 0, 0);
     }
 
     // Draw grid lines on top of data (using identity projection)
@@ -1254,6 +1317,7 @@ void WebGPUCanvas::Cleanup() {
     if (m_histPipeline) { wgpuRenderPipelineRelease(m_histPipeline); m_histPipeline = nullptr; }
     if (m_histBindGroup) { wgpuBindGroupRelease(m_histBindGroup); m_histBindGroup = nullptr; }
     if (m_histUniformBuffer) { wgpuBufferRelease(m_histUniformBuffer); m_histUniformBuffer = nullptr; }
+    if (m_selRectBuffer) { wgpuBufferRelease(m_selRectBuffer); m_selRectBuffer = nullptr; }
     if (m_selVertexBuffer) { wgpuBufferRelease(m_selVertexBuffer); m_selVertexBuffer = nullptr; }
     if (m_selPipeline) { wgpuRenderPipelineRelease(m_selPipeline); m_selPipeline = nullptr; }
     if (m_bindGroup) { wgpuBindGroupRelease(m_bindGroup); m_bindGroup = nullptr; }

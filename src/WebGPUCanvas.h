@@ -89,6 +89,8 @@ public:
     std::function<void()> onKillRequested;
     // Called when user pans or zooms this plot
     std::function<void(int plotIndex, float panX, float panY, float zoomX, float zoomY)> onViewChanged;
+    // Called during selection drag with world-space box coordinates
+    std::function<void(int plotIndex, float x0, float y0, float x1, float y1)> onSelectionDrag;
     std::function<void()> onInvertRequested;
     std::function<void()> onResetViewRequested;
     // Called on each render with current visible range in normalized coords
@@ -175,10 +177,15 @@ private:
     float m_panX = 0.0f, m_panY = 0.0f;
     float m_zoomX = 1.0f, m_zoomY = 1.0f;
 
+    // Selection rectangle rendering
+    WGPUBuffer m_selRectBuffer = nullptr;
+    size_t m_selRectVertexCount = 0;
+    void UpdateSelectionRect();
+
     // Mouse interaction
     bool m_panning = false;
     bool m_selecting = false;
-    bool m_translating = false;  // option+drag moves existing selection
+    bool m_translating = false;
     wxPoint m_lastMouse;
     wxPoint m_selectStart;
     wxPoint m_selectEnd;

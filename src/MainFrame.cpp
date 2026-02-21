@@ -411,6 +411,28 @@ void MainFrame::RebuildGrid() {
             }
         };
 
+        // Show selection box coordinates in status bar during drag
+        canvas->onSelectionDrag = [this](int pi, float x0, float y0, float x1, float y1) {
+            if (pi < 0 || pi >= (int)m_plotConfigs.size()) return;
+            auto& cfg = m_plotConfigs[pi];
+            const auto& ds = m_dataManager.dataset();
+            if (ds.numCols == 0) return;
+
+            float xDataMin, xDataMax, yDataMin, yDataMax;
+            ds.columnRange(cfg.xCol, xDataMin, xDataMax);
+            ds.columnRange(cfg.yCol, yDataMin, yDataMax);
+            float xRange = xDataMax - xDataMin; if (xRange == 0) xRange = 1;
+            float yRange = yDataMax - yDataMin; if (yRange == 0) yRange = 1;
+
+            float dLeft   = xDataMin + ((x0 + 0.9f) / 1.8f) * xRange;
+            float dRight  = xDataMin + ((x1 + 0.9f) / 1.8f) * xRange;
+            float dBottom = yDataMin + ((y0 + 0.9f) / 1.8f) * yRange;
+            float dTop    = yDataMin + ((y1 + 0.9f) / 1.8f) * yRange;
+
+            SetStatusText(wxString::Format("Selection: X [%.4g, %.4g]  Y [%.4g, %.4g]",
+                                            dLeft, dRight, dBottom, dTop));
+        };
+
         canvas->SetBrushColors(m_brushColors);
         canvas->onResetViewRequested = [this]() {
             for (auto* c : m_canvases) c->ResetView();
