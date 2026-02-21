@@ -1,3 +1,4 @@
+// Viewpoints (MIT License) - See LICENSE file
 #include "ControlPanel.h"
 #include "Normalize.h"
 #include "Brush.h"

@@ -1,3 +1,4 @@
+// Viewpoints (MIT License) - See LICENSE file
 // Viewpoints - Fast interactive linked plotting of large multivariate datasets
 // Modern rewrite using wxWidgets + WebGPU
 

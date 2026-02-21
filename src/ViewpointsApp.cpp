@@ -1,3 +1,4 @@
+// Viewpoints (MIT License) - See LICENSE file
 #include "ViewpointsApp.h"
 #include "MainFrame.h"
 

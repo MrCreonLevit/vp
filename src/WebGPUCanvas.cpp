@@ -1,3 +1,4 @@
+// Viewpoints (MIT License) - See LICENSE file
 #include "WebGPUCanvas.h"
 #include "WebGPUContext.h"
 #include "ColorMap.h"

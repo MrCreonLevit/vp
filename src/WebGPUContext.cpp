@@ -1,3 +1,4 @@
+// Viewpoints (MIT License) - See LICENSE file
 #include "WebGPUContext.h"
 #include "WebGPUCanvas.h" // for Uniforms struct
 #include <cstdio>

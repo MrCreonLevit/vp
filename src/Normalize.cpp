@@ -1,3 +1,4 @@
+// Viewpoints (MIT License) - See LICENSE file
 #include "Normalize.h"
 #include <algorithm>
 #include <cmath>
