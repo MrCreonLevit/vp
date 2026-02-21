@@ -1,5 +1,6 @@
 #include "WebGPUCanvas.h"
 #include "WebGPUContext.h"
+#include "ColorMap.h"
 #include <cstdio>
 #include <cmath>
 #include <cstring>
@@ -65,9 +66,13 @@ WebGPUCanvas::~WebGPUCanvas() {
 
 void WebGPUCanvas::SetPoints(std::vector<PointVertex> points) {
     m_basePositions.resize(points.size() * 2);
+    m_baseColors.resize(points.size() * 3);
     for (size_t i = 0; i < points.size(); i++) {
         m_basePositions[i * 2] = points[i].x;
         m_basePositions[i * 2 + 1] = points[i].y;
+        m_baseColors[i * 3] = points[i].r;
+        m_baseColors[i * 3 + 1] = points[i].g;
+        m_baseColors[i * 3 + 2] = points[i].b;
     }
     m_selection.assign(points.size(), 0);
     m_points = std::move(points);
@@ -121,6 +126,21 @@ void WebGPUCanvas::SetShowGridLines(bool show) {
 void WebGPUCanvas::SetShowHistograms(bool show) {
     m_showHistograms = show;
     Refresh();
+}
+
+void WebGPUCanvas::SetBackground(float brightness) {
+    m_bgBrightness = brightness;
+    Refresh();
+}
+
+void WebGPUCanvas::SetUseAdditiveBlending(bool additive) {
+    m_useAdditive = additive;
+    Refresh();
+}
+
+void WebGPUCanvas::SetColorMap(int colorMap) {
+    m_colorMap = colorMap;
+    RecomputeDensityColors();
 }
 
 void WebGPUCanvas::SetGridLinePositions(const std::vector<float>& xPositions,
@@ -202,9 +222,9 @@ void WebGPUCanvas::UpdatePointColors() {
             m_points[i].symbol = 0.0f;
             m_points[i].sizeScale = 1.0f;
         } else {
-            m_points[i].r = 0.15f;
-            m_points[i].g = 0.4f;
-            m_points[i].b = 1.0f;
+            m_points[i].r = (i * 3 < m_baseColors.size()) ? m_baseColors[i * 3] : 0.15f;
+            m_points[i].g = (i * 3 + 1 < m_baseColors.size()) ? m_baseColors[i * 3 + 1] : 0.4f;
+            m_points[i].b = (i * 3 + 2 < m_baseColors.size()) ? m_baseColors[i * 3 + 2] : 1.0f;
             m_points[i].a = m_opacity;
             m_points[i].symbol = 0.0f;
             m_points[i].sizeScale = 1.0f;
@@ -846,6 +866,77 @@ void WebGPUCanvas::UpdateGridLines() {
     wgpuQueueWriteBuffer(queue, m_gridLineBuffer, 0, lineVerts.data(), dataSize);
 }
 
+void WebGPUCanvas::RecomputeDensityColors() {
+    if (m_colorMap == 0 || m_basePositions.empty()) return;
+
+    constexpr int GRID_SIZE = 128;
+    size_t numPoints = m_basePositions.size() / 2;
+
+    // Use the current viewport for density binning
+    float hw = 1.0f / m_zoomX;
+    float hh = 1.0f / m_zoomY;
+    float viewMinX = m_panX - hw;
+    float viewMaxX = m_panX + hw;
+    float viewMinY = m_panY - hh;
+    float viewMaxY = m_panY + hh;
+    float viewW = viewMaxX - viewMinX;
+    float viewH = viewMaxY - viewMinY;
+    if (viewW <= 0 || viewH <= 0) return;
+
+    float cellW = viewW / GRID_SIZE;
+    float cellH = viewH / GRID_SIZE;
+
+    // Bin visible points into the density grid
+    std::vector<int> grid(GRID_SIZE * GRID_SIZE, 0);
+    for (size_t i = 0; i < numPoints; i++) {
+        float px = m_basePositions[i * 2];
+        float py = m_basePositions[i * 2 + 1];
+        if (px < viewMinX || px > viewMaxX || py < viewMinY || py > viewMaxY)
+            continue;
+        int gx = static_cast<int>((px - viewMinX) / cellW);
+        int gy = static_cast<int>((py - viewMinY) / cellH);
+        gx = std::max(0, std::min(gx, GRID_SIZE - 1));
+        gy = std::max(0, std::min(gy, GRID_SIZE - 1));
+        grid[gy * GRID_SIZE + gx]++;
+    }
+
+    int maxDensity = *std::max_element(grid.begin(), grid.end());
+    if (maxDensity == 0) maxDensity = 1;
+
+    // Recolor unselected points based on viewport-relative density
+    ColorMapType cmap = static_cast<ColorMapType>(m_colorMap);
+    for (size_t i = 0; i < numPoints && i < m_points.size(); i++) {
+        int brushIdx = (i < m_selection.size()) ? m_selection[i] : 0;
+        if (brushIdx > 0) continue;  // don't touch selected points
+
+        float px = m_basePositions[i * 2];
+        float py = m_basePositions[i * 2 + 1];
+
+        float density = 0.0f;
+        if (px >= viewMinX && px <= viewMaxX && py >= viewMinY && py <= viewMaxY) {
+            int gx = static_cast<int>((px - viewMinX) / cellW);
+            int gy = static_cast<int>((py - viewMinY) / cellH);
+            gx = std::max(0, std::min(gx, GRID_SIZE - 1));
+            gy = std::max(0, std::min(gy, GRID_SIZE - 1));
+            density = std::log(1.0f + grid[gy * GRID_SIZE + gx]) /
+                      std::log(1.0f + maxDensity);
+        }
+
+        ColorMapLookup(cmap, density, m_points[i].r, m_points[i].g, m_points[i].b);
+        // Also update base colors so UpdatePointColors preserves them
+        if (i * 3 + 2 < m_baseColors.size()) {
+            m_baseColors[i * 3] = m_points[i].r;
+            m_baseColors[i * 3 + 1] = m_points[i].g;
+            m_baseColors[i * 3 + 2] = m_points[i].b;
+        }
+    }
+
+    if (m_initialized) {
+        UpdateVertexBuffer();
+        Refresh();
+    }
+}
+
 void WebGPUCanvas::UpdateUniforms() {
     float hw = 1.0f / m_zoomX;
     float hh = 1.0f / m_zoomY;
@@ -933,8 +1024,8 @@ void WebGPUCanvas::Render() {
     encDesc.label = {"cmd_enc", WGPU_STRLEN};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device, &encDesc);
 
-    // Always black background for proper additive blending
-    double bgR = 0.0, bgG = 0.0, bgB = 0.0;
+    // Background brightness (0 = black for additive blending, higher = lighter)
+    double bgR = m_bgBrightness, bgG = m_bgBrightness, bgB = m_bgBrightness;
 
     WGPURenderPassColorAttachment colorAtt = {};
     colorAtt.view = view;
@@ -952,7 +1043,8 @@ void WebGPUCanvas::Render() {
 
     auto quadBuf = m_ctx->GetQuadBuffer();
     if (m_vertexBuffer && quadBuf && !m_points.empty()) {
-        wgpuRenderPassEncoderSetPipeline(rp, m_pipeline);
+        // Use additive or alpha blending based on colormap mode
+        wgpuRenderPassEncoderSetPipeline(rp, m_useAdditive ? m_pipeline : m_selPipeline);
         wgpuRenderPassEncoderSetBindGroup(rp, 0, m_bindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(rp, 0, quadBuf, 0, 6 * 2 * sizeof(float));
         wgpuRenderPassEncoderSetVertexBuffer(rp, 1, m_vertexBuffer, 0,
@@ -1066,6 +1158,7 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
         m_translating = false;
         m_panning = false;
         if (HasCapture()) ReleaseMouse();
+        if (m_colorMap != 0) RecomputeDensityColors();
         Refresh();
     } else if (event.Dragging()) {
         wxPoint pos = event.GetPosition();
@@ -1120,6 +1213,7 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
         m_zoomX = std::max(0.1f, std::min(m_zoomX, 100.0f));
         m_zoomY = std::max(0.1f, std::min(m_zoomY, 100.0f));
         if (onViewChanged) onViewChanged(m_plotIndex, m_panX, m_panY, m_zoomX, m_zoomY);
+        if (m_colorMap != 0) RecomputeDensityColors();
         Refresh();
     }
     event.Skip();

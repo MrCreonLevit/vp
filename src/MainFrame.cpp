@@ -224,6 +224,22 @@ void MainFrame::CreateLayout() {
         }
     };
 
+    m_controlPanel->onColorMapChanged = [this](int colormap, int colorVar) {
+        m_colorMap = static_cast<ColorMapType>(colormap);
+        m_colorVariable = colorVar;
+        bool additive = (m_colorMap == ColorMapType::Default);
+        for (auto* c : m_canvases) {
+            c->SetUseAdditiveBlending(additive);
+            c->SetColorMap(colormap);
+        }
+        UpdateAllPlots();
+    };
+
+    m_controlPanel->onBackgroundChanged = [this](float brightness) {
+        m_bgBrightness = brightness;
+        for (auto* c : m_canvases) c->SetBackground(brightness);
+    };
+
     m_controlPanel->onClearSelection = [this]() {
         ClearAllSelections();
     };
@@ -619,11 +635,51 @@ void MainFrame::UpdatePlot(int plotIndex) {
     std::vector<PointVertex> points;
     points.reserve(ds.numRows);
 
+    // Compute density-based coloring if a colormap is active
+    std::vector<float> densityValues;
+    if (m_colorMap != ColorMapType::Default) {
+        // Build 2D density grid
+        constexpr int GRID_SIZE = 128;
+        std::vector<int> grid(GRID_SIZE * GRID_SIZE, 0);
+        float dataMinX = -0.9f, dataMaxX = 0.9f;
+        float dataMinY = -0.9f, dataMaxY = 0.9f;
+        float gridW = (dataMaxX - dataMinX) / GRID_SIZE;
+        float gridH = (dataMaxY - dataMinY) / GRID_SIZE;
+
+        for (size_t r = 0; r < ds.numRows; r++) {
+            int gx = static_cast<int>((xVals[r] - dataMinX) / gridW);
+            int gy = static_cast<int>((yVals[r] - dataMinY) / gridH);
+            gx = std::max(0, std::min(gx, GRID_SIZE - 1));
+            gy = std::max(0, std::min(gy, GRID_SIZE - 1));
+            grid[gy * GRID_SIZE + gx]++;
+        }
+
+        // Find max density for normalization
+        int maxDensity = *std::max_element(grid.begin(), grid.end());
+        if (maxDensity == 0) maxDensity = 1;
+
+        // Look up each point's density
+        densityValues.resize(ds.numRows);
+        for (size_t r = 0; r < ds.numRows; r++) {
+            int gx = static_cast<int>((xVals[r] - dataMinX) / gridW);
+            int gy = static_cast<int>((yVals[r] - dataMinY) / gridH);
+            gx = std::max(0, std::min(gx, GRID_SIZE - 1));
+            gy = std::max(0, std::min(gy, GRID_SIZE - 1));
+            // Use log scale for density to spread the dynamic range
+            float d = static_cast<float>(grid[gy * GRID_SIZE + gx]);
+            densityValues[r] = std::log(1.0f + d) / std::log(1.0f + maxDensity);
+        }
+    }
+
     for (size_t r = 0; r < ds.numRows; r++) {
         PointVertex v;
         v.x = xVals[r];
         v.y = yVals[r];
-        v.r = 0.15f; v.g = 0.4f; v.b = 1.0f;
+        if (m_colorMap != ColorMapType::Default && r < densityValues.size()) {
+            ColorMapLookup(m_colorMap, densityValues[r], v.r, v.g, v.b);
+        } else {
+            v.r = 0.15f; v.g = 0.4f; v.b = 1.0f;
+        }
         v.a = opacity;
         v.symbol = 0.0f;
         v.sizeScale = 1.0f;

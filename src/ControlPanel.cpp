@@ -3,6 +3,7 @@
 #include "Brush.h"
 #include "MainFrame.h"
 #include "WebGPUCanvas.h"  // for SymbolName, SYMBOL_COUNT
+#include "ColorMap.h"
 #include <wx/statline.h>
 #include <wx/colordlg.h>
 
@@ -396,6 +397,14 @@ void ControlPanel::SetColumns(const std::vector<std::string>& names) {
     m_columnNames = names;
     for (auto* tab : m_plotTabs) tab->SetColumns(names);
     m_infoLabel->SetLabel(wxString::Format("%zu columns", names.size()));
+    // Update color variable dropdown
+    if (m_colorVarChoice) {
+        m_colorVarChoice->Clear();
+        m_colorVarChoice->Append("(position)");
+        for (const auto& name : names)
+            m_colorVarChoice->Append(name);
+        m_colorVarChoice->SetSelection(0);
+    }
 }
 
 void ControlPanel::SetSelectionInfo(int selected, int total) {
@@ -432,6 +441,45 @@ void ControlPanel::CreateAllPage() {
     sizer->Add(m_histBinsLabel, 0, wxLEFT | wxTOP, 8);
     m_histBinsSlider = new wxSlider(m_allPage, wxID_ANY, 64, 2, 512);
     sizer->Add(m_histBinsSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
+
+    // Color map controls
+    auto* colorHeader = new wxStaticText(m_allPage, wxID_ANY, "Color Map");
+    auto cFont = colorHeader->GetFont();
+    cFont.SetWeight(wxFONTWEIGHT_BOLD);
+    colorHeader->SetFont(cFont);
+    sizer->Add(colorHeader, 0, wxLEFT, 8);
+
+    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Map"), 0, wxLEFT | wxTOP, 8);
+    auto* colorMapChoice = new wxChoice(m_allPage, wxID_ANY);
+    for (const auto& name : AllColorMapNames())
+        colorMapChoice->Append(name);
+    colorMapChoice->SetSelection(0);
+    sizer->Add(colorMapChoice, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Color By"), 0, wxLEFT | wxTOP, 8);
+    m_colorVarChoice = new wxChoice(m_allPage, wxID_ANY);
+    m_colorVarChoice->Append("(position)");
+    m_colorVarChoice->SetSelection(0);
+    sizer->Add(m_colorVarChoice, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Background"), 0, wxLEFT | wxTOP, 8);
+    auto* bgSlider = new wxSlider(m_allPage, wxID_ANY, 0, 0, 50);
+    sizer->Add(bgSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    colorMapChoice->Bind(wxEVT_CHOICE, [this, colorMapChoice](wxCommandEvent&) {
+        if (onColorMapChanged)
+            onColorMapChanged(colorMapChoice->GetSelection(), m_colorVarChoice->GetSelection());
+    });
+    m_colorVarChoice->Bind(wxEVT_CHOICE, [this, colorMapChoice](wxCommandEvent&) {
+        if (onColorMapChanged)
+            onColorMapChanged(colorMapChoice->GetSelection(), m_colorVarChoice->GetSelection());
+    });
+    bgSlider->Bind(wxEVT_SLIDER, [this, bgSlider](wxCommandEvent&) {
+        if (onBackgroundChanged)
+            onBackgroundChanged(static_cast<float>(bgSlider->GetValue()) / 100.0f);
+    });
 
     sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
 

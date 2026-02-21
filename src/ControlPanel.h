@@ -82,6 +82,8 @@ public:
     std::function<void(float size)> onPointSizeChanged;
     std::function<void(float alpha)> onOpacityChanged;
     std::function<void(int bins)> onHistBinsChanged;
+    std::function<void(int colormap, int colorVar)> onColorMapChanged;
+    std::function<void(float brightness)> onBackgroundChanged;
     std::function<void()> onClearSelection;
     std::function<void()> onInvertSelection;
     std::function<void()> onKillSelected;
@@ -115,6 +117,7 @@ private:
     std::vector<std::string> m_columnNames;
 
     // "All" page widgets
+    wxChoice* m_colorVarChoice = nullptr;
     wxSlider* m_pointSizeSlider = nullptr;
     wxSlider* m_opacitySlider = nullptr;
     wxSlider* m_histBinsSlider = nullptr;

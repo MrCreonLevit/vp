@@ -5,6 +5,7 @@
 #include "WebGPUContext.h"
 #include "Normalize.h"
 #include "Brush.h"
+#include "ColorMap.h"
 #include "VerticalLabel.h"
 #include <vector>
 #include <array>
@@ -84,7 +85,10 @@ private:
     DataManager m_dataManager;
     std::vector<int> m_selection;
     int m_activeBrush = 1;
-    std::vector<BrushColor> m_brushColors;  // current brush colors (customizable)
+    std::vector<BrushColor> m_brushColors;
+    ColorMapType m_colorMap = ColorMapType::Default;
+    int m_colorVariable = 0;  // 0 = position, 1+ = column index
+    float m_bgBrightness = 0.0f;
 
     enum {
         ID_AddRow = wxID_HIGHEST + 1,

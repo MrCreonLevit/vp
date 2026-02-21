@@ -61,6 +61,9 @@ public:
     void SetShowUnselected(bool show);
     void SetShowGridLines(bool show);
     void SetShowHistograms(bool show);
+    void SetBackground(float brightness);
+    void SetUseAdditiveBlending(bool additive);
+    void SetColorMap(int colorMap);  // 0 = default, else ColorMapType
     void SetPanZoom(float panX, float panY, float zoomX, float zoomY);
     float GetPanX() const { return m_panX; }
     float GetPanY() const { return m_panY; }
@@ -99,6 +102,7 @@ private:
     void UpdatePointColors();
     void UpdateHistograms();
     void UpdateGridLines();
+    void RecomputeDensityColors();
     void UpdateUniforms();
     void Render();
     void Cleanup();
@@ -133,6 +137,7 @@ private:
     // Point data
     std::vector<PointVertex> m_points;
     std::vector<float> m_basePositions;
+    std::vector<float> m_baseColors;  // original r,g,b per point (3 floats each)
     Uniforms m_uniforms = {};
 
     // Selection state (0 = unselected, 1-7 = brush index)
@@ -160,6 +165,9 @@ private:
 
     // Display settings
     bool m_showUnselected = true;
+    float m_bgBrightness = 0.0f;
+    bool m_useAdditive = true;
+    int m_colorMap = 0;
     float m_pointSize = 6.0f;
     float m_opacity = 0.05f;
 
