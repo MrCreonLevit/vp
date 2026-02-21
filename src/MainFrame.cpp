@@ -1,6 +1,7 @@
 #include "MainFrame.h"
 #include "WebGPUCanvas.h"
 #include "ControlPanel.h"
+#include <wx/progdlg.h>
 #include <algorithm>
 
 MainFrame::MainFrame()
@@ -383,18 +384,32 @@ void MainFrame::InvertAllSelections() {
 }
 
 void MainFrame::LoadFile(const std::string& path) {
-    fprintf(stderr, "Loading: %s\n", path.c_str());
-    fflush(stderr);
-    wxBusyCursor wait;
+    wxProgressDialog progressDlg("Loading Data", "Loading " + wxString(path).AfterLast('/'),
+                                  100, this,
+                                  wxPD_APP_MODAL | wxPD_AUTO_HIDE | wxPD_SMOOTH | wxPD_CAN_ABORT);
 
-    if (!m_dataManager.loadAsciiFile(path)) {
-        wxMessageBox("Failed to load file:\n" + m_dataManager.errorMessage(),
-                     "Load Error", wxOK | wxICON_ERROR, this);
+    bool cancelled = false;
+    auto progressCb = [&](size_t bytesRead, size_t totalBytes) -> bool {
+        int pct = (totalBytes > 0) ? static_cast<int>((bytesRead * 100) / totalBytes) : 0;
+        pct = std::min(pct, 99);
+        cancelled = !progressDlg.Update(pct,
+            wxString::Format("Loading... %zu KB / %zu KB",
+                             bytesRead / 1024, totalBytes / 1024));
+        wxYield();  // keep UI responsive
+        return !cancelled;
+    };
+
+    if (!m_dataManager.loadAsciiFile(path, progressCb)) {
+        if (!cancelled) {
+            wxMessageBox("Failed to load file:\n" + m_dataManager.errorMessage(),
+                         "Load Error", wxOK | wxICON_ERROR, this);
+        }
         return;
     }
 
+    progressDlg.Update(100, "Processing...");
+
     const auto& ds = m_dataManager.dataset();
-    fprintf(stderr, "Loaded: %zu rows x %zu cols\n", ds.numRows, ds.numCols);
 
     m_controlPanel->SetColumns(ds.columnLabels);
     m_selection.assign(ds.numRows, 0);

@@ -52,7 +52,7 @@ std::vector<std::string> DataManager::splitTokens(const std::string& line, char 
     return tokens;
 }
 
-bool DataManager::loadAsciiFile(const std::string& path) {
+bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progress) {
     m_filePath = path;
     m_error.clear();
     m_data = DataSet{};
@@ -62,6 +62,12 @@ bool DataManager::loadAsciiFile(const std::string& path) {
         m_error = "Cannot open file: " + path;
         return false;
     }
+
+    // Get file size for progress reporting
+    file.seekg(0, std::ios::end);
+    size_t totalBytes = static_cast<size_t>(file.tellg());
+    file.seekg(0, std::ios::beg);
+    size_t bytesRead = 0;
 
     // Detect delimiter from file extension
     if (path.size() >= 4) {
@@ -147,8 +153,10 @@ bool DataManager::loadAsciiFile(const std::string& path) {
     }
 
     // Phase 2: Read data rows
-    // Reserve space (estimate based on file size)
-    m_data.data.reserve(m_data.numCols * 10000);
+    // Estimate row count from file size for better reserve
+    size_t estRows = (totalBytes > 0 && m_data.numCols > 0) ?
+        totalBytes / (m_data.numCols * 8) : 10000;
+    m_data.data.reserve(m_data.numCols * estRows);
 
     auto parseLine = [&](const std::string& dataLine) -> bool {
         auto dataTokens = splitTokens(dataLine, m_delimiter);
@@ -188,6 +196,8 @@ bool DataManager::loadAsciiFile(const std::string& path) {
     // Read remaining lines
     size_t linesRead = 0;
     while (std::getline(file, line)) {
+        bytesRead += line.size() + 1;  // +1 for newline
+
         if (!line.empty() && line.back() == '\r')
             line.pop_back();
 
@@ -197,8 +207,12 @@ bool DataManager::loadAsciiFile(const std::string& path) {
         parseLine(line);
         linesRead++;
 
-        if (linesRead % 10000 == 0) {
-            fprintf(stderr, "  Read %zu rows...\n", m_data.numRows);
+        // Report progress every 10000 lines
+        if (progress && linesRead % 10000 == 0) {
+            if (!progress(bytesRead, totalBytes)) {
+                m_error = "Loading cancelled";
+                return false;
+            }
         }
     }
 

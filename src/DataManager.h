@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <functional>
 #include <cstddef>
 
 struct DataSet {
@@ -21,7 +22,9 @@ struct DataSet {
 class DataManager {
 public:
     // Load an ASCII data file. Returns true on success.
-    bool loadAsciiFile(const std::string& path);
+    // Progress callback receives (bytesRead, totalBytes), returns false to cancel.
+    using ProgressCallback = std::function<bool(size_t bytesRead, size_t totalBytes)>;
+    bool loadAsciiFile(const std::string& path, ProgressCallback progress = nullptr);
 
     const DataSet& dataset() const { return m_data; }
     const std::string& errorMessage() const { return m_error; }
