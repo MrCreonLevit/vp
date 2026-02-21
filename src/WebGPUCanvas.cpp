@@ -897,6 +897,16 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             Refresh();
         } else if (m_selecting) {
             m_selectEnd = pos;
+            // Live update: fire brush rect during drag for real-time linked brushing
+            float wx0, wy0, wx1, wy1;
+            ScreenToWorld(m_selectStart.x, m_selectStart.y, wx0, wy0);
+            ScreenToWorld(m_selectEnd.x, m_selectEnd.y, wx1, wy1);
+            if (std::abs(m_selectEnd.x - m_selectStart.x) > 3 ||
+                std::abs(m_selectEnd.y - m_selectStart.y) > 3) {
+                bool extend = event.CmdDown() || event.ControlDown();
+                if (onBrushRect)
+                    onBrushRect(m_plotIndex, wx0, wy0, wx1, wy1, extend);
+            }
             Refresh();
         }
     } else if (event.GetWheelRotation() != 0) {
