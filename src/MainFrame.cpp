@@ -98,8 +98,8 @@ void MainFrame::CreateLayout() {
         InvertAllSelections();
     };
 
-    m_controlPanel->onBrushColorChanged = [this](float r, float g, float b) {
-        for (auto* c : m_canvases) c->SetBrushColor({r, g, b});
+    m_controlPanel->onBrushChanged = [this](int brushIndex) {
+        m_activeBrush = brushIndex + 1;  // UI is 0-based, internal is 1-based
     };
 
     RebuildGrid();
@@ -128,6 +128,12 @@ void MainFrame::RebuildGrid() {
         };
         canvas->onClearRequested = [this]() { ClearAllSelections(); };
         canvas->onInvertRequested = [this]() { InvertAllSelections(); };
+
+        // Set brush colors on each canvas
+        std::vector<BrushColor> colors;
+        for (int b = 0; b < NUM_BRUSHES; b++)
+            colors.push_back({kDefaultBrushes[b].r, kDefaultBrushes[b].g, kDefaultBrushes[b].b});
+        canvas->SetBrushColors(colors);
         canvas->onResetViewRequested = [this]() {
             for (auto* c : m_canvases) c->ResetView();
         };
@@ -245,7 +251,7 @@ void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, flo
     for (size_t r = 0; r < ds.numRows; r++) {
         if (xVals[r] >= rectMinX && xVals[r] <= rectMaxX &&
             yVals[r] >= rectMinY && yVals[r] <= rectMaxY) {
-            m_selection[r] = 1;
+            m_selection[r] = m_activeBrush;
         }
     }
 

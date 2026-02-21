@@ -33,7 +33,7 @@ public:
     void SetPoints(std::vector<PointVertex> points);
     void SetPointSize(float size);
     void SetOpacity(float alpha);
-    void SetBrushColor(const BrushColor& color);
+    void SetBrushColors(const std::vector<BrushColor>& colors);
     void SetSelection(const std::vector<int>& sel);
     void ClearSelection();
     void InvertSelection();
@@ -88,9 +88,9 @@ private:
     std::vector<float> m_basePositions;
     Uniforms m_uniforms = {};
 
-    // Selection state
+    // Selection state (0 = unselected, 1-7 = brush index)
     std::vector<int> m_selection;
-    BrushColor m_brushColor = {1.0f, 0.3f, 0.3f};
+    std::vector<BrushColor> m_brushColors;
 
     // Display settings
     float m_pointSize = 6.0f;

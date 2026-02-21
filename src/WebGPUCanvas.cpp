@@ -71,8 +71,8 @@ void WebGPUCanvas::SetOpacity(float alpha) {
     UpdatePointColors();
 }
 
-void WebGPUCanvas::SetBrushColor(const BrushColor& color) {
-    m_brushColor = color;
+void WebGPUCanvas::SetBrushColors(const std::vector<BrushColor>& colors) {
+    m_brushColors = colors;
     UpdatePointColors();
 }
 
@@ -118,15 +118,16 @@ void WebGPUCanvas::ResetView() {
 
 void WebGPUCanvas::UpdatePointColors() {
     for (size_t i = 0; i < m_points.size(); i++) {
-        if (i < m_selection.size() && m_selection[i] > 0) {
-            // Selected: full saturated brush color, slightly boosted
-            m_points[i].r = m_brushColor.r;
-            m_points[i].g = m_brushColor.g;
-            m_points[i].b = m_brushColor.b;
+        int brushIdx = (i < m_selection.size()) ? m_selection[i] : 0;
+        if (brushIdx > 0 && brushIdx <= (int)m_brushColors.size()) {
+            // Selected by a brush: use that brush's color
+            const auto& bc = m_brushColors[brushIdx - 1];
+            m_points[i].r = bc.r;
+            m_points[i].g = bc.g;
+            m_points[i].b = bc.b;
             m_points[i].a = m_opacity * 2.0f;
         } else {
-            // Unselected: saturated blue, low luminosity
-            // With additive blending over black: dark → saturated → white
+            // Unselected: low-luminosity blue for additive buildup
             m_points[i].r = 0.15f;
             m_points[i].g = 0.4f;
             m_points[i].b = 1.0f;

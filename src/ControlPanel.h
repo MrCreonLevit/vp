@@ -1,10 +1,12 @@
 #pragma once
 
 #include <wx/wx.h>
-#include <wx/clrpicker.h>
 #include <vector>
 #include <string>
 #include <functional>
+#include <array>
+
+constexpr int CP_NUM_BRUSHES = 7;
 
 class ControlPanel : public wxPanel {
 public:
@@ -22,7 +24,7 @@ public:
     std::function<void(float alpha)> onOpacityChanged;
     std::function<void()> onClearSelection;
     std::function<void()> onInvertSelection;
-    std::function<void(float r, float g, float b)> onBrushColorChanged;
+    std::function<void(int brushIndex)> onBrushChanged;
 
     int GetXColumn() const;
     int GetYColumn() const;
@@ -37,8 +39,10 @@ private:
     void OnNormChoice(wxCommandEvent& event);
     void OnPointSizeSlider(wxCommandEvent& event);
     void OnOpacitySlider(wxCommandEvent& event);
+    void SelectBrush(int index);
 
     bool m_suppressEvents = false;
+    int m_activeBrush = 0;
 
     wxStaticText* m_activePlotLabel = nullptr;
     wxChoice* m_xAxis = nullptr;
@@ -51,5 +55,5 @@ private:
     wxStaticText* m_opacityLabel = nullptr;
     wxStaticText* m_infoLabel = nullptr;
     wxStaticText* m_selectionLabel = nullptr;
-    wxColourPickerCtrl* m_brushColorPicker = nullptr;
+    std::array<wxButton*, CP_NUM_BRUSHES> m_brushButtons = {};
 };

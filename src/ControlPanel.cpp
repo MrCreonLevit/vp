@@ -1,5 +1,6 @@
 #include "ControlPanel.h"
 #include "Normalize.h"
+#include "Brush.h"
 #include <wx/statline.h>
 
 ControlPanel::ControlPanel(wxWindow* parent)
@@ -19,7 +20,6 @@ void ControlPanel::CreateControls() {
     title->SetFont(titleFont);
     sizer->Add(title, 0, wxALL, 10);
 
-    // Active plot indicator
     m_activePlotLabel = new wxStaticText(this, wxID_ANY, "Active: Plot 0,0");
     auto apFont = m_activePlotLabel->GetFont();
     apFont.SetWeight(wxFONTWEIGHT_BOLD);
@@ -34,7 +34,7 @@ void ControlPanel::CreateControls() {
     m_xAxis = new wxChoice(this, wxID_ANY);
     sizer->Add(m_xAxis, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
-    sizer->Add(new wxStaticText(this, wxID_ANY, "X Normalization"), 0, wxLEFT | wxTOP, 10);
+    sizer->Add(new wxStaticText(this, wxID_ANY, "X Norm"), 0, wxLEFT | wxTOP, 10);
     m_xNorm = new wxChoice(this, wxID_ANY);
     for (const auto& name : AllNormModeNames())
         m_xNorm->Append(name);
@@ -46,7 +46,7 @@ void ControlPanel::CreateControls() {
     m_yAxis = new wxChoice(this, wxID_ANY);
     sizer->Add(m_yAxis, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
-    sizer->Add(new wxStaticText(this, wxID_ANY, "Y Normalization"), 0, wxLEFT | wxTOP, 10);
+    sizer->Add(new wxStaticText(this, wxID_ANY, "Y Norm"), 0, wxLEFT | wxTOP, 10);
     m_yNorm = new wxChoice(this, wxID_ANY);
     for (const auto& name : AllNormModeNames())
         m_yNorm->Append(name);
@@ -68,16 +68,33 @@ void ControlPanel::CreateControls() {
 
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxALL, 10);
 
-    // Brush section
-    auto* brushTitle = new wxStaticText(this, wxID_ANY, "Brush");
-    auto bFont = brushTitle->GetFont();
+    // Brush selector — colored buttons
+    auto* brushLabel = new wxStaticText(this, wxID_ANY, "Brush (1-7)");
+    auto bFont = brushLabel->GetFont();
     bFont.SetWeight(wxFONTWEIGHT_BOLD);
-    brushTitle->SetFont(bFont);
-    sizer->Add(brushTitle, 0, wxLEFT, 10);
+    brushLabel->SetFont(bFont);
+    sizer->Add(brushLabel, 0, wxLEFT, 10);
 
-    sizer->Add(new wxStaticText(this, wxID_ANY, "Brush Color"), 0, wxLEFT | wxTOP, 10);
-    m_brushColorPicker = new wxColourPickerCtrl(this, wxID_ANY, wxColour(255, 77, 77));
-    sizer->Add(m_brushColorPicker, 0, wxLEFT | wxRIGHT | wxBOTTOM, 10);
+    auto* brushSizer = new wxGridSizer(1, CP_NUM_BRUSHES, 2, 2);
+    for (int i = 0; i < CP_NUM_BRUSHES; i++) {
+        auto* btn = new wxButton(this, wxID_ANY, wxString::Format("%d", i + 1),
+                                  wxDefaultPosition, wxSize(26, 26), wxBU_EXACTFIT);
+        wxColour col(static_cast<unsigned char>(kDefaultBrushes[i].r * 255),
+                     static_cast<unsigned char>(kDefaultBrushes[i].g * 255),
+                     static_cast<unsigned char>(kDefaultBrushes[i].b * 255));
+        btn->SetBackgroundColour(col);
+        btn->SetForegroundColour(*wxWHITE);
+        m_brushButtons[i] = btn;
+        brushSizer->Add(btn, 0, wxEXPAND);
+
+        btn->Bind(wxEVT_BUTTON, [this, i](wxCommandEvent&) {
+            SelectBrush(i);
+        });
+    }
+    sizer->Add(brushSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 10);
+
+    // Highlight first brush as active
+    SelectBrush(0);
 
     m_selectionLabel = new wxStaticText(this, wxID_ANY, "No selection");
     sizer->Add(m_selectionLabel, 0, wxLEFT | wxTOP, 10);
@@ -124,11 +141,20 @@ void ControlPanel::CreateControls() {
     invertBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         if (onInvertSelection) onInvertSelection();
     });
-    m_brushColorPicker->Bind(wxEVT_COLOURPICKER_CHANGED, [this](wxColourPickerEvent& evt) {
-        wxColour c = evt.GetColour();
-        if (onBrushColorChanged)
-            onBrushColorChanged(c.Red() / 255.0f, c.Green() / 255.0f, c.Blue() / 255.0f);
-    });
+}
+
+void ControlPanel::SelectBrush(int index) {
+    m_activeBrush = index;
+    // Update button visual to show which is active
+    for (int i = 0; i < CP_NUM_BRUSHES; i++) {
+        if (i == index) {
+            m_brushButtons[i]->SetLabel(wxString::Format("[%d]", i + 1));
+        } else {
+            m_brushButtons[i]->SetLabel(wxString::Format("%d", i + 1));
+        }
+    }
+    if (onBrushChanged)
+        onBrushChanged(index);
 }
 
 void ControlPanel::SetColumns(const std::vector<std::string>& names) {

@@ -4,6 +4,7 @@
 #include "DataManager.h"
 #include "WebGPUContext.h"
 #include "Normalize.h"
+#include "Brush.h"
 #include <vector>
 
 class WebGPUCanvas;
@@ -53,6 +54,7 @@ private:
     ControlPanel* m_controlPanel = nullptr;
     DataManager m_dataManager;
     std::vector<int> m_selection;
+    int m_activeBrush = 1;  // 1-based brush index (1-7)
 
     enum {
         ID_AddRow = wxID_HIGHEST + 1,
