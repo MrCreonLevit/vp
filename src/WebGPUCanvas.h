@@ -57,6 +57,7 @@ private:
     void ConfigureSurface(int width, int height);
     void UpdateVertexBuffer();
     void UpdatePointColors();
+    void UpdateHistograms();
     void UpdateUniforms();
     void Render();
     void Cleanup();
@@ -91,6 +92,12 @@ private:
     // Selection state (0 = unselected, 1-7 = brush index)
     std::vector<int> m_selection;
     std::vector<BrushColor> m_brushColors;
+
+    // Histogram rendering
+    WGPURenderPipeline m_histPipeline = nullptr;
+    WGPUBuffer m_histBuffer = nullptr;
+    size_t m_histVertexCount = 0;
+    bool m_showHistograms = true;
 
     // Display settings
     float m_pointSize = 6.0f;

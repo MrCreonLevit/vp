@@ -57,6 +57,7 @@ void WebGPUCanvas::SetPoints(std::vector<PointVertex> points) {
     m_points = std::move(points);
     if (m_initialized) {
         UpdateVertexBuffer();
+        UpdateHistograms();
         Refresh();
     }
 }
@@ -136,6 +137,7 @@ void WebGPUCanvas::UpdatePointColors() {
     }
     if (m_initialized) {
         UpdateVertexBuffer();
+        UpdateHistograms();
         Refresh();
     }
 }
@@ -292,6 +294,134 @@ void WebGPUCanvas::CreatePipeline() {
     rpDesc.multisample.mask = 0xFFFFFFFF;
 
     m_pipeline = wgpuDeviceCreateRenderPipeline(device, &rpDesc);
+
+    // Histogram pipeline: simple triangles with per-vertex position+color
+    // Reuse the same shader but with a single vertex buffer (no instancing)
+    // The histogram vertices are pre-transformed to clip space, so vs_main
+    // just passes them through via the projection uniform set to identity-like.
+    // Actually, we can use the same projection - histogram bars are in the
+    // same coordinate space as points.
+
+    // For histograms, we render PointVertex directly as triangles (not instanced).
+    // We use the instance buffer layout but as per-vertex, with a dummy quad buffer.
+    // Simpler: create a new pipeline with just one vertex buffer.
+    WGPUVertexAttribute histAttrs[2] = {};
+    histAttrs[0].format = WGPUVertexFormat_Float32x2;
+    histAttrs[0].offset = offsetof(PointVertex, x);
+    histAttrs[0].shaderLocation = 1;  // maps to point_pos in shader
+    histAttrs[1].format = WGPUVertexFormat_Float32x4;
+    histAttrs[1].offset = offsetof(PointVertex, r);
+    histAttrs[1].shaderLocation = 2;  // maps to point_color in shader
+
+    WGPUVertexBufferLayout histVbLayout = {};
+    histVbLayout.arrayStride = sizeof(PointVertex);
+    histVbLayout.stepMode = WGPUVertexStepMode_Vertex;
+    histVbLayout.attributeCount = 2;
+    histVbLayout.attributes = histAttrs;
+
+    // Alpha blending (not additive) for histogram bars
+    WGPUBlendState histBlend = {};
+    histBlend.color.srcFactor = WGPUBlendFactor_SrcAlpha;
+    histBlend.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+    histBlend.color.operation = WGPUBlendOperation_Add;
+    histBlend.alpha.srcFactor = WGPUBlendFactor_One;
+    histBlend.alpha.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+    histBlend.alpha.operation = WGPUBlendOperation_Add;
+
+    WGPUColorTargetState histColorTarget = {};
+    histColorTarget.format = m_surfaceFormat;
+    histColorTarget.blend = &histBlend;
+    histColorTarget.writeMask = WGPUColorWriteMask_All;
+
+    WGPUFragmentState histFragState = {};
+    histFragState.module = shaderModule;
+    histFragState.entryPoint = {"fs_main", WGPU_STRLEN};
+    histFragState.targetCount = 1;
+    histFragState.targets = &histColorTarget;
+
+    // We need a special vertex shader for histograms that doesn't use
+    // the quad expansion. We'll create a simple pass-through by using
+    // point_pos as position directly (location 1) with a dummy location 0.
+    // But actually, we can just use the quad buffer with vertex (0,0) so the
+    // offset is zero and point_pos becomes the position directly.
+    // Simpler: just put histogram vertices in world space and use the same
+    // projection. Skip the quad expansion by not binding the quad buffer.
+
+    // Actually the cleanest approach: create histogram vertices as PointVertex
+    // in world space, use the instanced pipeline with instance count 1 per bar
+    // vertex... no, that's wrong.
+
+    // Let me just use a separate simple shader embedded here for histograms.
+    // This avoids all the instancing complexity.
+
+    static const char* kHistShaderSource = R"(
+struct Uniforms {
+    projection: mat4x4f,
+    point_size: f32,
+    viewport_w: f32,
+    viewport_h: f32,
+    _pad: f32,
+}
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) color: vec4f,
+}
+
+@vertex
+fn hist_vs(@location(0) pos: vec2f, @location(1) color: vec4f) -> VertexOutput {
+    var output: VertexOutput;
+    output.position = uniforms.projection * vec4f(pos, 0.0, 1.0);
+    output.color = color;
+    return output;
+}
+
+@fragment
+fn hist_fs(input: VertexOutput) -> @location(0) vec4f {
+    return input.color;
+}
+)";
+
+    WGPUShaderSourceWGSL histWgsl = {};
+    histWgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+    histWgsl.code = {kHistShaderSource, WGPU_STRLEN};
+    WGPUShaderModuleDescriptor histSmDesc = {};
+    histSmDesc.nextInChain = &histWgsl.chain;
+    WGPUShaderModule histShader = wgpuDeviceCreateShaderModule(device, &histSmDesc);
+
+    // Histogram vertex layout: vec2f position (location 0) + vec4f color (location 1)
+    WGPUVertexAttribute histAttrs2[2] = {};
+    histAttrs2[0].format = WGPUVertexFormat_Float32x2;
+    histAttrs2[0].offset = offsetof(PointVertex, x);
+    histAttrs2[0].shaderLocation = 0;
+    histAttrs2[1].format = WGPUVertexFormat_Float32x4;
+    histAttrs2[1].offset = offsetof(PointVertex, r);
+    histAttrs2[1].shaderLocation = 1;
+
+    WGPUVertexBufferLayout histLayout = {};
+    histLayout.arrayStride = sizeof(PointVertex);
+    histLayout.stepMode = WGPUVertexStepMode_Vertex;
+    histLayout.attributeCount = 2;
+    histLayout.attributes = histAttrs2;
+
+    histFragState.module = histShader;
+    histFragState.entryPoint = {"hist_fs", WGPU_STRLEN};
+
+    WGPURenderPipelineDescriptor histRpDesc = {};
+    histRpDesc.label = {"hist_pipeline", WGPU_STRLEN};
+    histRpDesc.layout = pipelineLayout;
+    histRpDesc.vertex.module = histShader;
+    histRpDesc.vertex.entryPoint = {"hist_vs", WGPU_STRLEN};
+    histRpDesc.vertex.bufferCount = 1;
+    histRpDesc.vertex.buffers = &histLayout;
+    histRpDesc.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+    histRpDesc.fragment = &histFragState;
+    histRpDesc.multisample.count = 1;
+    histRpDesc.multisample.mask = 0xFFFFFFFF;
+
+    m_histPipeline = wgpuDeviceCreateRenderPipeline(device, &histRpDesc);
+    wgpuShaderModuleRelease(histShader);
 }
 
 void WebGPUCanvas::UpdateVertexBuffer() {
@@ -313,6 +443,116 @@ void WebGPUCanvas::UpdateVertexBuffer() {
     vbDesc.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
     m_vertexBuffer = wgpuDeviceCreateBuffer(device, &vbDesc);
     wgpuQueueWriteBuffer(queue, m_vertexBuffer, 0, m_points.data(), dataSize);
+}
+
+void WebGPUCanvas::UpdateHistograms() {
+    if (!m_ctx || m_basePositions.empty() || !m_showHistograms)
+        return;
+
+    constexpr int NUM_BINS = 64;
+    constexpr float HIST_HEIGHT = 0.15f;  // fraction of plot height for histogram
+    size_t numPoints = m_basePositions.size() / 2;
+
+    // Compute X and Y histograms (all points and selected points)
+    std::vector<int> xBinsAll(NUM_BINS, 0), yBinsAll(NUM_BINS, 0);
+    std::vector<int> xBinsSel(NUM_BINS, 0), yBinsSel(NUM_BINS, 0);
+
+    // Data range is [-0.9, 0.9] (our normalized space)
+    float dataMin = -0.9f, dataMax = 0.9f;
+    float binWidth = (dataMax - dataMin) / NUM_BINS;
+
+    for (size_t i = 0; i < numPoints; i++) {
+        float px = m_basePositions[i * 2];
+        float py = m_basePositions[i * 2 + 1];
+
+        int xBin = static_cast<int>((px - dataMin) / binWidth);
+        int yBin = static_cast<int>((py - dataMin) / binWidth);
+        xBin = std::max(0, std::min(xBin, NUM_BINS - 1));
+        yBin = std::max(0, std::min(yBin, NUM_BINS - 1));
+
+        xBinsAll[xBin]++;
+        yBinsAll[yBin]++;
+
+        if (i < m_selection.size() && m_selection[i] > 0) {
+            xBinsSel[xBin]++;
+            yBinsSel[yBin]++;
+        }
+    }
+
+    // Find max bin count for scaling
+    int xMaxAll = *std::max_element(xBinsAll.begin(), xBinsAll.end());
+    int yMaxAll = *std::max_element(yBinsAll.begin(), yBinsAll.end());
+    if (xMaxAll == 0) xMaxAll = 1;
+    if (yMaxAll == 0) yMaxAll = 1;
+
+    // Build histogram bar vertices (each bar = 2 triangles = 6 vertices)
+    std::vector<PointVertex> histVerts;
+    histVerts.reserve(NUM_BINS * 6 * 4);  // X all + X sel + Y all + Y sel
+
+    auto addBar = [&](float x0, float y0, float x1, float y1,
+                      float r, float g, float b, float a) {
+        PointVertex tl = {x0, y1, r, g, b, a};
+        PointVertex tr = {x1, y1, r, g, b, a};
+        PointVertex bl = {x0, y0, r, g, b, a};
+        PointVertex br = {x1, y0, r, g, b, a};
+        histVerts.push_back(bl);
+        histVerts.push_back(br);
+        histVerts.push_back(tr);
+        histVerts.push_back(bl);
+        histVerts.push_back(tr);
+        histVerts.push_back(tl);
+    };
+
+    // X histogram (along bottom edge)
+    float xHistBase = -0.95f;  // bottom of plot area
+    for (int i = 0; i < NUM_BINS; i++) {
+        float bx0 = dataMin + i * binWidth;
+        float bx1 = bx0 + binWidth;
+        // All points (dim)
+        float hAll = (static_cast<float>(xBinsAll[i]) / xMaxAll) * HIST_HEIGHT;
+        if (hAll > 0.001f)
+            addBar(bx0, xHistBase, bx1, xHistBase + hAll, 0.3f, 0.5f, 0.8f, 0.3f);
+        // Selected points (bright)
+        float hSel = (static_cast<float>(xBinsSel[i]) / xMaxAll) * HIST_HEIGHT;
+        if (hSel > 0.001f)
+            addBar(bx0, xHistBase, bx1, xHistBase + hSel, 1.0f, 0.5f, 0.2f, 0.5f);
+    }
+
+    // Y histogram (along left edge)
+    float yHistBase = -0.95f;  // left of plot area
+    for (int i = 0; i < NUM_BINS; i++) {
+        float by0 = dataMin + i * binWidth;
+        float by1 = by0 + binWidth;
+        // All points (dim)
+        float hAll = (static_cast<float>(yBinsAll[i]) / yMaxAll) * HIST_HEIGHT;
+        if (hAll > 0.001f)
+            addBar(yHistBase, by0, yHistBase + hAll, by1, 0.3f, 0.5f, 0.8f, 0.3f);
+        // Selected points (bright)
+        float hSel = (static_cast<float>(yBinsSel[i]) / yMaxAll) * HIST_HEIGHT;
+        if (hSel > 0.001f)
+            addBar(yHistBase, by0, yHistBase + hSel, by1, 1.0f, 0.5f, 0.2f, 0.5f);
+    }
+
+    m_histVertexCount = histVerts.size();
+
+    if (m_histVertexCount == 0)
+        return;
+
+    auto device = m_ctx->GetDevice();
+    auto queue = m_ctx->GetQueue();
+
+    if (m_histBuffer) {
+        wgpuBufferRelease(m_histBuffer);
+        m_histBuffer = nullptr;
+    }
+
+    size_t dataSize = m_histVertexCount * sizeof(PointVertex);
+    WGPUBufferDescriptor hbDesc = {};
+    hbDesc.label = {"histogram", WGPU_STRLEN};
+    hbDesc.size = dataSize;
+    hbDesc.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+    m_histBuffer = wgpuDeviceCreateBuffer(device, &hbDesc);
+    wgpuQueueWriteBuffer(queue, m_histBuffer, 0, histVerts.data(), dataSize);
 }
 
 void WebGPUCanvas::UpdateUniforms() {
@@ -403,6 +643,15 @@ void WebGPUCanvas::Render() {
         wgpuRenderPassEncoderSetVertexBuffer(rp, 1, m_vertexBuffer, 0,
                                               m_points.size() * sizeof(PointVertex));
         wgpuRenderPassEncoderDraw(rp, 6, static_cast<uint32_t>(m_points.size()), 0, 0);
+    }
+
+    // Draw histograms
+    if (m_histPipeline && m_histBuffer && m_histVertexCount > 0 && m_showHistograms) {
+        wgpuRenderPassEncoderSetPipeline(rp, m_histPipeline);
+        wgpuRenderPassEncoderSetBindGroup(rp, 0, m_bindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetVertexBuffer(rp, 0, m_histBuffer, 0,
+                                              m_histVertexCount * sizeof(PointVertex));
+        wgpuRenderPassEncoderDraw(rp, static_cast<uint32_t>(m_histVertexCount), 1, 0, 0);
     }
 
     wgpuRenderPassEncoderEnd(rp);
@@ -536,6 +785,8 @@ void WebGPUCanvas::OnKeyDown(wxKeyEvent& event) {
 }
 
 void WebGPUCanvas::Cleanup() {
+    if (m_histBuffer) { wgpuBufferRelease(m_histBuffer); m_histBuffer = nullptr; }
+    if (m_histPipeline) { wgpuRenderPipelineRelease(m_histPipeline); m_histPipeline = nullptr; }
     if (m_bindGroup) { wgpuBindGroupRelease(m_bindGroup); m_bindGroup = nullptr; }
     if (m_pipeline) { wgpuRenderPipelineRelease(m_pipeline); m_pipeline = nullptr; }
     if (m_uniformBuffer) { wgpuBufferRelease(m_uniformBuffer); m_uniformBuffer = nullptr; }
