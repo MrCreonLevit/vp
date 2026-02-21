@@ -12,6 +12,12 @@
 # Version control (legacy)
 .svn/
 
+# CMake / Build
+build/
+cmake-build-*/
+compile_commands.json
+.cache/
+
 # Build artifacts
 *.o
 *.a
