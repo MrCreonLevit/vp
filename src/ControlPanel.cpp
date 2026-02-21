@@ -174,9 +174,9 @@ void PlotTab::SyncFromConfig(const PlotConfig& cfg) {
 // ============================================================
 
 ControlPanel::ControlPanel(wxWindow* parent)
-    : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(240, -1))
+    : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(280, -1))
 {
-    SetMinSize(wxSize(240, -1));
+    SetMinSize(wxSize(280, -1));
 
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
@@ -211,6 +211,7 @@ ControlPanel::ControlPanel(wxWindow* parent)
         "Scroll: zoom\n"
         "C: clear selection\n"
         "I: invert selection\n"
+        "D: kill selected points\n"
         "R: reset all views\n"
         "Q: quit");
     helpText->SetForegroundColour(wxColour(120, 120, 120));
@@ -221,9 +222,12 @@ ControlPanel::ControlPanel(wxWindow* parent)
 
     SetSizer(sizer);
     RebuildTabs(2, 2);
+    m_ready = true;
 }
 
 void ControlPanel::RebuildTabs(int rows, int cols) {
+    m_ready = false;  // suppress dialogs during rebuild
+
     float savedSize = m_pointSizeSlider ? m_pointSizeSlider->GetValue() : 6;
     float savedOpacity = m_opacitySlider ? m_opacitySlider->GetValue() : 5;
     int savedBins = m_histBinsSlider ? m_histBinsSlider->GetValue() : 64;
@@ -293,6 +297,7 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
     // Rebuild selector buttons
     RebuildSelectorGrid();
     SelectPage(0);
+    m_ready = true;
 }
 
 void ControlPanel::RebuildSelectorGrid() {
@@ -442,7 +447,7 @@ void ControlPanel::CreateAllPage() {
 
     sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
 
-    auto* brushLabel = new wxStaticText(m_allPage, wxID_ANY, "Brush (1-7)");
+    auto* brushLabel = new wxStaticText(m_allPage, wxID_ANY, "Brush (dbl-click: edit color)");
     auto bFont = brushLabel->GetFont();
     bFont.SetWeight(wxFONTWEIGHT_BOLD);
     brushLabel->SetFont(bFont);
@@ -459,9 +464,12 @@ void ControlPanel::CreateAllPage() {
         btn->SetForegroundColour(*wxWHITE);
         m_brushButtons[i] = btn;
         brushSizer->Add(btn, 0, wxEXPAND);
-        btn->Bind(wxEVT_BUTTON, [this, i](wxCommandEvent&) { SelectBrush(i); });
-        // Right-click to edit brush color
-        btn->Bind(wxEVT_RIGHT_DOWN, [this, i](wxMouseEvent&) {
+        // Single click: select brush
+        btn->Bind(wxEVT_BUTTON, [this, i](wxCommandEvent&) {
+            SelectBrush(i);
+        });
+        // Double-click: open color picker
+        btn->Bind(wxEVT_LEFT_DCLICK, [this, i](wxMouseEvent&) {
             wxColourData colData;
             colData.SetChooseFull(true);
             colData.SetChooseAlpha(true);
@@ -473,7 +481,6 @@ void ControlPanel::CreateAllPage() {
                 float r = c.Red() / 255.0f;
                 float g = c.Green() / 255.0f;
                 float b = c.Blue() / 255.0f;
-                // Alpha from color picker: low alpha = additive glow, high alpha = solid overlay
                 float a = c.Alpha() / 255.0f;
                 m_brushButtons[i]->SetBackgroundColour(wxColour(c.Red(), c.Green(), c.Blue()));
                 m_brushButtons[i]->Refresh();
@@ -493,8 +500,11 @@ void ControlPanel::CreateAllPage() {
                                    wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
     auto* invertBtn = new wxButton(m_allPage, wxID_ANY, "Invert (I)",
                                     wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    auto* killBtn = new wxButton(m_allPage, wxID_ANY, "Kill (D)",
+                                  wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
     btnSizer->Add(clearBtn, 1, wxRIGHT, 4);
-    btnSizer->Add(invertBtn, 1);
+    btnSizer->Add(invertBtn, 1, wxRIGHT, 4);
+    btnSizer->Add(killBtn, 1);
     sizer->Add(btnSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
     sizer->AddStretchSpacer();
@@ -521,6 +531,9 @@ void ControlPanel::CreateAllPage() {
     });
     invertBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         if (onInvertSelection) onInvertSelection();
+    });
+    killBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (onKillSelected) onKillSelected();
     });
 }
 

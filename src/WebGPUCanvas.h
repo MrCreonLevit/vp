@@ -56,8 +56,8 @@ public:
     // Called when user completes a brush rectangle in this canvas.
     // Provides world-space rect so MainFrame can test rows and propagate.
     std::function<void(int plotIndex, float x0, float y0, float x1, float y1, bool extend)> onBrushRect;
-    // Called when user presses C or I keys
     std::function<void()> onClearRequested;
+    std::function<void()> onKillRequested;
     std::function<void()> onInvertRequested;
     std::function<void()> onResetViewRequested;
     // Called on each render with current visible range in normalized coords

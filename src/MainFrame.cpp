@@ -31,7 +31,7 @@ MainFrame::MainFrame()
 {
     // Size window to ~85% of usable screen area
     wxRect clientArea = wxGetClientDisplayRect();  // excludes dock/menubar
-    int w = std::min(static_cast<int>(clientArea.width * 0.85), 1500);
+    int w = std::min(static_cast<int>(clientArea.width * 0.90), 1800);
     int h = std::min(static_cast<int>(clientArea.height * 0.85), 960);
     SetSize(w, h);
     Centre();
@@ -214,6 +214,10 @@ void MainFrame::CreateLayout() {
         InvertAllSelections();
     };
 
+    m_controlPanel->onKillSelected = [this]() {
+        KillSelectedPoints();
+    };
+
     m_controlPanel->onBrushChanged = [this](int brushIndex) {
         m_activeBrush = brushIndex + 1;
     };
@@ -318,6 +322,7 @@ void MainFrame::RebuildGrid() {
         };
         canvas->onClearRequested = [this]() { ClearAllSelections(); };
         canvas->onInvertRequested = [this]() { InvertAllSelections(); };
+        canvas->onKillRequested = [this]() { KillSelectedPoints(); };
 
         canvas->SetBrushColors(m_brushColors);
         canvas->onResetViewRequested = [this]() {
@@ -626,6 +631,24 @@ void MainFrame::InvertAllSelections() {
     for (auto& s : m_selection)
         s = (s == 0) ? m_activeBrush : 0;
     PropagateSelection(m_selection);
+}
+
+void MainFrame::KillSelectedPoints() {
+    int count = 0;
+    for (int s : m_selection) if (s > 0) count++;
+    if (count == 0) return;
+
+    size_t removed = m_dataManager.removeSelectedRows(m_selection);
+    if (removed == 0) return;
+
+    // Reset selection and rebuild all plots with reduced data
+    const auto& ds = m_dataManager.dataset();
+    m_selection.assign(ds.numRows, 0);
+    UpdateAllPlots();
+    PropagateSelection(m_selection);
+
+    SetStatusText(wxString::Format("Deleted %zu points, %zu remaining",
+                                    removed, ds.numRows));
 }
 
 void MainFrame::LoadFile(const std::string& path) {

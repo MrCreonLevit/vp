@@ -30,6 +30,9 @@ public:
     const std::string& errorMessage() const { return m_error; }
     const std::string& filePath() const { return m_filePath; }
 
+    // Remove rows where selection[row] > 0. Returns number of rows removed.
+    size_t removeSelectedRows(const std::vector<int>& selection);
+
 private:
     bool isCommentLine(const std::string& line) const;
     std::vector<std::string> splitTokens(const std::string& line, char delimiter) const;

@@ -80,6 +80,7 @@ public:
     std::function<void(int bins)> onHistBinsChanged;
     std::function<void()> onClearSelection;
     std::function<void()> onInvertSelection;
+    std::function<void()> onKillSelected;
     std::function<void(int brushIndex)> onBrushChanged;
     std::function<void(int brushIndex, float r, float g, float b, float a)> onBrushColorEdited;
 
@@ -103,6 +104,7 @@ private:
     int m_selectedPage = -1;
     int m_gridRows = 2;
     int m_gridCols = 2;
+    bool m_ready = false;  // prevents dialogs during construction
 
     std::vector<std::string> m_columnNames;
 

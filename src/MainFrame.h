@@ -42,6 +42,7 @@ private:
     void PropagateSelection(const std::vector<int>& selection);
     void HandleBrushRect(int plotIndex, float x0, float y0, float x1, float y1, bool extend);
     void ClearAllSelections();
+    void KillSelectedPoints();
     void InvertAllSelections();
 
     void OnOpen(wxCommandEvent& event);

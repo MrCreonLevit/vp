@@ -1101,6 +1101,9 @@ void WebGPUCanvas::OnKeyDown(wxKeyEvent& event) {
             if (onResetViewRequested) onResetViewRequested();
             else ResetView();
             break;
+        case 'D':
+            if (onKillRequested) onKillRequested();
+            break;
         case 'Q':
             if (auto* frame = wxDynamicCast(wxGetTopLevelParent(this), wxFrame))
                 frame->Close(true);

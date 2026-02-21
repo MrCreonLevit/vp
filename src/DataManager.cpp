@@ -275,3 +275,29 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
 
     return true;
 }
+
+size_t DataManager::removeSelectedRows(const std::vector<int>& selection) {
+    if (selection.size() != m_data.numRows)
+        return 0;
+
+    size_t removed = 0;
+    std::vector<float> newData;
+    newData.reserve(m_data.numRows * m_data.numCols);
+
+    for (size_t row = 0; row < m_data.numRows; row++) {
+        if (selection[row] > 0) {
+            removed++;
+            continue;
+        }
+        for (size_t col = 0; col < m_data.numCols; col++)
+            newData.push_back(m_data.data[row * m_data.numCols + col]);
+    }
+
+    m_data.data = std::move(newData);
+    m_data.numRows -= removed;
+    m_data.data.shrink_to_fit();
+
+    fprintf(stderr, "Removed %zu selected rows, %zu rows remaining\n",
+            removed, m_data.numRows);
+    return removed;
+}
