@@ -184,18 +184,21 @@ void WebGPUCanvas::UpdatePointColors() {
             m_points[i].b = bc.b;
             m_points[i].a = m_opacity * bc.a;
             m_points[i].symbol = static_cast<float>(bc.symbol);
+            m_points[i].sizeScale = std::max(0.1f, 1.0f + bc.sizeOffset / m_pointSize);
         } else if (!m_showUnselected) {
             m_points[i].r = 0.0f;
             m_points[i].g = 0.0f;
             m_points[i].b = 0.0f;
             m_points[i].a = 0.0f;
             m_points[i].symbol = 0.0f;
+            m_points[i].sizeScale = 1.0f;
         } else {
             m_points[i].r = 0.15f;
             m_points[i].g = 0.4f;
             m_points[i].b = 1.0f;
             m_points[i].a = m_opacity;
-            m_points[i].symbol = 0.0f;  // circle for unselected
+            m_points[i].symbol = 0.0f;
+            m_points[i].sizeScale = 1.0f;
         }
     }
 
@@ -369,7 +372,7 @@ void WebGPUCanvas::CreatePipeline() {
     quadAttr.offset = 0;
     quadAttr.shaderLocation = 0;
 
-    WGPUVertexAttribute instanceAttrs[3] = {};
+    WGPUVertexAttribute instanceAttrs[4] = {};
     instanceAttrs[0].format = WGPUVertexFormat_Float32x2;  // position
     instanceAttrs[0].offset = offsetof(PointVertex, x);
     instanceAttrs[0].shaderLocation = 1;
@@ -379,6 +382,9 @@ void WebGPUCanvas::CreatePipeline() {
     instanceAttrs[2].format = WGPUVertexFormat_Float32;    // symbol
     instanceAttrs[2].offset = offsetof(PointVertex, symbol);
     instanceAttrs[2].shaderLocation = 3;
+    instanceAttrs[3].format = WGPUVertexFormat_Float32;    // sizeScale
+    instanceAttrs[3].offset = offsetof(PointVertex, sizeScale);
+    instanceAttrs[3].shaderLocation = 4;
 
     WGPUVertexBufferLayout vbLayouts[2] = {};
     vbLayouts[0].arrayStride = 2 * sizeof(float);
@@ -387,7 +393,7 @@ void WebGPUCanvas::CreatePipeline() {
     vbLayouts[0].attributes = &quadAttr;
     vbLayouts[1].arrayStride = sizeof(PointVertex);
     vbLayouts[1].stepMode = WGPUVertexStepMode_Instance;
-    vbLayouts[1].attributeCount = 3;
+    vbLayouts[1].attributeCount = 4;
     vbLayouts[1].attributes = instanceAttrs;
 
     WGPUBlendState blend = {};

@@ -506,6 +506,16 @@ void ControlPanel::CreateAllPage() {
             onBrushSymbolChanged(m_activeBrush, sym);
     });
 
+    // Per-brush size offset slider
+    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Brush Size +/-"), 0, wxLEFT | wxTOP, 8);
+    auto* brushSizeSlider = new wxSlider(m_allPage, wxID_ANY, 0, -10, 20);
+    sizer->Add(brushSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+    brushSizeSlider->Bind(wxEVT_SLIDER, [this, brushSizeSlider](wxCommandEvent&) {
+        float offset = static_cast<float>(brushSizeSlider->GetValue());
+        if (onBrushSizeOffsetChanged)
+            onBrushSizeOffsetChanged(m_activeBrush, offset);
+    });
+
     m_selectionLabel = new wxStaticText(m_allPage, wxID_ANY, "No selection");
     sizer->Add(m_selectionLabel, 0, wxLEFT | wxTOP, 8);
 

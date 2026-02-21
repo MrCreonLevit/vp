@@ -28,9 +28,11 @@ fn vs_main(
     @location(1) point_pos: vec2f,
     @location(2) point_color: vec4f,
     @location(3) point_symbol: f32,
+    @location(4) point_size_scale: f32,
 ) -> VertexOutput {
     let clip = uniforms.projection * vec4f(point_pos, 0.0, 1.0);
-    let pixel_offset = quad_pos * uniforms.point_size;
+    let effective_size = uniforms.point_size * point_size_scale;
+    let pixel_offset = quad_pos * effective_size;
     let ndc_offset = vec2f(
         pixel_offset.x * 2.0 / uniforms.viewport_w,
         pixel_offset.y * 2.0 / uniforms.viewport_h,

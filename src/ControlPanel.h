@@ -84,6 +84,7 @@ public:
     std::function<void(int brushIndex)> onBrushChanged;
     std::function<void(int brushIndex, float r, float g, float b, float a)> onBrushColorEdited;
     std::function<void(int brushIndex, int symbol)> onBrushSymbolChanged;
+    std::function<void(int brushIndex, float offset)> onBrushSizeOffsetChanged;
 
     float GetPointSize() const;
     float GetOpacity() const;

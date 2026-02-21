@@ -11,7 +11,8 @@ class WebGPUContext;
 struct PointVertex {
     float x, y;
     float r, g, b, a;
-    float symbol;  // 0=circle, 1=square, 2=diamond, 3=triangle, etc.
+    float symbol;     // 0=circle, 1=square, 2=diamond, 3=triangle, etc.
+    float sizeScale;  // multiplier for point size (1.0 = default)
 };
 
 struct Uniforms {
@@ -43,6 +44,7 @@ struct BrushColor {
     float r, g, b;
     float a = 1.0f;
     int symbol = SYMBOL_CIRCLE;
+    float sizeOffset = 0.0f;  // additive point size offset for this brush (-10 to +20)
 };
 
 class WebGPUCanvas : public wxWindow {

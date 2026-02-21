@@ -244,6 +244,14 @@ void MainFrame::CreateLayout() {
         }
     };
 
+    m_controlPanel->onBrushSizeOffsetChanged = [this](int brushIndex, float offset) {
+        if (brushIndex >= 0 && brushIndex < (int)m_brushColors.size()) {
+            m_brushColors[brushIndex].sizeOffset = offset;
+            for (auto* c : m_canvases)
+                c->SetBrushColors(m_brushColors);
+        }
+    };
+
     RebuildGrid();
 }
 
@@ -568,6 +576,8 @@ void MainFrame::UpdatePlot(int plotIndex) {
         v.y = yVals[r];
         v.r = 0.15f; v.g = 0.4f; v.b = 1.0f;
         v.a = opacity;
+        v.symbol = 0.0f;
+        v.sizeScale = 1.0f;
         points.push_back(v);
     }
 
