@@ -36,21 +36,21 @@ set(VIEWPOINTS_SOURCES
 )
 
 # --- Executable ---
-add_executable(viewpoints ${VIEWPOINTS_SOURCES})
+add_executable(vp ${VIEWPOINTS_SOURCES})
 
-target_include_directories(viewpoints PRIVATE
+target_include_directories(vp PRIVATE
     ${WGPU_INCLUDE_DIR}
     src
 )
 
-target_link_libraries(viewpoints PRIVATE
+target_link_libraries(vp PRIVATE
     ${wxWidgets_LIBRARIES}
     ${WGPU_LIBRARY}
 )
 
 # macOS frameworks needed by wgpu-native (Metal backend)
 if(APPLE)
-    target_link_libraries(viewpoints PRIVATE
+    target_link_libraries(vp PRIVATE
         "-framework Metal"
         "-framework MetalKit"
         "-framework QuartzCore"
