@@ -16,6 +16,8 @@ struct BrushColor;
 struct PlotConfig {
     size_t xCol = 0;
     size_t yCol = 1;
+    bool xLocked = false;
+    bool yLocked = false;
     NormMode xNorm = NormMode::None;
     NormMode yNorm = NormMode::None;
     bool showUnselected = true;

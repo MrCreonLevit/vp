@@ -37,7 +37,11 @@ void PlotTab::CreateControls(int row, int col) {
         if (onRandomizeAxes) onRandomizeAxes(m_plotIndex);
     });
 
-    sizer->Add(new wxStaticText(this, wxID_ANY, "X Axis"), 0, wxLEFT | wxTOP, 8);
+    auto* xRow = new wxBoxSizer(wxHORIZONTAL);
+    xRow->Add(new wxStaticText(this, wxID_ANY, "X Axis"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    m_xLock = new wxCheckBox(this, wxID_ANY, "Lock");
+    xRow->Add(m_xLock, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(xRow, 0, wxLEFT | wxRIGHT | wxTOP, 8);
     m_xAxis = new wxChoice(this, wxID_ANY);
     sizer->Add(m_xAxis, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
@@ -47,7 +51,11 @@ void PlotTab::CreateControls(int row, int col) {
     m_xNorm->SetSelection(0);
     sizer->Add(m_xNorm, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
-    sizer->Add(new wxStaticText(this, wxID_ANY, "Y Axis"), 0, wxLEFT, 8);
+    auto* yRow = new wxBoxSizer(wxHORIZONTAL);
+    yRow->Add(new wxStaticText(this, wxID_ANY, "Y Axis"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    m_yLock = new wxCheckBox(this, wxID_ANY, "Lock");
+    yRow->Add(m_yLock, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(yRow, 0, wxLEFT | wxRIGHT, 8);
     m_yAxis = new wxChoice(this, wxID_ANY);
     sizer->Add(m_yAxis, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
@@ -115,6 +123,14 @@ void PlotTab::CreateControls(int row, int col) {
         if (onGridLinesChanged)
             onGridLinesChanged(m_plotIndex, m_showGridLines->GetValue());
     });
+    m_xLock->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+        if (onAxisLockChanged)
+            onAxisLockChanged(m_plotIndex, m_xLock->GetValue(), m_yLock->GetValue());
+    });
+    m_yLock->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+        if (onAxisLockChanged)
+            onAxisLockChanged(m_plotIndex, m_xLock->GetValue(), m_yLock->GetValue());
+    });
     m_showHistograms->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
         if (onShowHistogramsChanged)
             onShowHistogramsChanged(m_plotIndex, m_showHistograms->GetValue());
@@ -156,6 +172,8 @@ void PlotTab::SyncFromConfig(const PlotConfig& cfg) {
     m_suppress = true;
     if ((int)cfg.xCol < m_xAxis->GetCount()) m_xAxis->SetSelection(cfg.xCol);
     if ((int)cfg.yCol < m_yAxis->GetCount()) m_yAxis->SetSelection(cfg.yCol);
+    m_xLock->SetValue(cfg.xLocked);
+    m_yLock->SetValue(cfg.yLocked);
     if ((int)cfg.xNorm < m_xNorm->GetCount()) m_xNorm->SetSelection(static_cast<int>(cfg.xNorm));
     if ((int)cfg.yNorm < m_yNorm->GetCount()) m_yNorm->SetSelection(static_cast<int>(cfg.yNorm));
     m_showUnselected->SetValue(cfg.showUnselected);
@@ -262,6 +280,9 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
         };
         tab->onAxisChanged = [this](int pi, int x, int y) {
             if (onAxisChanged) onAxisChanged(pi, x, y);
+        };
+        tab->onAxisLockChanged = [this](int pi, bool xLock, bool yLock) {
+            if (onAxisLockChanged) onAxisLockChanged(pi, xLock, yLock);
         };
         tab->onNormChanged = [this](int pi, int xn, int yn) {
             if (onNormChanged) onNormChanged(pi, xn, yn);

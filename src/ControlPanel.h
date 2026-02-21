@@ -28,6 +28,7 @@ public:
     std::function<void(int plotIndex, float size)> onPointSizeChanged;
     std::function<void(int plotIndex, float alpha)> onOpacityChanged;
     std::function<void(int plotIndex, int bins)> onHistBinsChanged;
+    std::function<void(int plotIndex, bool xLock, bool yLock)> onAxisLockChanged;
 
 private:
     void CreateControls(int row, int col);
@@ -37,6 +38,8 @@ private:
 
     wxChoice* m_xAxis = nullptr;
     wxChoice* m_yAxis = nullptr;
+    wxCheckBox* m_xLock = nullptr;
+    wxCheckBox* m_yLock = nullptr;
     wxChoice* m_xNorm = nullptr;
     wxChoice* m_yNorm = nullptr;
     wxCheckBox* m_showUnselected = nullptr;
@@ -64,6 +67,7 @@ public:
     // Per-plot callbacks
     std::function<void(int plotIndex)> onRandomizeAxes;
     std::function<void(int plotIndex, int xCol, int yCol)> onAxisChanged;
+    std::function<void(int plotIndex, bool xLock, bool yLock)> onAxisLockChanged;
     std::function<void(int plotIndex, int xNorm, int yNorm)> onNormChanged;
     std::function<void(int plotIndex, bool show)> onShowUnselectedChanged;
     std::function<void(int plotIndex, bool show)> onGridLinesChanged;

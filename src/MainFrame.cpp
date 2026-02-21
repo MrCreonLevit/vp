@@ -109,16 +109,20 @@ void MainFrame::CreateLayout() {
         const auto& ds = m_dataManager.dataset();
         if (ds.numCols < 2 || plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size())
             return;
+        auto& cfg = m_plotConfigs[plotIndex];
         std::random_device rd;
         std::mt19937 rng(rd());
         std::uniform_int_distribution<size_t> dist(0, ds.numCols - 1);
-        size_t xCol = dist(rng);
-        size_t yCol = dist(rng);
-        while (yCol == xCol && ds.numCols > 1)
-            yCol = dist(rng);
-        m_plotConfigs[plotIndex].xCol = xCol;
-        m_plotConfigs[plotIndex].yCol = yCol;
-        m_controlPanel->SetPlotConfig(plotIndex, m_plotConfigs[plotIndex]);
+        // Only randomize unlocked axes
+        if (!cfg.xLocked) {
+            cfg.xCol = dist(rng);
+        }
+        if (!cfg.yLocked) {
+            cfg.yCol = dist(rng);
+            while (cfg.yCol == cfg.xCol && ds.numCols > 1)
+                cfg.yCol = dist(rng);
+        }
+        m_controlPanel->SetPlotConfig(plotIndex, cfg);
         UpdatePlot(plotIndex);
     };
 
@@ -129,6 +133,15 @@ void MainFrame::CreateLayout() {
             UpdatePlot(plotIndex);
         }
     };
+
+    m_controlPanel->onAxisLockChanged = [this](int plotIndex, bool xLock, bool yLock) {
+        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
+            m_plotConfigs[plotIndex].xLocked = xLock;
+            m_plotConfigs[plotIndex].yLocked = yLock;
+        }
+    };
+
+    // Axis lock callback is also wired per-canvas below in RebuildGrid
 
     m_controlPanel->onNormChanged = [this](int plotIndex, int xNorm, int yNorm) {
         if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
@@ -345,6 +358,42 @@ void MainFrame::RebuildGrid() {
         canvas->onClearRequested = [this]() { ClearAllSelections(); };
         canvas->onInvertRequested = [this]() { InvertAllSelections(); };
         canvas->onKillRequested = [this]() { KillSelectedPoints(); };
+
+        // Linked axis view: propagate pan/zoom to plots sharing locked variables
+        canvas->onViewChanged = [this](int pi, float panX, float panY, float zoomX, float zoomY) {
+            if (pi < 0 || pi >= (int)m_plotConfigs.size()) return;
+            auto& srcCfg = m_plotConfigs[pi];
+
+            for (int j = 0; j < (int)m_canvases.size(); j++) {
+                if (j == pi) continue;
+                auto& dstCfg = m_plotConfigs[j];
+                bool needsUpdate = false;
+                float dstPanX = m_canvases[j]->GetPanX();
+                float dstPanY = m_canvases[j]->GetPanY();
+                float dstZoomX = m_canvases[j]->GetZoomX();
+                float dstZoomY = m_canvases[j]->GetZoomY();
+
+                // If source X is locked, sync only the matching axis
+                if (srcCfg.xLocked) {
+                    if (dstCfg.xCol == srcCfg.xCol) {
+                        dstPanX = panX; dstZoomX = zoomX; needsUpdate = true;
+                    } else if (dstCfg.yCol == srcCfg.xCol) {
+                        dstPanY = panX; dstZoomY = zoomX; needsUpdate = true;
+                    }
+                }
+                // If source Y is locked, sync only the matching axis
+                if (srcCfg.yLocked) {
+                    if (dstCfg.yCol == srcCfg.yCol) {
+                        dstPanY = panY; dstZoomY = zoomY; needsUpdate = true;
+                    } else if (dstCfg.xCol == srcCfg.yCol) {
+                        dstPanX = panY; dstZoomX = zoomY; needsUpdate = true;
+                    }
+                }
+
+                if (needsUpdate)
+                    m_canvases[j]->SetPanZoom(dstPanX, dstPanY, dstZoomX, dstZoomY);
+            }
+        };
 
         canvas->SetBrushColors(m_brushColors);
         canvas->onResetViewRequested = [this]() {

@@ -61,6 +61,11 @@ public:
     void SetShowUnselected(bool show);
     void SetShowGridLines(bool show);
     void SetShowHistograms(bool show);
+    void SetPanZoom(float panX, float panY, float zoomX, float zoomY);
+    float GetPanX() const { return m_panX; }
+    float GetPanY() const { return m_panY; }
+    float GetZoomX() const { return m_zoomX; }
+    float GetZoomY() const { return m_zoomY; }
     // Set explicit grid line positions in clip space [-1, 1]
     void SetGridLinePositions(const std::vector<float>& xPositions,
                               const std::vector<float>& yPositions);
@@ -79,6 +84,8 @@ public:
     std::function<void(int plotIndex, float x0, float y0, float x1, float y1, bool extend)> onBrushRect;
     std::function<void()> onClearRequested;
     std::function<void()> onKillRequested;
+    // Called when user pans or zooms this plot
+    std::function<void(int plotIndex, float panX, float panY, float zoomX, float zoomY)> onViewChanged;
     std::function<void()> onInvertRequested;
     std::function<void()> onResetViewRequested;
     // Called on each render with current visible range in normalized coords
@@ -156,9 +163,9 @@ private:
     float m_pointSize = 6.0f;
     float m_opacity = 0.05f;
 
-    // View state
+    // View state (independent X and Y zoom for axis lock)
     float m_panX = 0.0f, m_panY = 0.0f;
-    float m_zoom = 1.0f;
+    float m_zoomX = 1.0f, m_zoomY = 1.0f;
 
     // Mouse interaction
     bool m_panning = false;

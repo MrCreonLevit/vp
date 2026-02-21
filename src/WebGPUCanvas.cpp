@@ -100,6 +100,14 @@ void WebGPUCanvas::SetHistBins(int bins) {
     Refresh();
 }
 
+void WebGPUCanvas::SetPanZoom(float panX, float panY, float zoomX, float zoomY) {
+    m_panX = panX;
+    m_panY = panY;
+    m_zoomX = zoomX;
+    m_zoomY = zoomY;
+    Refresh();
+}
+
 void WebGPUCanvas::SetShowUnselected(bool show) {
     m_showUnselected = show;
     UpdatePointColors();
@@ -165,7 +173,8 @@ void WebGPUCanvas::SetActive(bool active) {
 void WebGPUCanvas::ResetView() {
     m_panX = 0.0f;
     m_panY = 0.0f;
-    m_zoom = 1.0f;
+    m_zoomX = 1.0f;
+    m_zoomY = 1.0f;
     if (m_initialized) {
         Refresh();
         Update();  // force immediate repaint
@@ -251,8 +260,8 @@ void WebGPUCanvas::ScreenToWorld(int sx, int sy, float& wx, float& wy) {
     wxSize size = GetClientSize();
     float ndcX = (static_cast<float>(sx) / size.GetWidth()) * 2.0f - 1.0f;
     float ndcY = 1.0f - (static_cast<float>(sy) / size.GetHeight()) * 2.0f;
-    float hw = 1.0f / m_zoom;
-    float hh = 1.0f / m_zoom;
+    float hw = 1.0f / m_zoomX;
+    float hh = 1.0f / m_zoomY;
     wx = m_panX + ndcX * hw;
     wy = m_panY + ndcY * hh;
 }
@@ -622,8 +631,8 @@ void WebGPUCanvas::UpdateHistograms() {
     constexpr float HIST_HEIGHT = 0.3f;
     size_t numPoints = m_basePositions.size() / 2;
 
-    float hw = 1.0f / m_zoom;
-    float hh = 1.0f / m_zoom;
+    float hw = 1.0f / m_zoomX;
+    float hh = 1.0f / m_zoomY;
     float xViewMin = m_panX - hw;
     float xViewMax = m_panX + hw;
     float yViewMin = m_panY - hh;
@@ -838,8 +847,8 @@ void WebGPUCanvas::UpdateGridLines() {
 }
 
 void WebGPUCanvas::UpdateUniforms() {
-    float hw = 1.0f / m_zoom;
-    float hh = 1.0f / m_zoom;
+    float hw = 1.0f / m_zoomX;
+    float hh = 1.0f / m_zoomY;
     makeOrtho(m_uniforms.projection, m_panX - hw, m_panX + hw, m_panY - hh, m_panY + hh);
 
     wxSize size = GetClientSize();
@@ -899,8 +908,8 @@ void WebGPUCanvas::Render() {
 
     // Notify MainFrame of current viewport for tick value labels
     if (onViewportChanged) {
-        float hw = 1.0f / m_zoom;
-        float hh = 1.0f / m_zoom;
+        float hw = 1.0f / m_zoomX;
+        float hh = 1.0f / m_zoomY;
         onViewportChanged(m_plotIndex, m_panX - hw, m_panX + hw, m_panY - hh, m_panY + hh);
     }
 
@@ -1064,15 +1073,16 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             wxSize size = GetClientSize();
             float dx = static_cast<float>(pos.x - m_lastMouse.x) / size.GetWidth();
             float dy = static_cast<float>(pos.y - m_lastMouse.y) / size.GetHeight();
-            m_panX -= dx * 2.0f / m_zoom;
-            m_panY += dy * 2.0f / m_zoom;
+            m_panX -= dx * 2.0f / m_zoomX;
+            m_panY += dy * 2.0f / m_zoomY;
             m_lastMouse = pos;
+            if (onViewChanged) onViewChanged(m_plotIndex, m_panX, m_panY, m_zoomX, m_zoomY);
             Refresh();
         } else if (m_translating && m_hasLastRect) {
             // Option+drag: translate the existing selection rect
             wxSize size = GetClientSize();
-            float hw = 1.0f / m_zoom;
-            float hh = 1.0f / m_zoom;
+            float hw = 1.0f / m_zoomX;
+            float hh = 1.0f / m_zoomY;
             float dx = static_cast<float>(pos.x - m_lastMouse.x) / size.GetWidth() * 2.0f * hw;
             float dy = -static_cast<float>(pos.y - m_lastMouse.y) / size.GetHeight() * 2.0f * hh;
             m_lastRectX0 += dx;
@@ -1105,8 +1115,11 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
         }
     } else if (event.GetWheelRotation() != 0) {
         float factor = event.GetWheelRotation() > 0 ? 1.1f : 1.0f / 1.1f;
-        m_zoom *= factor;
-        m_zoom = std::max(0.1f, std::min(m_zoom, 100.0f));
+        m_zoomX *= factor;
+        m_zoomY *= factor;
+        m_zoomX = std::max(0.1f, std::min(m_zoomX, 100.0f));
+        m_zoomY = std::max(0.1f, std::min(m_zoomY, 100.0f));
+        if (onViewChanged) onViewChanged(m_plotIndex, m_panX, m_panY, m_zoomX, m_zoomY);
         Refresh();
     }
     event.Skip();
