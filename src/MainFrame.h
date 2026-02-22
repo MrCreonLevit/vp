@@ -33,6 +33,7 @@ struct PlotConfig {
 class MainFrame : public wxFrame {
 public:
     MainFrame();
+    void LoadFileFromPath(const std::string& path);
 
 private:
     void CreateMenuBar();

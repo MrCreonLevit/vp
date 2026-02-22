@@ -630,6 +630,9 @@ void WebGPUCanvas::UpdateVertexBuffer() {
     auto queue = m_ctx->GetQueue();
 
     size_t dataSize = m_points.size() * sizeof(PointVertex);
+    fprintf(stderr, "    VB: %zu points, %zu bytes (%.1f MB)\n",
+            m_points.size(), dataSize, dataSize / 1048576.0);
+    fflush(stderr);
 
     if (m_vertexBuffer) {
         wgpuBufferRelease(m_vertexBuffer);

@@ -4,6 +4,7 @@
 #include "ControlPanel.h"
 #include <wx/progdlg.h>
 #include <algorithm>
+#include <numeric>
 #include <cmath>
 #include <random>
 
@@ -644,6 +645,9 @@ void MainFrame::UpdatePlot(int plotIndex) {
     const auto& ds = m_dataManager.dataset();
     if (ds.numRows == 0 || plotIndex < 0 || plotIndex >= (int)m_canvases.size())
         return;
+    fprintf(stderr, "  UpdatePlot(%d): %zu rows, cols %zu,%zu\n",
+            plotIndex, ds.numRows, m_plotConfigs[plotIndex].xCol, m_plotConfigs[plotIndex].yCol);
+    fflush(stderr);
 
     auto& cfg = m_plotConfigs[plotIndex];
     if (cfg.xCol >= ds.numCols) cfg.xCol = 0;
@@ -655,8 +659,29 @@ void MainFrame::UpdatePlot(int plotIndex) {
 
     float opacity = m_controlPanel->GetOpacity();
 
+    // Subsample if dataset is very large to avoid GPU memory issues
+    constexpr size_t MAX_DISPLAY_POINTS = 4000000;  // 4M points max per plot
+    std::vector<size_t> displayIndices;
+    bool subsampled = false;
+    if (ds.numRows > MAX_DISPLAY_POINTS) {
+        subsampled = true;
+        // Reservoir sampling for uniform random subset
+        displayIndices.resize(ds.numRows);
+        std::iota(displayIndices.begin(), displayIndices.end(), 0);
+        std::mt19937 rng(plotIndex * 42 + 7);  // deterministic per-plot seed
+        for (size_t i = ds.numRows - 1; i > MAX_DISPLAY_POINTS; i--) {
+            std::uniform_int_distribution<size_t> dist(0, i);
+            std::swap(displayIndices[i], displayIndices[dist(rng)]);
+        }
+        displayIndices.resize(MAX_DISPLAY_POINTS);
+        std::sort(displayIndices.begin(), displayIndices.end());
+        fprintf(stderr, "  Subsampled %zu -> %zu points for display\n", ds.numRows, MAX_DISPLAY_POINTS);
+        fflush(stderr);
+    }
+
+    size_t numDisplay = subsampled ? displayIndices.size() : ds.numRows;
     std::vector<PointVertex> points;
-    points.reserve(ds.numRows);
+    points.reserve(numDisplay);
 
     // Compute density-based coloring if a colormap is active
     std::vector<float> densityValues;
@@ -694,7 +719,8 @@ void MainFrame::UpdatePlot(int plotIndex) {
         }
     }
 
-    for (size_t r = 0; r < ds.numRows; r++) {
+    for (size_t di = 0; di < numDisplay; di++) {
+        size_t r = subsampled ? displayIndices[di] : di;
         PointVertex v;
         v.x = xVals[r];
         v.y = yVals[r];
@@ -830,6 +856,8 @@ void MainFrame::LoadFile(const std::string& path) {
     progressDlg.Update(100, "Processing...");
 
     const auto& ds = m_dataManager.dataset();
+    fprintf(stderr, "Processing %zu rows x %zu cols\n", ds.numRows, ds.numCols);
+    fflush(stderr);
 
     m_controlPanel->SetColumns(ds.columnLabels);
     m_selection.assign(ds.numRows, 0);
@@ -843,7 +871,9 @@ void MainFrame::LoadFile(const std::string& path) {
     }
 
     SetTitle("Viewpoints — " + wxString(path).AfterLast('/'));
+    fprintf(stderr, "Updating plots...\n"); fflush(stderr);
     UpdateAllPlots();
+    fprintf(stderr, "Plots updated\n"); fflush(stderr);
     SetActivePlot(0);
 }
 
@@ -898,6 +928,10 @@ void MainFrame::OnSave(bool selectedOnly) {
             wxMessageBox("Failed to save file.", "Save Error", wxOK | wxICON_ERROR, this);
         }
     }
+}
+
+void MainFrame::LoadFileFromPath(const std::string& path) {
+    CallAfter([this, path]() { LoadFile(path); });
 }
 
 void MainFrame::OnQuit(wxCommandEvent& event) { Close(true); }

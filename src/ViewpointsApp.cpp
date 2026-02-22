@@ -1,6 +1,25 @@
 // Viewpoints (MIT License) - See LICENSE file
 #include "ViewpointsApp.h"
 #include "MainFrame.h"
+#include <wx/cmdline.h>
+
+void ViewpointsApp::OnInitCmdLine(wxCmdLineParser& parser) {
+    wxApp::OnInitCmdLine(parser);
+    parser.AddOption("i", "input-file", "Data file to load on startup",
+                     wxCMD_LINE_VAL_STRING, wxCMD_LINE_PARAM_OPTIONAL);
+    // Also accept a positional argument (bare filename)
+    parser.AddParam("input file", wxCMD_LINE_VAL_STRING, wxCMD_LINE_PARAM_OPTIONAL);
+}
+
+bool ViewpointsApp::OnCmdLineParsed(wxCmdLineParser& parser) {
+    wxString val;
+    if (parser.Found("i", &val)) {
+        m_inputFile = val;
+    } else if (parser.GetParamCount() > 0) {
+        m_inputFile = parser.GetParam(0);
+    }
+    return wxApp::OnCmdLineParsed(parser);
+}
 
 bool ViewpointsApp::OnInit() {
     if (!wxApp::OnInit())
@@ -8,5 +27,10 @@ bool ViewpointsApp::OnInit() {
 
     auto* frame = new MainFrame();
     frame->Show();
+
+    if (!m_inputFile.empty()) {
+        frame->LoadFileFromPath(m_inputFile.ToStdString());
+    }
+
     return true;
 }
