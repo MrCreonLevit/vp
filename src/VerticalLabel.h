@@ -25,7 +25,8 @@ private:
         wxPaintDC dc(this);
         if (m_label.empty()) return;
 
-        wxFont font(9, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+        wxFont font = GetFont();
+        font.SetPointSize(font.GetPointSize() - 1);
         dc.SetFont(font);
         dc.SetTextForeground(wxColour(160, 170, 200));
         dc.SetBackground(wxBrush(wxColour(30, 30, 40)));

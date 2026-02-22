@@ -58,3 +58,6 @@ pytest.log
 
 # Large data files
 data/tycho2/
+data/nyc_311/
+data/nyc_taxi/
+data/chicago_taxi/

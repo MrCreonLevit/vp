@@ -431,8 +431,12 @@ void MainFrame::RebuildGrid() {
             float dBottom = yDataMin + ((y0 + 0.9f) / 1.8f) * yRange;
             float dTop    = yDataMin + ((y1 + 0.9f) / 1.8f) * yRange;
 
-            SetStatusText(wxString::Format("Selection: X [%.4g, %.4g]  Y [%.4g, %.4g]",
-                                            dLeft, dRight, dBottom, dTop));
+            int selCount = 0;
+            for (int s : m_selection) if (s > 0) selCount++;
+            float pct = ds.numRows > 0 ? (100.0f * selCount / ds.numRows) : 0;
+            SetStatusText(wxString::Format("Selection: X [%.4g, %.4g]  Y [%.4g, %.4g]  |  %d / %zu (%.1f%%)",
+                                            dLeft, dRight, dBottom, dTop,
+                                            selCount, ds.numRows, pct));
         };
 
         canvas->SetBrushColors(m_brushColors);
