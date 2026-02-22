@@ -242,6 +242,10 @@ void MainFrame::CreateLayout() {
         for (auto* c : m_canvases) c->SetBackground(brightness);
     };
 
+    m_controlPanel->onDeferRedrawsChanged = [this](bool defer) {
+        for (auto* c : m_canvases) c->SetDeferRedraws(defer);
+    };
+
     m_controlPanel->onClearSelection = [this]() {
         ClearAllSelections();
     };

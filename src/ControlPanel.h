@@ -85,6 +85,7 @@ public:
     std::function<void(int bins)> onHistBinsChanged;
     std::function<void(int colormap, int colorVar)> onColorMapChanged;
     std::function<void(float brightness)> onBackgroundChanged;
+    std::function<void(bool defer)> onDeferRedrawsChanged;
     std::function<void()> onClearSelection;
     std::function<void()> onInvertSelection;
     std::function<void()> onKillSelected;

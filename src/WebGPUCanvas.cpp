@@ -1372,9 +1372,11 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             m_lastRectY0 += dy;
             m_lastRectY1 += dy;
             m_lastMouse = pos;
-            bool extend = event.CmdDown() || event.ControlDown();
-            if (onBrushRect)
-                onBrushRect(m_plotIndex, m_lastRectX0, m_lastRectY0, m_lastRectX1, m_lastRectY1, extend);
+            if (!m_deferRedraws) {
+                bool extend = event.CmdDown() || event.ControlDown();
+                if (onBrushRect)
+                    onBrushRect(m_plotIndex, m_lastRectX0, m_lastRectY0, m_lastRectX1, m_lastRectY1, extend);
+            }
             Refresh();
         } else if (m_selecting) {
             m_selectEnd = pos;
@@ -1383,9 +1385,11 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             ScreenToWorld(m_selectEnd.x, m_selectEnd.y, wx1, wy1);
             if (std::abs(m_selectEnd.x - m_selectStart.x) > 3 ||
                 std::abs(m_selectEnd.y - m_selectStart.y) > 3) {
-                bool extend = event.CmdDown() || event.ControlDown();
-                if (onBrushRect)
-                    onBrushRect(m_plotIndex, wx0, wy0, wx1, wy1, extend);
+                if (!m_deferRedraws) {
+                    bool extend = event.CmdDown() || event.ControlDown();
+                    if (onBrushRect)
+                        onBrushRect(m_plotIndex, wx0, wy0, wx1, wy1, extend);
+                }
                 // Update saved rect during drag too
                 m_lastRectX0 = std::min(wx0, wx1);
                 m_lastRectY0 = std::min(wy0, wy1);

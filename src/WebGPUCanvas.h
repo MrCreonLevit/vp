@@ -65,6 +65,7 @@ public:
     void SetBackground(float brightness);
     void SetUseAdditiveBlending(bool additive);
     void SetColorMap(int colorMap);  // 0 = default, else ColorMapType
+    void SetDeferRedraws(bool defer) { m_deferRedraws = defer; }
     void SetPanZoom(float panX, float panY, float zoomX, float zoomY);
     float GetPanX() const { return m_panX; }
     float GetPanY() const { return m_panY; }
@@ -167,6 +168,7 @@ private:
     float m_yDataMin = 0.0f, m_yDataMax = 1.0f;
 
     // Grid lines
+    bool m_deferRedraws = false;
     bool m_showGridLines = false;
     std::vector<float> m_gridXPositions;  // clip space positions
     std::vector<float> m_gridYPositions;

@@ -495,7 +495,15 @@ void ControlPanel::CreateAllPage() {
 
     auto* allHistograms = new wxCheckBox(m_allPage, wxID_ANY, "Histograms");
     allHistograms->SetValue(true);
-    sizer->Add(allHistograms, 0, wxLEFT | wxBOTTOM, 8);
+    sizer->Add(allHistograms, 0, wxLEFT, 8);
+
+    auto* deferRedraws = new wxCheckBox(m_allPage, wxID_ANY, "Defer redraws");
+    deferRedraws->SetValue(false);
+    sizer->Add(deferRedraws, 0, wxLEFT | wxBOTTOM, 8);
+
+    deferRedraws->Bind(wxEVT_CHECKBOX, [this, deferRedraws](wxCommandEvent&) {
+        if (onDeferRedrawsChanged) onDeferRedrawsChanged(deferRedraws->GetValue());
+    });
 
     allShowUnselected->Bind(wxEVT_CHECKBOX, [this, allShowUnselected](wxCommandEvent&) {
         bool show = allShowUnselected->GetValue();
