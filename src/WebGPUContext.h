@@ -24,7 +24,9 @@ public:
     WGPUBuffer GetQuadBuffer() const { return m_quadBuffer; }
     WGPUShaderModule GetShaderModule() const { return m_shaderModule; }
     WGPUBindGroupLayout GetBindGroupLayout() const { return m_bindGroupLayout; }
+    WGPUBindGroupLayout GetSelectionBindGroupLayout() const { return m_selectionBindGroupLayout; }
     WGPUPipelineLayout GetPipelineLayout() const { return m_pipelineLayout; }
+    WGPUPipelineLayout GetHistPipelineLayout() const { return m_histPipelineLayout; }
 
 private:
     void CreateSharedResources();
@@ -38,7 +40,9 @@ private:
     WGPUBuffer m_quadBuffer = nullptr;
     WGPUShaderModule m_shaderModule = nullptr;
     WGPUBindGroupLayout m_bindGroupLayout = nullptr;
+    WGPUBindGroupLayout m_selectionBindGroupLayout = nullptr;
     WGPUPipelineLayout m_pipelineLayout = nullptr;
+    WGPUPipelineLayout m_histPipelineLayout = nullptr;
 
     bool m_initialized = false;
 };

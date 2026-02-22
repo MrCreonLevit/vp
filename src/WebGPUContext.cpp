@@ -16,6 +16,11 @@ struct Uniforms {
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
+// Selection data (bind group 1)
+@group(1) @binding(0) var<storage, read> selection: array<u32>;
+@group(1) @binding(1) var<uniform> brush_colors: array<vec4f, 8>;
+@group(1) @binding(2) var<uniform> brush_params: array<vec4f, 8>; // x=symbol, y=sizeScale, z=showUnsel, w=0
+
 struct VertexOutput {
     @builtin(position) position: vec4f,
     @location(0) color: vec4f,
@@ -25,14 +30,29 @@ struct VertexOutput {
 
 @vertex
 fn vs_main(
+    @builtin(instance_index) instance_id: u32,
     @location(0) quad_pos: vec2f,
     @location(1) point_pos: vec2f,
     @location(2) point_color: vec4f,
     @location(3) point_symbol: f32,
     @location(4) point_size_scale: f32,
 ) -> VertexOutput {
+    // Look up selection state from GPU buffer
+    let sel = selection[instance_id];
+
+    var color = point_color;
+    var sym = point_symbol;
+    var size_scale = point_size_scale;
+
+    if (sel > 0u && sel <= 7u) {
+        // Selected: use brush color/params from uniform
+        color = brush_colors[sel];
+        sym = brush_params[sel].x;
+        size_scale = brush_params[sel].y;
+    }
+
     let clip = uniforms.projection * vec4f(point_pos, 0.0, 1.0);
-    let effective_size = uniforms.point_size * point_size_scale;
+    let effective_size = uniforms.point_size * size_scale;
     let pixel_offset = quad_pos * effective_size;
     let ndc_offset = vec2f(
         pixel_offset.x * 2.0 / uniforms.viewport_w,
@@ -41,9 +61,9 @@ fn vs_main(
 
     var output: VertexOutput;
     output.position = vec4f(clip.xy + ndc_offset * clip.w, clip.z, clip.w);
-    output.color = point_color;
+    output.color = color;
     output.uv = quad_pos + 0.5;
-    output.symbol = point_symbol;
+    output.symbol = sym;
     return output;
 }
 
@@ -213,27 +233,59 @@ void WebGPUContext::CreateSharedResources() {
     smDesc.nextInChain = &wgslDesc.chain;
     m_shaderModule = wgpuDeviceCreateShaderModule(m_device, &smDesc);
 
-    // Bind group layout
-    WGPUBindGroupLayoutEntry bglEntry = {};
-    bglEntry.binding = 0;
-    bglEntry.visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
-    bglEntry.buffer.type = WGPUBufferBindingType_Uniform;
-    bglEntry.buffer.minBindingSize = sizeof(Uniforms);
+    // Bind group layout 0: uniforms (used by all pipelines)
+    WGPUBindGroupLayoutEntry bglEntry0 = {};
+    bglEntry0.binding = 0;
+    bglEntry0.visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+    bglEntry0.buffer.type = WGPUBufferBindingType_Uniform;
+    bglEntry0.buffer.minBindingSize = sizeof(Uniforms);
 
-    WGPUBindGroupLayoutDescriptor bglDesc = {};
-    bglDesc.entryCount = 1;
-    bglDesc.entries = &bglEntry;
-    m_bindGroupLayout = wgpuDeviceCreateBindGroupLayout(m_device, &bglDesc);
+    WGPUBindGroupLayoutDescriptor bglDesc0 = {};
+    bglDesc0.entryCount = 1;
+    bglDesc0.entries = &bglEntry0;
+    m_bindGroupLayout = wgpuDeviceCreateBindGroupLayout(m_device, &bglDesc0);
 
-    // Pipeline layout
+    // Bind group layout 1: selection + brush data (point pipelines only)
+    WGPUBindGroupLayoutEntry selEntries[3] = {};
+    // Binding 0: selection buffer (read-only storage)
+    selEntries[0].binding = 0;
+    selEntries[0].visibility = WGPUShaderStage_Vertex;
+    selEntries[0].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
+    selEntries[0].buffer.minBindingSize = 4;  // at least 1 u32
+    // Binding 1: brush colors (uniform, 8 × vec4f = 128 bytes)
+    selEntries[1].binding = 1;
+    selEntries[1].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+    selEntries[1].buffer.type = WGPUBufferBindingType_Uniform;
+    selEntries[1].buffer.minBindingSize = 8 * 16;  // 8 vec4f
+    // Binding 2: brush params (uniform, 8 × vec4f for symbol/sizeScale/showUnsel/pad)
+    selEntries[2].binding = 2;
+    selEntries[2].visibility = WGPUShaderStage_Vertex;
+    selEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
+    selEntries[2].buffer.minBindingSize = 8 * 16;
+
+    WGPUBindGroupLayoutDescriptor selBglDesc = {};
+    selBglDesc.entryCount = 3;
+    selBglDesc.entries = selEntries;
+    m_selectionBindGroupLayout = wgpuDeviceCreateBindGroupLayout(m_device, &selBglDesc);
+
+    // Pipeline layout for points: 2 bind groups
+    WGPUBindGroupLayout layouts[2] = {m_bindGroupLayout, m_selectionBindGroupLayout};
     WGPUPipelineLayoutDescriptor plDesc = {};
-    plDesc.bindGroupLayoutCount = 1;
-    plDesc.bindGroupLayouts = &m_bindGroupLayout;
+    plDesc.bindGroupLayoutCount = 2;
+    plDesc.bindGroupLayouts = layouts;
     m_pipelineLayout = wgpuDeviceCreatePipelineLayout(m_device, &plDesc);
+
+    // Pipeline layout for histograms: 1 bind group (uniforms only)
+    WGPUPipelineLayoutDescriptor histPlDesc = {};
+    histPlDesc.bindGroupLayoutCount = 1;
+    histPlDesc.bindGroupLayouts = &m_bindGroupLayout;
+    m_histPipelineLayout = wgpuDeviceCreatePipelineLayout(m_device, &histPlDesc);
 }
 
 void WebGPUContext::Cleanup() {
+    if (m_histPipelineLayout) { wgpuPipelineLayoutRelease(m_histPipelineLayout); m_histPipelineLayout = nullptr; }
     if (m_pipelineLayout) { wgpuPipelineLayoutRelease(m_pipelineLayout); m_pipelineLayout = nullptr; }
+    if (m_selectionBindGroupLayout) { wgpuBindGroupLayoutRelease(m_selectionBindGroupLayout); m_selectionBindGroupLayout = nullptr; }
     if (m_bindGroupLayout) { wgpuBindGroupLayoutRelease(m_bindGroupLayout); m_bindGroupLayout = nullptr; }
     if (m_shaderModule) { wgpuShaderModuleRelease(m_shaderModule); m_shaderModule = nullptr; }
     if (m_quadBuffer) { wgpuBufferRelease(m_quadBuffer); m_quadBuffer = nullptr; }

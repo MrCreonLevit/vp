@@ -131,6 +131,12 @@ private:
     size_t m_selVertexCount = 0;
     WGPUBuffer m_uniformBuffer = nullptr;
     WGPUBindGroup m_bindGroup = nullptr;
+    // GPU selection buffer (bind group 1)
+    WGPUBuffer m_selectionGpuBuffer = nullptr;
+    WGPUBuffer m_brushColorGpuBuffer = nullptr;
+    WGPUBuffer m_brushParamsGpuBuffer = nullptr;
+    WGPUBindGroup m_selectionBindGroup = nullptr;
+    size_t m_selectionBufferSize = 0;
     WGPUBuffer m_histUniformBuffer = nullptr;
     WGPUBindGroup m_histBindGroup = nullptr;
     WGPUTextureFormat m_surfaceFormat = WGPUTextureFormat_Undefined;

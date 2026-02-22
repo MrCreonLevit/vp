@@ -158,14 +158,83 @@ void WebGPUCanvas::SetOpacity(float alpha) {
 
 void WebGPUCanvas::SetBrushColors(const std::vector<BrushColor>& colors) {
     m_brushColors = colors;
-    UpdatePointColors();
+    // Upload brush data to GPU
+    if (m_initialized && m_brushColorGpuBuffer && m_brushParamsGpuBuffer) {
+        float colorData[8 * 4] = {};  // 8 vec4f, 1-indexed (sel values are 1-7)
+        float paramData[8 * 4] = {};  // 8 vec4f
+        for (size_t i = 0; i < colors.size() && i < 7; i++) {
+            // Store at index i+1 since selection values are 1-based
+            size_t idx = i + 1;
+            colorData[idx * 4 + 0] = colors[i].r;
+            colorData[idx * 4 + 1] = colors[i].g;
+            colorData[idx * 4 + 2] = colors[i].b;
+            colorData[idx * 4 + 3] = m_opacity * colors[i].a * 2.0f;
+            paramData[idx * 4 + 0] = static_cast<float>(colors[i].symbol);
+            paramData[idx * 4 + 1] = std::max(0.1f, 1.0f + colors[i].sizeOffset / m_pointSize);
+            paramData[idx * 4 + 2] = 0.0f;
+            paramData[idx * 4 + 3] = 0.0f;
+        }
+        auto queue = m_ctx->GetQueue();
+        wgpuQueueWriteBuffer(queue, m_brushColorGpuBuffer, 0, colorData, sizeof(colorData));
+        wgpuQueueWriteBuffer(queue, m_brushParamsGpuBuffer, 0, paramData, sizeof(paramData));
+        Refresh();
+    }
+    UpdatePointColors();  // still needed for overlay pass
 }
 
 void WebGPUCanvas::SetSelection(const std::vector<int>& sel) {
-    if (sel.size() == m_selection.size()) {
-        m_selection = sel;
-        UpdatePointColors();
+    if (sel.size() != m_selection.size()) return;
+    m_selection = sel;
+
+    // Upload selection to GPU storage buffer (fast path!)
+    if (m_initialized && m_ctx) {
+        auto device = m_ctx->GetDevice();
+        auto queue = m_ctx->GetQueue();
+        size_t numPoints = sel.size();
+
+        // Resize GPU selection buffer if needed
+        if (numPoints != m_selectionBufferSize) {
+            if (m_selectionGpuBuffer) wgpuBufferRelease(m_selectionGpuBuffer);
+            size_t bufSize = std::max(numPoints, (size_t)1) * sizeof(uint32_t);
+            WGPUBufferDescriptor sDesc = {};
+            sDesc.label = {"selection_gpu", WGPU_STRLEN};
+            sDesc.size = bufSize;
+            sDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
+            m_selectionGpuBuffer = wgpuDeviceCreateBuffer(device, &sDesc);
+            m_selectionBufferSize = numPoints;
+
+            // Recreate bind group with new buffer
+            if (m_selectionBindGroup) wgpuBindGroupRelease(m_selectionBindGroup);
+            WGPUBindGroupEntry entries[3] = {};
+            entries[0].binding = 0; entries[0].buffer = m_selectionGpuBuffer;
+            entries[0].offset = 0; entries[0].size = bufSize;
+            entries[1].binding = 1; entries[1].buffer = m_brushColorGpuBuffer;
+            entries[1].offset = 0; entries[1].size = 8 * 16;
+            entries[2].binding = 2; entries[2].buffer = m_brushParamsGpuBuffer;
+            entries[2].offset = 0; entries[2].size = 8 * 16;
+            WGPUBindGroupDescriptor bgDesc = {};
+            bgDesc.layout = m_ctx->GetSelectionBindGroupLayout();
+            bgDesc.entryCount = 3;
+            bgDesc.entries = entries;
+            m_selectionBindGroup = wgpuDeviceCreateBindGroup(device, &bgDesc);
+        }
+
+        // Convert int selection to u32 and upload
+        std::vector<uint32_t> selU32(numPoints);
+        for (size_t i = 0; i < numPoints; i++)
+            selU32[i] = static_cast<uint32_t>(sel[i]);
+        wgpuQueueWriteBuffer(queue, m_selectionGpuBuffer, 0,
+                             selU32.data(), numPoints * sizeof(uint32_t));
     }
+
+    // GPU shader handles selection coloring — no vertex buffer rebuild needed.
+    // Clear the overlay buffer so old selections don't persist on screen.
+    if (m_selVertexBuffer) {
+        wgpuBufferRelease(m_selVertexBuffer);
+        m_selVertexBuffer = nullptr;
+    }
+    m_selVertexCount = 0;
+    Refresh();
 }
 
 void WebGPUCanvas::ClearSelection() {
@@ -203,33 +272,24 @@ void WebGPUCanvas::ResetView() {
 }
 
 void WebGPUCanvas::UpdatePointColors() {
-    // Set colors in the main additive buffer.
-    // Selected points get their brush color; unselected get default blue.
+    // Set BASE colors in the vertex buffer. The GPU shader overrides these
+    // for selected points using the selection storage buffer + brush uniforms.
+    // Symbol and sizeScale are always base values here — brush-specific
+    // values come from the GPU uniform lookup only.
     for (size_t i = 0; i < m_points.size(); i++) {
-        int brushIdx = (i < m_selection.size()) ? m_selection[i] : 0;
-        if (brushIdx > 0 && brushIdx <= (int)m_brushColors.size()) {
-            const auto& bc = m_brushColors[brushIdx - 1];
-            m_points[i].r = bc.r;
-            m_points[i].g = bc.g;
-            m_points[i].b = bc.b;
-            m_points[i].a = m_opacity * bc.a;
-            m_points[i].symbol = static_cast<float>(bc.symbol);
-            m_points[i].sizeScale = std::max(0.1f, 1.0f + bc.sizeOffset / m_pointSize);
-        } else if (!m_showUnselected) {
+        if (!m_showUnselected && (i >= m_selection.size() || m_selection[i] == 0)) {
             m_points[i].r = 0.0f;
             m_points[i].g = 0.0f;
             m_points[i].b = 0.0f;
             m_points[i].a = 0.0f;
-            m_points[i].symbol = 0.0f;
-            m_points[i].sizeScale = 1.0f;
         } else {
             m_points[i].r = (i * 3 < m_baseColors.size()) ? m_baseColors[i * 3] : 0.15f;
             m_points[i].g = (i * 3 + 1 < m_baseColors.size()) ? m_baseColors[i * 3 + 1] : 0.4f;
             m_points[i].b = (i * 3 + 2 < m_baseColors.size()) ? m_baseColors[i * 3 + 2] : 1.0f;
             m_points[i].a = m_opacity;
-            m_points[i].symbol = 0.0f;
-            m_points[i].sizeScale = 1.0f;
         }
+        m_points[i].symbol = 0.0f;
+        m_points[i].sizeScale = 1.0f;
     }
 
     // Build overlay buffer for high-alpha brushes (so selected points
@@ -357,6 +417,52 @@ void WebGPUCanvas::InitSurface() {
     bgDesc.entries = &bgEntry;
     m_bindGroup = wgpuDeviceCreateBindGroup(device, &bgDesc);
 
+    // Create GPU selection buffer and brush uniform buffers (bind group 1)
+    {
+        // Selection buffer: start with 1 element, will resize in SetPoints/SetSelection
+        WGPUBufferDescriptor selDesc = {};
+        selDesc.label = {"selection_gpu", WGPU_STRLEN};
+        selDesc.size = 4;  // minimum 1 u32
+        selDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
+        m_selectionGpuBuffer = wgpuDeviceCreateBuffer(device, &selDesc);
+        m_selectionBufferSize = 1;
+
+        // Brush colors: 8 × vec4f (RGBA)
+        WGPUBufferDescriptor bcDesc = {};
+        bcDesc.label = {"brush_colors", WGPU_STRLEN};
+        bcDesc.size = 8 * 16;
+        bcDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        m_brushColorGpuBuffer = wgpuDeviceCreateBuffer(device, &bcDesc);
+
+        // Brush params: 8 × vec4f (symbol, sizeScale, 0, 0)
+        WGPUBufferDescriptor bpDesc = {};
+        bpDesc.label = {"brush_params", WGPU_STRLEN};
+        bpDesc.size = 8 * 16;
+        bpDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        m_brushParamsGpuBuffer = wgpuDeviceCreateBuffer(device, &bpDesc);
+
+        // Create selection bind group (group 1)
+        WGPUBindGroupEntry selEntries[3] = {};
+        selEntries[0].binding = 0;
+        selEntries[0].buffer = m_selectionGpuBuffer;
+        selEntries[0].offset = 0;
+        selEntries[0].size = 4;
+        selEntries[1].binding = 1;
+        selEntries[1].buffer = m_brushColorGpuBuffer;
+        selEntries[1].offset = 0;
+        selEntries[1].size = 8 * 16;
+        selEntries[2].binding = 2;
+        selEntries[2].buffer = m_brushParamsGpuBuffer;
+        selEntries[2].offset = 0;
+        selEntries[2].size = 8 * 16;
+
+        WGPUBindGroupDescriptor selBgDesc = {};
+        selBgDesc.layout = m_ctx->GetSelectionBindGroupLayout();
+        selBgDesc.entryCount = 3;
+        selBgDesc.entries = selEntries;
+        m_selectionBindGroup = wgpuDeviceCreateBindGroup(device, &selBgDesc);
+    }
+
     // Create separate uniform buffer + bind group for histograms (identity projection)
     WGPUBufferDescriptor hubDesc = {};
     hubDesc.label = {"hist_uniforms", WGPU_STRLEN};
@@ -389,6 +495,17 @@ void WebGPUCanvas::InitSurface() {
                      static_cast<int>(size.GetHeight() * scale));
 
     m_initialized = true;
+
+    // Upload brush colors/params to GPU (may have been set before InitSurface ran)
+    if (!m_brushColors.empty()) {
+        SetBrushColors(m_brushColors);
+    }
+
+    // Upload selection state if already set
+    if (!m_selection.empty()) {
+        SetSelection(m_selection);
+    }
+
     Refresh();
 }
 
@@ -609,7 +726,7 @@ fn hist_fs(input: VertexOutput) -> @location(0) vec4f {
 
     WGPURenderPipelineDescriptor histRpDesc = {};
     histRpDesc.label = {"hist_pipeline", WGPU_STRLEN};
-    histRpDesc.layout = pipelineLayout;
+    histRpDesc.layout = m_ctx->GetHistPipelineLayout();
     histRpDesc.vertex.module = histShader;
     histRpDesc.vertex.entryPoint = {"hist_vs", WGPU_STRLEN};
     histRpDesc.vertex.bufferCount = 1;
@@ -1104,6 +1221,9 @@ void WebGPUCanvas::Render() {
         // Use additive or alpha blending based on colormap mode
         wgpuRenderPassEncoderSetPipeline(rp, m_useAdditive ? m_pipeline : m_selPipeline);
         wgpuRenderPassEncoderSetBindGroup(rp, 0, m_bindGroup, 0, nullptr);
+        // Bind selection + brush data (group 1)
+        if (m_selectionBindGroup)
+            wgpuRenderPassEncoderSetBindGroup(rp, 1, m_selectionBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(rp, 0, quadBuf, 0, 6 * 2 * sizeof(float));
         wgpuRenderPassEncoderSetVertexBuffer(rp, 1, m_vertexBuffer, 0,
                                               m_points.size() * sizeof(PointVertex));
@@ -1111,10 +1231,11 @@ void WebGPUCanvas::Render() {
     }
 
     // Draw selected points on top with alpha blending (not additive)
-    // so they stand out clearly against dense overplotted regions
     if (m_selPipeline && m_selVertexBuffer && m_selVertexCount > 0) {
         wgpuRenderPassEncoderSetPipeline(rp, m_selPipeline);
         wgpuRenderPassEncoderSetBindGroup(rp, 0, m_bindGroup, 0, nullptr);
+        if (m_selectionBindGroup)
+            wgpuRenderPassEncoderSetBindGroup(rp, 1, m_selectionBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(rp, 0, quadBuf, 0, 6 * 2 * sizeof(float));
         wgpuRenderPassEncoderSetVertexBuffer(rp, 1, m_selVertexBuffer, 0,
                                               m_selVertexCount * sizeof(PointVertex));
@@ -1316,6 +1437,10 @@ void WebGPUCanvas::OnKeyDown(wxKeyEvent& event) {
 }
 
 void WebGPUCanvas::Cleanup() {
+    if (m_selectionBindGroup) { wgpuBindGroupRelease(m_selectionBindGroup); m_selectionBindGroup = nullptr; }
+    if (m_selectionGpuBuffer) { wgpuBufferRelease(m_selectionGpuBuffer); m_selectionGpuBuffer = nullptr; }
+    if (m_brushColorGpuBuffer) { wgpuBufferRelease(m_brushColorGpuBuffer); m_brushColorGpuBuffer = nullptr; }
+    if (m_brushParamsGpuBuffer) { wgpuBufferRelease(m_brushParamsGpuBuffer); m_brushParamsGpuBuffer = nullptr; }
     if (m_gridLineBuffer) { wgpuBufferRelease(m_gridLineBuffer); m_gridLineBuffer = nullptr; }
     if (m_histBuffer) { wgpuBufferRelease(m_histBuffer); m_histBuffer = nullptr; }
     if (m_histPipeline) { wgpuRenderPipelineRelease(m_histPipeline); m_histPipeline = nullptr; }
