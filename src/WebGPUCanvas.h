@@ -115,6 +115,7 @@ private:
     void OnPaint(wxPaintEvent& event);
     void OnSize(wxSizeEvent& event);
     void OnMouse(wxMouseEvent& event);
+    void OnMagnify(wxMouseEvent& event);
     void OnKeyDown(wxKeyEvent& event);
 
     WebGPUContext* m_ctx = nullptr;

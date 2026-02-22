@@ -55,6 +55,7 @@ WebGPUCanvas::WebGPUCanvas(wxWindow* parent, WebGPUContext* ctx, int plotIndex)
     Bind(wxEVT_RIGHT_UP, &WebGPUCanvas::OnMouse, this);
     Bind(wxEVT_MOTION, &WebGPUCanvas::OnMouse, this);
     Bind(wxEVT_MOUSEWHEEL, &WebGPUCanvas::OnMouse, this);
+    Bind(wxEVT_MAGNIFY, &WebGPUCanvas::OnMagnify, this);
     Bind(wxEVT_KEY_DOWN, &WebGPUCanvas::OnKeyDown, this);
     Bind(wxEVT_CHAR, &WebGPUCanvas::OnKeyDown, this);
 
@@ -1396,15 +1397,66 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
         }
     } else if (event.GetWheelRotation() != 0) {
         float factor = event.GetWheelRotation() > 0 ? 1.1f : 1.0f / 1.1f;
-        m_zoomX *= factor;
-        m_zoomY *= factor;
-        m_zoomX = std::max(0.1f, std::min(m_zoomX, 100.0f));
-        m_zoomY = std::max(0.1f, std::min(m_zoomY, 100.0f));
+
+        // Zoom centered on mouse position
+        wxPoint mousePos = event.GetPosition();
+        float wx, wy;
+        ScreenToWorld(mousePos.x, mousePos.y, wx, wy);
+
+        float newZoomX = m_zoomX * factor;
+        float newZoomY = m_zoomY * factor;
+        newZoomX = std::max(0.1f, std::min(newZoomX, 100.0f));
+        newZoomY = std::max(0.1f, std::min(newZoomY, 100.0f));
+
+        wxSize sz = GetClientSize();
+        float ndcX = (static_cast<float>(mousePos.x) / sz.GetWidth()) * 2.0f - 1.0f;
+        float ndcY = 1.0f - (static_cast<float>(mousePos.y) / sz.GetHeight()) * 2.0f;
+        m_panX = wx - ndcX / newZoomX;
+        m_panY = wy - ndcY / newZoomY;
+        m_zoomX = newZoomX;
+        m_zoomY = newZoomY;
+
         if (onViewChanged) onViewChanged(m_plotIndex, m_panX, m_panY, m_zoomX, m_zoomY);
         if (m_colorMap != 0) RecomputeDensityColors();
         Refresh();
     }
     event.Skip();
+}
+
+void WebGPUCanvas::OnMagnify(wxMouseEvent& event) {
+    float magnification = event.GetMagnification();  // typically -0.1 to +0.1 per event
+    if (magnification == 0.0f) return;
+
+    float factor = 1.0f + magnification;
+    factor = std::max(0.5f, std::min(factor, 2.0f));
+
+    // Get world position under the mouse cursor (zoom center)
+    wxPoint mousePos = event.GetPosition();
+    float wx, wy;
+    ScreenToWorld(mousePos.x, mousePos.y, wx, wy);
+
+    // Apply zoom
+    float newZoomX = m_zoomX * factor;
+    float newZoomY = m_zoomY * factor;
+    newZoomX = std::max(0.1f, std::min(newZoomX, 100.0f));
+    newZoomY = std::max(0.1f, std::min(newZoomY, 100.0f));
+
+    // Adjust pan so the world point under the cursor stays fixed
+    // Before zoom: wx = panX + ndcX / zoomX
+    // After zoom:  wx = panX' + ndcX / zoomX'
+    // So: panX' = wx - ndcX / zoomX' = wx - (wx - panX) * (zoomX / zoomX')
+    wxSize size = GetClientSize();
+    float ndcX = (static_cast<float>(mousePos.x) / size.GetWidth()) * 2.0f - 1.0f;
+    float ndcY = 1.0f - (static_cast<float>(mousePos.y) / size.GetHeight()) * 2.0f;
+
+    m_panX = wx - ndcX / newZoomX;
+    m_panY = wy - ndcY / newZoomY;
+    m_zoomX = newZoomX;
+    m_zoomY = newZoomY;
+
+    if (onViewChanged) onViewChanged(m_plotIndex, m_panX, m_panY, m_zoomX, m_zoomY);
+    if (m_colorMap != 0) RecomputeDensityColors();
+    Refresh();
 }
 
 void WebGPUCanvas::OnKeyDown(wxKeyEvent& event) {
