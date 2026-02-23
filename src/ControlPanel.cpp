@@ -40,32 +40,30 @@ void PlotTab::CreateControls(int row, int col) {
     });
 
     auto* xRow = new wxBoxSizer(wxHORIZONTAL);
-    xRow->Add(new wxStaticText(this, wxID_ANY, "X Axis"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    xRow->Add(new wxStaticText(this, wxID_ANY, "X-axis"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     m_xLock = new wxCheckBox(this, wxID_ANY, "Lock");
-    xRow->Add(m_xLock, 0, wxALIGN_CENTER_VERTICAL);
-    sizer->Add(xRow, 0, wxLEFT | wxRIGHT | wxTOP, 8);
-    m_xAxis = new wxChoice(this, wxID_ANY);
-    sizer->Add(m_xAxis, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
-
-    sizer->Add(new wxStaticText(this, wxID_ANY, "X Norm"), 0, wxLEFT | wxTOP, 8);
+    xRow->Add(m_xLock, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    xRow->Add(new wxStaticText(this, wxID_ANY, "Norm"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     m_xNorm = new wxChoice(this, wxID_ANY);
     for (const auto& name : AllNormModeNames()) m_xNorm->Append(name);
     m_xNorm->SetSelection(0);
-    sizer->Add(m_xNorm, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    xRow->Add(m_xNorm, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(xRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+    m_xAxis = new wxChoice(this, wxID_ANY);
+    sizer->Add(m_xAxis, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 4);
 
     auto* yRow = new wxBoxSizer(wxHORIZONTAL);
-    yRow->Add(new wxStaticText(this, wxID_ANY, "Y Axis"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    yRow->Add(new wxStaticText(this, wxID_ANY, "Y-axis"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     m_yLock = new wxCheckBox(this, wxID_ANY, "Lock");
-    yRow->Add(m_yLock, 0, wxALIGN_CENTER_VERTICAL);
-    sizer->Add(yRow, 0, wxLEFT | wxRIGHT, 8);
-    m_yAxis = new wxChoice(this, wxID_ANY);
-    sizer->Add(m_yAxis, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
-
-    sizer->Add(new wxStaticText(this, wxID_ANY, "Y Norm"), 0, wxLEFT | wxTOP, 8);
+    yRow->Add(m_yLock, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    yRow->Add(new wxStaticText(this, wxID_ANY, "Norm"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     m_yNorm = new wxChoice(this, wxID_ANY);
     for (const auto& name : AllNormModeNames()) m_yNorm->Append(name);
     m_yNorm->SetSelection(0);
-    sizer->Add(m_yNorm, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    yRow->Add(m_yNorm, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(yRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 4);
+    m_yAxis = new wxChoice(this, wxID_ANY);
+    sizer->Add(m_yAxis, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 4);
 
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 

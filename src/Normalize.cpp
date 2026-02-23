@@ -7,17 +7,17 @@
 
 const char* NormModeName(NormMode mode) {
     switch (mode) {
-        case NormMode::None:       return "None (raw)";
-        case NormMode::MinMax:     return "Min-Max [0,1]";
-        case NormMode::ZeroMax:    return "Zero-Max [0,max]";
-        case NormMode::MaxAbs:     return "Max |value|";
-        case NormMode::Trim1e2:    return "Trim 1-99%";
-        case NormMode::Trim1e3:    return "Trim 0.1-99.9%";
-        case NormMode::ThreeSigma: return "Three Sigma";
+        case NormMode::None:       return "None";
+        case NormMode::MinMax:     return "Min-Max";
+        case NormMode::ZeroMax:    return "+ only";
+        case NormMode::MaxAbs:     return "Max |val|";
+        case NormMode::Trim1e2:    return "Trim 1%";
+        case NormMode::Trim1e3:    return "Trim 0.1%";
+        case NormMode::ThreeSigma: return "3 Sigma";
         case NormMode::Log10:      return "Log10";
         case NormMode::Arctan:     return "Arctan";
         case NormMode::Rank:       return "Rank";
-        case NormMode::Gaussianize:return "Gaussianize";
+        case NormMode::Gaussianize:return "Gaussian";
         default:                   return "Unknown";
     }
 }
