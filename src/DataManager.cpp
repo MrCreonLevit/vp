@@ -422,7 +422,7 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
     // Extract data row-major
     fprintf(stderr, "  Allocating %zu x %zu = %zu floats (%.1f MB)\n",
             m_data.numRows, m_data.numCols, m_data.numRows * m_data.numCols,
-            m_data.numRows * m_data.numCols * 4.0 / 1048576.0);
+            m_data.numRows * m_data.numCols * 4.0 / 1048576.0);  // 1048576 = 2^20 = bytes per MB
     fflush(stderr);
     try {
         m_data.data.resize(m_data.numRows * m_data.numCols, 0.0f);
