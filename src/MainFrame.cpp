@@ -878,6 +878,14 @@ void MainFrame::LoadFile(const std::string& path) {
         m_plotConfigs[i] = {col1, col2};
     }
 
+    // Set default point size based on dataset size: larger for small datasets,
+    // smaller for large datasets to reduce overplotting
+    float defaultSize = std::max(1.0f, std::min(15.0f,
+        14.0f - 2.0f * std::log10(static_cast<float>(ds.numRows))));
+    for (auto& cfg : m_plotConfigs) cfg.pointSize = defaultSize;
+    for (auto* c : m_canvases) c->SetPointSize(defaultSize);
+    fprintf(stderr, "Default point size: %.1f (for %zu rows)\n", defaultSize, ds.numRows);
+
     SetTitle("Viewpoints — " + wxString(path).AfterLast('/'));
     fprintf(stderr, "Updating plots...\n"); fflush(stderr);
     UpdateAllPlots();
