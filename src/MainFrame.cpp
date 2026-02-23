@@ -75,7 +75,7 @@ void MainFrame::CreateMenuBar() {
     viewMenu->Append(ID_RemoveRow, "Remove Row", "Remove bottom row");
     viewMenu->Append(ID_RemoveCol, "Remove Column", "Remove right column");
     viewMenu->AppendSeparator();
-    viewMenu->Append(ID_ResetViews, "Reset All Views", "Reset pan and zoom on all plots");
+    viewMenu->Append(ID_ResetViews, "Reset View\tR", "Reset pan and zoom on active plot");
     menuBar->Append(viewMenu, "&View");
 
     auto* helpMenu = new wxMenu();
@@ -94,7 +94,8 @@ void MainFrame::CreateMenuBar() {
     Bind(wxEVT_MENU, &MainFrame::OnRemoveRow, this, ID_RemoveRow);
     Bind(wxEVT_MENU, &MainFrame::OnRemoveCol, this, ID_RemoveCol);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) {
-        for (auto* c : m_canvases) c->ResetView();
+        if (m_activePlot >= 0 && m_activePlot < (int)m_canvases.size())
+            m_canvases[m_activePlot]->ResetView();
     }, ID_ResetViews);
 }
 
@@ -492,8 +493,8 @@ void MainFrame::RebuildGrid() {
         };
 
         canvas->SetBrushColors(m_brushColors);
-        canvas->onResetViewRequested = [this]() {
-            for (auto* c : m_canvases) c->ResetView();
+        canvas->onResetViewRequested = [this, i]() {
+            m_canvases[i]->ResetView();
         };
 
         // Viewport change callback: compute nice ticks, update labels and grid lines

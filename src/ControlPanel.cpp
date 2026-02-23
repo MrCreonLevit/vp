@@ -314,7 +314,7 @@ ControlPanel::ControlPanel(wxWindow* parent)
         "C: clear selection\n"
         "I: invert selection\n"
         "K: kill selected points\n"
-        "R: reset all views\n"
+        "R: reset active view\n"
         "Cmd+S: save all data\n"
         "Cmd+Shift+S: save selected\n"
         "Q: quit");
@@ -331,11 +331,15 @@ ControlPanel::ControlPanel(wxWindow* parent)
     // Single spin timer drives all spinning PlotTabs
     m_spinTimer.SetOwner(this);
     Bind(wxEVT_TIMER, &ControlPanel::OnSpinTimer, this);
+    m_lastSpinTime = wxGetLocalTimeMillis();
     m_spinTimer.Start(SPIN_INTERVAL_MS);
 }
 
 void ControlPanel::OnSpinTimer(wxTimerEvent&) {
-    float dt = SPIN_INTERVAL_MS / 1000.0f;
+    wxLongLong now = wxGetLocalTimeMillis();
+    float dt = (now - m_lastSpinTime).ToDouble() / 1000.0;
+    m_lastSpinTime = now;
+    if (dt <= 0.0f || dt > 1.0f) dt = SPIN_INTERVAL_MS / 1000.0f; // sanity clamp
     for (auto* tab : m_plotTabs) {
         if (tab->m_spinning) {
             tab->m_spinAngle += SPIN_SPEED * dt;

@@ -142,6 +142,7 @@ private:
     static constexpr float SPIN_SPEED = 10.0f;  // degrees per second
     static constexpr float ROCK_AMPLITUDE = 3.0f; // degrees
     static constexpr int SPIN_INTERVAL_MS = 33; // ~30 fps
+    wxLongLong m_lastSpinTime;
     void OnSpinTimer(wxTimerEvent& event);
 
     // "All" page widgets
