@@ -25,7 +25,7 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 - **Apache Parquet** file loading via Arrow C++ (optional dependency)
 - **Command-line loading** — `vp -i data.csv` or `vp data.parquet`
 - **Constant-column removal** — columns with a single value are automatically dropped on load
-- **Save All / Save Selected** — export data or just brushed points as CSV
+- **Save All / Save Selected** — export data or just brushed points as Parquet or CSV
 - **11 normalization modes** — None, Min-Max, +only, Max |val|, Trim percentile, 3 Sigma, Log10, Arctan, Rank, Gaussianize (per-plot, per-axis)
 - **Large dataset subsampling** — datasets over 4M points are automatically subsampled per plot for GPU memory management
 - Tested with datasets up to **12.6 million rows** (NYC taxi data)
@@ -41,7 +41,8 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 - **Defer Redraws** toggle for smooth interaction with very large datasets
 - **Randomize Axes** button per plot
 - **Kill Selected** — permanently remove selected points from dataset
-- Keyboard shortcuts: **C** clear, **I** invert, **D** delete selected, **R** reset views, **Q** quit
+- **3D rotation** — optional Z-axis with rotation slider, spin (continuous 10°/s), and rock (sinusoidal ±3°)
+- Keyboard shortcuts: **C** clear, **I** invert, **D** delete selected, **R** reset view, **Cmd+S** save all, **Cmd+Shift+S** save selected, **Q** quit
 
 ### Control Panel
 - **Grid-based plot selector** matching the plot layout, plus an "All" tab for global settings
@@ -133,7 +134,8 @@ vp/
 ├── shaders/                WGSL shader reference
 ├── data/                   Sample data files
 │   ├── sampledata.txt      Inline skating EMG (29,900 rows)
-│   └── sampledata1000.txt  Smaller sample
+│   ├── sampledata1000.txt  Smaller sample
+│   └── nuclides/           IAEA nuclear properties (3,386 nuclides, 17 variables)
 └── legacy/                 Original C++98/FLTK source (reference)
 ```
 
