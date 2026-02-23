@@ -3,6 +3,8 @@
 
 #include <wx/wx.h>
 #include <wx/simplebook.h>
+#include <wx/timer.h>
+#include <wx/tglbtn.h>
 #include <vector>
 #include <string>
 #include <functional>
@@ -34,6 +36,7 @@ public:
     std::function<void(int plotIndex, float angle)> onRotationChanged;
 
 private:
+    friend class ControlPanel;
     void CreateControls(int row, int col);
 
     int m_plotIndex;
@@ -49,6 +52,13 @@ private:
     wxChoice* m_zNorm = nullptr;
     wxSlider* m_rotationSlider = nullptr;
     wxStaticText* m_rotationLabel = nullptr;
+    wxToggleButton* m_spinButton = nullptr;
+    wxToggleButton* m_rockButton = nullptr;
+    float m_spinAngle = 0.0f;
+    bool m_spinning = false;
+    bool m_rocking = false;
+    float m_rockCenter = 0.0f;
+    float m_rockPhase = 0.0f;
     wxCheckBox* m_showUnselected = nullptr;
     wxCheckBox* m_showGridLines = nullptr;
     wxCheckBox* m_showHistograms = nullptr;
@@ -102,6 +112,7 @@ public:
     std::function<void(int brushIndex)> onBrushReset;  // reset brush to default
     std::function<void(int brushIndex, int symbol)> onBrushSymbolChanged;
     std::function<void(int brushIndex, float offset)> onBrushSizeOffsetChanged;
+    std::function<void(bool selectedOnly)> onSaveData;
 
     float GetPointSize() const;
     float GetOpacity() const;
@@ -126,6 +137,12 @@ private:
     bool m_ready = false;  // prevents dialogs during construction
 
     std::vector<std::string> m_columnNames;
+
+    wxTimer m_spinTimer;
+    static constexpr float SPIN_SPEED = 10.0f;  // degrees per second
+    static constexpr float ROCK_AMPLITUDE = 3.0f; // degrees
+    static constexpr int SPIN_INTERVAL_MS = 33; // ~30 fps
+    void OnSpinTimer(wxTimerEvent& event);
 
     // "All" page widgets
     wxChoice* m_colorVarChoice = nullptr;

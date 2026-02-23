@@ -24,6 +24,8 @@ find_library(WGPU_LIBRARY NAMES wgpu_native REQUIRED)
 find_path(WGPU_INCLUDE_DIR NAMES webgpu.h REQUIRED)
 
 # --- Apache Arrow / Parquet ---
+# Prefer Homebrew over Anaconda to avoid header/library version mismatch
+list(PREPEND CMAKE_PREFIX_PATH "/opt/homebrew")
 find_package(Arrow QUIET)
 find_package(Parquet QUIET)
 

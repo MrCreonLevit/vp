@@ -354,12 +354,72 @@ bool DataManager::saveAsCsv(const std::string& path, const std::vector<int>& sel
 }
 
 #ifdef HAS_PARQUET
-// Parquet loading via Apache Arrow
+// Parquet I/O via Apache Arrow
 #include <arrow/api.h>
 #include <arrow/io/file.h>
 #include <parquet/arrow/reader.h>
+#include <parquet/arrow/writer.h>
 #include <parquet/file_reader.h>
 #endif
+
+bool DataManager::saveAsParquet(const std::string& path, const std::vector<int>& selection) const {
+#ifndef HAS_PARQUET
+    fprintf(stderr, "Parquet support not available\n");
+    return false;
+#else
+    bool filterSelected = !selection.empty() && selection.size() == m_data.numRows;
+
+    // Count output rows
+    size_t outRows = 0;
+    if (filterSelected) {
+        for (size_t r = 0; r < m_data.numRows; r++)
+            if (selection[r] > 0) outRows++;
+    } else {
+        outRows = m_data.numRows;
+    }
+
+    // Build one Float32 array per column
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow::Array>> arrays;
+
+    for (size_t col = 0; col < m_data.numCols; col++) {
+        fields.push_back(arrow::field(m_data.columnLabels[col], arrow::float32()));
+
+        arrow::FloatBuilder builder;
+        auto st = builder.Reserve(static_cast<int64_t>(outRows));
+        if (!st.ok()) { fprintf(stderr, "Arrow reserve failed\n"); return false; }
+
+        for (size_t row = 0; row < m_data.numRows; row++) {
+            if (filterSelected && selection[row] == 0) continue;
+            builder.UnsafeAppend(m_data.data[row * m_data.numCols + col]);
+        }
+
+        std::shared_ptr<arrow::Array> arr;
+        st = builder.Finish(&arr);
+        if (!st.ok()) { fprintf(stderr, "Arrow build failed\n"); return false; }
+        arrays.push_back(arr);
+    }
+
+    auto schema = arrow::schema(fields);
+    auto table = arrow::Table::Make(schema, arrays, static_cast<int64_t>(outRows));
+
+    auto outResult = arrow::io::FileOutputStream::Open(path);
+    if (!outResult.ok()) {
+        fprintf(stderr, "Failed to open %s for writing\n", path.c_str());
+        return false;
+    }
+
+    auto st = parquet::arrow::WriteTable(*table, arrow::default_memory_pool(),
+                                          outResult.ValueOrDie(), outRows);
+    if (!st.ok()) {
+        fprintf(stderr, "Parquet write failed: %s\n", st.ToString().c_str());
+        return false;
+    }
+
+    fprintf(stderr, "Saved %zu rows to %s\n", outRows, path.c_str());
+    return true;
+#endif
+}
 
 bool DataManager::loadParquetFile(const std::string& path, ProgressCallback progress, size_t maxRows) {
 #ifndef HAS_PARQUET

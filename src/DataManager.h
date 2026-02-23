@@ -39,6 +39,9 @@ public:
     // Save data to CSV. If selection is provided, only saves rows where selection[row] > 0.
     bool saveAsCsv(const std::string& path, const std::vector<int>& selection = {}) const;
 
+    // Save data to Parquet. If selection is provided, only saves rows where selection[row] > 0.
+    bool saveAsParquet(const std::string& path, const std::vector<int>& selection = {}) const;
+
 private:
     bool isCommentLine(const std::string& line) const;
     std::vector<std::string> splitTokens(const std::string& line, char delimiter) const;

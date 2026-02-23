@@ -7,6 +7,7 @@
 #include "ColorMap.h"
 #include <wx/statline.h>
 #include <wx/colordlg.h>
+#include <cmath>
 
 // ============================================================
 // PlotTab
@@ -78,11 +79,19 @@ void PlotTab::CreateControls(int row, int col) {
     m_zAxis->SetSelection(0);
     sizer->Add(m_zAxis, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
 
-    // Rotation slider (for 3D)
+    // Rotation slider (for 3D) with spin button
     m_rotationLabel = new wxStaticText(this, wxID_ANY, "Rotation: 0");
     sizer->Add(m_rotationLabel, 0, wxLEFT, 8);
+    auto* rotRow = new wxBoxSizer(wxHORIZONTAL);
     m_rotationSlider = new wxSlider(this, wxID_ANY, 0, 0, 360);
-    sizer->Add(m_rotationSlider, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    rotRow->Add(m_rotationSlider, 1, wxALIGN_CENTER_VERTICAL);
+    m_spinButton = new wxToggleButton(this, wxID_ANY, "Spin",
+                                       wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    rotRow->Add(m_spinButton, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 2);
+    m_rockButton = new wxToggleButton(this, wxID_ANY, "Rock",
+                                       wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    rotRow->Add(m_rockButton, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 2);
+    sizer->Add(rotRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
@@ -167,8 +176,27 @@ void PlotTab::CreateControls(int row, int col) {
     m_rotationSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         if (m_suppress) return;
         float angle = static_cast<float>(m_rotationSlider->GetValue());
+        m_spinAngle = angle;
         m_rotationLabel->SetLabel(wxString::Format("Rotation: %d\u00B0", (int)angle));
         if (onRotationChanged) onRotationChanged(m_plotIndex, angle);
+    });
+    m_spinButton->Bind(wxEVT_TOGGLEBUTTON, [this](wxCommandEvent&) {
+        m_spinning = m_spinButton->GetValue();
+        if (m_spinning) {
+            m_spinAngle = static_cast<float>(m_rotationSlider->GetValue());
+            m_rocking = false;
+            m_rockButton->SetValue(false);
+        }
+    });
+    m_rockButton->Bind(wxEVT_TOGGLEBUTTON, [this](wxCommandEvent&) {
+        m_rocking = m_rockButton->GetValue();
+        if (m_rocking) {
+            m_spinAngle = static_cast<float>(m_rotationSlider->GetValue());
+            m_rockCenter = m_spinAngle;
+            m_rockPhase = 0.0f;
+            m_spinning = false;
+            m_spinButton->SetValue(false);
+        }
     });
     m_showHistograms->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
         if (onShowHistogramsChanged)
@@ -224,8 +252,13 @@ void PlotTab::SyncFromConfig(const PlotConfig& cfg) {
     // Z-axis: -1="(None)" maps to dropdown index 0, column N maps to index N+1
     m_zAxis->SetSelection(cfg.zCol < 0 ? 0 : std::min(cfg.zCol + 1, (int)m_zAxis->GetCount() - 1));
     if ((int)cfg.zNorm < m_zNorm->GetCount()) m_zNorm->SetSelection(static_cast<int>(cfg.zNorm));
-    m_rotationSlider->SetValue(static_cast<int>(cfg.rotationY));
-    m_rotationLabel->SetLabel(wxString::Format("Rotation: %d\u00B0", (int)cfg.rotationY));
+    if (!m_spinning && !m_rocking) {
+        m_spinAngle = cfg.rotationY;
+        m_rotationSlider->SetValue(static_cast<int>(cfg.rotationY));
+        m_rotationLabel->SetLabel(wxString::Format("Rotation: %d\u00B0", (int)cfg.rotationY));
+    }
+    m_spinButton->SetValue(m_spinning);
+    m_rockButton->SetValue(m_rocking);
     m_showUnselected->SetValue(cfg.showUnselected);
     m_showGridLines->SetValue(cfg.showGridLines);
     m_showHistograms->SetValue(cfg.showHistograms);
@@ -282,6 +315,8 @@ ControlPanel::ControlPanel(wxWindow* parent)
         "I: invert selection\n"
         "K: kill selected points\n"
         "R: reset all views\n"
+        "Cmd+S: save all data\n"
+        "Cmd+Shift+S: save selected\n"
         "Q: quit");
     helpText->SetForegroundColour(wxColour(120, 120, 120));
     auto hFont = helpText->GetFont();
@@ -292,6 +327,32 @@ ControlPanel::ControlPanel(wxWindow* parent)
     SetSizer(sizer);
     RebuildTabs(2, 2);
     m_ready = true;
+
+    // Single spin timer drives all spinning PlotTabs
+    m_spinTimer.SetOwner(this);
+    Bind(wxEVT_TIMER, &ControlPanel::OnSpinTimer, this);
+    m_spinTimer.Start(SPIN_INTERVAL_MS);
+}
+
+void ControlPanel::OnSpinTimer(wxTimerEvent&) {
+    float dt = SPIN_INTERVAL_MS / 1000.0f;
+    for (auto* tab : m_plotTabs) {
+        if (tab->m_spinning) {
+            tab->m_spinAngle += SPIN_SPEED * dt;
+            if (tab->m_spinAngle >= 360.0f) tab->m_spinAngle -= 360.0f;
+        } else if (tab->m_rocking) {
+            // Sinusoidal: match ~1s full cycle (2π radians/s phase rate)
+            tab->m_rockPhase += 2.0f * 3.14159265f * dt;
+            if (tab->m_rockPhase >= 2.0f * 3.14159265f)
+                tab->m_rockPhase -= 2.0f * 3.14159265f;
+            tab->m_spinAngle = tab->m_rockCenter + ROCK_AMPLITUDE * std::sin(tab->m_rockPhase);
+        } else {
+            continue;
+        }
+        tab->m_rotationSlider->SetValue(static_cast<int>(tab->m_spinAngle));
+        tab->m_rotationLabel->SetLabel(wxString::Format("Rotation: %d\u00B0", (int)tab->m_spinAngle));
+        if (onRotationChanged) onRotationChanged(tab->m_plotIndex, tab->m_spinAngle);
+    }
 }
 
 void ControlPanel::RebuildTabs(int rows, int cols) {
@@ -674,6 +735,15 @@ void ControlPanel::CreateAllPage() {
     btnSizer->Add(killBtn, 1);
     sizer->Add(btnSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
+    auto* saveSizer = new wxBoxSizer(wxHORIZONTAL);
+    auto* saveAllBtn = new wxButton(m_allPage, wxID_ANY, "Save All",
+                                     wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    auto* saveSelBtn = new wxButton(m_allPage, wxID_ANY, "Save Selected",
+                                     wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    saveSizer->Add(saveAllBtn, 1, wxRIGHT, 4);
+    saveSizer->Add(saveSelBtn, 1);
+    sizer->Add(saveSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+
     sizer->AddStretchSpacer();
     m_allPage->SetSizer(sizer);
     m_book->AddPage(m_allPage, "");
@@ -701,6 +771,12 @@ void ControlPanel::CreateAllPage() {
     });
     killBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         if (onKillSelected) onKillSelected();
+    });
+    saveAllBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (onSaveData) onSaveData(false);
+    });
+    saveSelBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (onSaveData) onSaveData(true);
     });
 }
 

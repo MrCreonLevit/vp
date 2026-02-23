@@ -62,8 +62,8 @@ void MainFrame::CreateMenuBar() {
     auto* fileMenu = new wxMenu();
     fileMenu->Append(wxID_OPEN, "&Open...\tCtrl+O", "Open a data file");
     fileMenu->AppendSeparator();
-    fileMenu->Append(ID_SaveAll, "Save &All...\tCtrl+S", "Save all data as CSV");
-    fileMenu->Append(ID_SaveSelected, "Save &Selected...\tCtrl+Shift+S", "Save selected points as CSV");
+    fileMenu->Append(ID_SaveAll, "Save &All...\tCtrl+S", "Save all data");
+    fileMenu->Append(ID_SaveSelected, "Save &Selected...\tCtrl+Shift+S", "Save selected points");
     fileMenu->AppendSeparator();
     fileMenu->Append(wxID_EXIT, "&Quit\tCtrl+Q", "Quit Viewpoints");
     menuBar->Append(fileMenu, "&File");
@@ -279,6 +279,10 @@ void MainFrame::CreateLayout() {
 
     m_controlPanel->onKillSelected = [this]() {
         KillSelectedPoints();
+    };
+
+    m_controlPanel->onSaveData = [this](bool selectedOnly) {
+        OnSave(selectedOnly);
     };
 
     m_controlPanel->onBrushChanged = [this](int brushIndex) {
@@ -1032,16 +1036,25 @@ void MainFrame::OnSave(bool selectedOnly) {
         }
     }
 
-    wxString defaultName = selectedOnly ? "selected.csv" : "data.csv";
+    wxString defaultName = selectedOnly ? "selected.parquet" : "data.parquet";
     wxFileDialog dialog(this,
         selectedOnly ? "Save Selected Points" : "Save All Data",
         "", defaultName,
-        "CSV files (*.csv)|*.csv|Text files (*.txt)|*.txt|All files (*.*)|*.*",
+        "Parquet files (*.parquet)|*.parquet|CSV files (*.csv)|*.csv|Text files (*.txt)|*.txt|All files (*.*)|*.*",
         wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
 
     if (dialog.ShowModal() == wxID_OK) {
         std::string path = dialog.GetPath().ToStdString();
-        bool ok = m_dataManager.saveAsCsv(path, selectedOnly ? m_selection : std::vector<int>{});
+        const auto& sel = selectedOnly ? m_selection : std::vector<int>{};
+
+        bool ok;
+        // Choose format based on file extension
+        if (path.size() >= 8 && path.substr(path.size() - 8) == ".parquet") {
+            ok = m_dataManager.saveAsParquet(path, sel);
+        } else {
+            ok = m_dataManager.saveAsCsv(path, sel);
+        }
+
         if (ok) {
             SetStatusText("Saved: " + dialog.GetPath());
         } else {
