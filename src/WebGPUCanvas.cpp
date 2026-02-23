@@ -118,6 +118,9 @@ void WebGPUCanvas::SetPanZoom(float panX, float panY, float zoomX, float zoomY) 
 void WebGPUCanvas::SetShowUnselected(bool show) {
     m_showUnselected = show;
     UpdatePointColors();
+    // Re-upload brush colors to GPU to ensure they're current after vertex rebuild
+    if (m_initialized && !m_brushColors.empty())
+        SetBrushColors(m_brushColors);
 }
 
 void WebGPUCanvas::SetShowGridLines(bool show) {
@@ -140,8 +143,9 @@ void WebGPUCanvas::SetUseAdditiveBlending(bool additive) {
     Refresh();
 }
 
-void WebGPUCanvas::SetColorMap(int colorMap) {
+void WebGPUCanvas::SetColorMap(int colorMap, int colorVariable) {
     m_colorMap = colorMap;
+    m_colorVariable = colorVariable;
     RecomputeDensityColors();
 }
 
@@ -161,26 +165,28 @@ void WebGPUCanvas::SetBrushColors(const std::vector<BrushColor>& colors) {
     m_brushColors = colors;
     // Upload brush data to GPU
     if (m_initialized && m_brushColorGpuBuffer && m_brushParamsGpuBuffer) {
-        float colorData[8 * 4] = {};  // 8 vec4f, 1-indexed (sel values are 1-7)
+        float colorData[8 * 4] = {};  // 8 vec4f: index 0=unselected, 1-7=brushes
         float paramData[8 * 4] = {};  // 8 vec4f
-        for (size_t i = 0; i < colors.size() && i < 7; i++) {
-            // Store at index i+1 since selection values are 1-based
-            size_t idx = i + 1;
-            colorData[idx * 4 + 0] = colors[i].r;
-            colorData[idx * 4 + 1] = colors[i].g;
-            colorData[idx * 4 + 2] = colors[i].b;
-            colorData[idx * 4 + 3] = m_opacity * colors[i].a * 2.0f;
-            paramData[idx * 4 + 0] = static_cast<float>(colors[i].symbol);
-            paramData[idx * 4 + 1] = std::max(0.1f, 1.0f + colors[i].sizeOffset / m_pointSize);
-            paramData[idx * 4 + 2] = 0.0f;
-            paramData[idx * 4 + 3] = 0.0f;
+        for (size_t i = 0; i < colors.size() && i < 8; i++) {
+            colorData[i * 4 + 0] = colors[i].r;
+            colorData[i * 4 + 1] = colors[i].g;
+            colorData[i * 4 + 2] = colors[i].b;
+            colorData[i * 4 + 3] = (i == 0) ? colors[i].a : m_opacity * colors[i].a * 2.0f;
+            paramData[i * 4 + 0] = static_cast<float>(colors[i].symbol);
+            paramData[i * 4 + 1] = std::max(0.1f, 1.0f + colors[i].sizeOffset / m_pointSize);
+            paramData[i * 4 + 2] = colors[i].useVertexColor ? 1.0f : 0.0f;
+            paramData[i * 4 + 3] = 0.0f;
         }
         auto queue = m_ctx->GetQueue();
         wgpuQueueWriteBuffer(queue, m_brushColorGpuBuffer, 0, colorData, sizeof(colorData));
         wgpuQueueWriteBuffer(queue, m_brushParamsGpuBuffer, 0, paramData, sizeof(paramData));
+
+        // Clear overlay buffer to avoid stale colors
+        if (m_selVertexBuffer) { wgpuBufferRelease(m_selVertexBuffer); m_selVertexBuffer = nullptr; }
+        m_selVertexCount = 0;
+
         Refresh();
     }
-    UpdatePointColors();  // still needed for overlay pass
 }
 
 void WebGPUCanvas::SetSelection(const std::vector<int>& sel) {
@@ -1043,6 +1049,8 @@ void WebGPUCanvas::UpdateSelectionRect() {
 
 void WebGPUCanvas::RecomputeDensityColors() {
     if (m_colorMap == 0 || m_basePositions.empty()) return;
+    // Variable-based coloring is set by UpdatePlot and doesn't change with zoom
+    if (m_colorVariable > 0) return;
 
     constexpr int GRID_SIZE = 128;
     size_t numPoints = m_basePositions.size() / 2;
@@ -1479,7 +1487,7 @@ void WebGPUCanvas::OnKeyDown(wxKeyEvent& event) {
             if (onResetViewRequested) onResetViewRequested();
             else ResetView();
             break;
-        case 'D':
+        case 'K':
             if (onKillRequested) onKillRequested();
             break;
         case 'Q':

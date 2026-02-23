@@ -40,16 +40,33 @@ fn vs_main(
     // Look up selection state from GPU buffer
     let sel = selection[instance_id];
 
-    var color = point_color;
-    var sym = point_symbol;
-    var size_scale = point_size_scale;
+    // All points use brush uniforms: brush 0 for unselected, brush 1-7 for selected
+    var brush_idx = sel;
+    if (brush_idx > 7u) { brush_idx = 0u; }
 
-    if (sel > 0u && sel <= 7u) {
-        // Selected: use brush color/params from uniform
-        color = brush_colors[sel];
-        sym = brush_params[sel].x;
-        size_scale = brush_params[sel].y;
+    // Color logic:
+    // brush_params[i].z = useVertexColor flag (1.0 = use vertex/colormap color)
+    var color: vec4f;
+    let use_vertex = brush_params[brush_idx].z > 0.5;
+
+    if (brush_idx == 0u) {
+        // Unselected points
+        if (use_vertex) {
+            color = point_color;  // colormap/default
+        } else {
+            color = vec4f(brush_colors[0].rgb, point_color.a);  // custom brush 0
+        }
+    } else {
+        // Selected points (brushes 1-7)
+        // Modulate brush color by vertex colormap brightness
+        // so density/variable structure shows through the selection color
+        let vertex_lum = dot(point_color.rgb, vec3f(0.299, 0.587, 0.114));
+        let base_lum = max(vertex_lum, 0.15);  // floor to avoid fully black
+        color = vec4f(brush_colors[brush_idx].rgb * base_lum * 3.0,
+                      brush_colors[brush_idx].a);
     }
+    var sym = brush_params[brush_idx].x;
+    var size_scale = brush_params[brush_idx].y;
 
     let clip = uniforms.projection * vec4f(point_pos, 0.0, 1.0);
     let effective_size = uniforms.point_size * size_scale;

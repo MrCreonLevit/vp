@@ -223,14 +223,14 @@ ControlPanel::ControlPanel(wxWindow* parent)
 
     auto* helpText = new wxStaticText(this, wxID_ANY,
         "Click plot: activate\n"
-        "Drag: select\n"
+        "Drag: select (brush) points\n"
         "Opt+drag: move selection\n"
         "Cmd+drag: extend selection\n"
         "Shift+drag: pan\n"
-        "Scroll: zoom\n"
+        "Scroll/pinch: zoom\n"
         "C: clear selection\n"
         "I: invert selection\n"
-        "D: kill selected points\n"
+        "K: kill selected points\n"
         "R: reset all views\n"
         "Q: quit");
     helpText->SetForegroundColour(wxColour(120, 120, 120));
@@ -399,7 +399,7 @@ void ControlPanel::SetColumns(const std::vector<std::string>& names) {
     // Update color variable dropdown
     if (m_colorVarChoice) {
         m_colorVarChoice->Clear();
-        m_colorVarChoice->Append("(position)");
+        m_colorVarChoice->Append("(density)");
         for (const auto& name : names)
             m_colorVarChoice->Append(name);
         m_colorVarChoice->SetSelection(0);
@@ -459,7 +459,7 @@ void ControlPanel::CreateAllPage() {
 
     sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Color By"), 0, wxLEFT | wxTOP, 8);
     m_colorVarChoice = new wxChoice(m_allPage, wxID_ANY);
-    m_colorVarChoice->Append("(position)");
+    m_colorVarChoice->Append("(density)");
     m_colorVarChoice->SetSelection(0);
     sizer->Add(m_colorVarChoice, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
@@ -532,11 +532,18 @@ void ControlPanel::CreateAllPage() {
 
     auto* brushSizer = new wxGridSizer(1, CP_NUM_BRUSHES, 2, 2);
     for (int i = 0; i < CP_NUM_BRUSHES; i++) {
-        auto* btn = new wxButton(m_allPage, wxID_ANY, wxString::Format("%d", i + 1),
+        // Button label: "0" for unselected, "1"-"7" for selection brushes
+        auto* btn = new wxButton(m_allPage, wxID_ANY, wxString::Format("%d", i),
                                   wxDefaultPosition, wxSize(26, 26), wxBU_EXACTFIT);
-        wxColour col(static_cast<unsigned char>(kDefaultBrushes[i].r * 255),
-                     static_cast<unsigned char>(kDefaultBrushes[i].g * 255),
-                     static_cast<unsigned char>(kDefaultBrushes[i].b * 255));
+        wxColour col;
+        if (i == 0) {
+            // Brush 0: default unselected color (dark blue)
+            col = wxColour(38, 102, 255);
+        } else {
+            col = wxColour(static_cast<unsigned char>(kDefaultBrushes[i - 1].r * 255),
+                           static_cast<unsigned char>(kDefaultBrushes[i - 1].g * 255),
+                           static_cast<unsigned char>(kDefaultBrushes[i - 1].b * 255));
+        }
         btn->SetBackgroundColour(col);
         btn->SetForegroundColour(*wxWHITE);
         m_brushButtons[i] = btn;
@@ -564,6 +571,10 @@ void ControlPanel::CreateAllPage() {
                 if (onBrushColorEdited)
                     onBrushColorEdited(i, r, g, b, a);
             }
+        });
+        // Right-click: reset brush to default (especially useful for brush 0)
+        btn->Bind(wxEVT_RIGHT_DOWN, [this, i](wxMouseEvent&) {
+            if (onBrushReset) onBrushReset(i);
         });
     }
     sizer->Add(brushSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
@@ -600,7 +611,7 @@ void ControlPanel::CreateAllPage() {
                                    wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
     auto* invertBtn = new wxButton(m_allPage, wxID_ANY, "Invert (I)",
                                     wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-    auto* killBtn = new wxButton(m_allPage, wxID_ANY, "Kill (D)",
+    auto* killBtn = new wxButton(m_allPage, wxID_ANY, "Kill (K)",
                                   wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
     btnSizer->Add(clearBtn, 1, wxRIGHT, 4);
     btnSizer->Add(invertBtn, 1, wxRIGHT, 4);
@@ -642,7 +653,7 @@ void ControlPanel::SelectBrush(int index) {
     for (int i = 0; i < CP_NUM_BRUSHES; i++) {
         if (m_brushButtons[i])
             m_brushButtons[i]->SetLabel(
-                i == index ? wxString::Format("[%d]", i + 1) : wxString::Format("%d", i + 1));
+                i == index ? wxString::Format("[%d]", i) : wxString::Format("%d", i));
     }
     if (onBrushChanged) onBrushChanged(index);
 }

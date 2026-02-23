@@ -45,7 +45,8 @@ struct BrushColor {
     float r, g, b;
     float a = 1.0f;
     int symbol = SYMBOL_CIRCLE;
-    float sizeOffset = 0.0f;  // additive point size offset for this brush (-10 to +20)
+    float sizeOffset = 0.0f;
+    bool useVertexColor = false;  // true = use vertex/colormap color (brush 0 default)
 };
 
 class WebGPUCanvas : public wxWindow {
@@ -64,7 +65,7 @@ public:
     void SetShowHistograms(bool show);
     void SetBackground(float brightness);
     void SetUseAdditiveBlending(bool additive);
-    void SetColorMap(int colorMap);  // 0 = default, else ColorMapType
+    void SetColorMap(int colorMap, int colorVariable = 0);  // colorVariable: 0=density, 1+=column
     void SetDeferRedraws(bool defer) { m_deferRedraws = defer; }
     void SetPanZoom(float panX, float panY, float zoomX, float zoomY);
     float GetPanX() const { return m_panX; }
@@ -180,6 +181,7 @@ private:
     float m_bgBrightness = 0.0f;
     bool m_useAdditive = true;
     int m_colorMap = 0;
+    int m_colorVariable = 0;  // 0=density, 1+=column index
     float m_pointSize = 6.0f;
     float m_opacity = 0.05f;
 

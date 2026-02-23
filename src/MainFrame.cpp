@@ -39,6 +39,9 @@ MainFrame::MainFrame()
     Centre();
 
     // Initialize default brush colors
+    // Brush 0 = unselected points (uses vertex/colormap color by default)
+    m_brushColors.push_back({0.15f, 0.4f, 1.0f, 1.0f, SYMBOL_CIRCLE, 0.0f, true});
+    // Brushes 1-7 = selection brushes
     for (int i = 0; i < NUM_BRUSHES; i++)
         m_brushColors.push_back({kDefaultBrushes[i].r, kDefaultBrushes[i].g, kDefaultBrushes[i].b, 1.0f, i % SYMBOL_COUNT});
 
@@ -230,10 +233,15 @@ void MainFrame::CreateLayout() {
         m_colorMap = static_cast<ColorMapType>(colormap);
         m_colorVariable = colorVar;
         bool additive = (m_colorMap == ColorMapType::Default);
+        // Reset brush 0 to vertex/colormap mode so the colormap takes effect
+        m_brushColors[0].useVertexColor = true;
+        // Upload brush params FIRST (so useVertexColor flag is current)
         for (auto* c : m_canvases) {
+            c->SetBrushColors(m_brushColors);
             c->SetUseAdditiveBlending(additive);
-            c->SetColorMap(colormap);
+            c->SetColorMap(colormap, colorVar);
         }
+        // Then rebuild plots with colormap-colored vertex data
         UpdateAllPlots();
     };
 
@@ -259,13 +267,34 @@ void MainFrame::CreateLayout() {
     };
 
     m_controlPanel->onBrushChanged = [this](int brushIndex) {
-        m_activeBrush = brushIndex + 1;
+        // Brush 0 controls unselected appearance; brushes 1-7 are selection brushes
+        // Active brush for selection: brush 0 maps to 1 (can't select with brush 0)
+        m_activeBrush = (brushIndex == 0) ? 1 : brushIndex;
+    };
+
+    m_controlPanel->onBrushReset = [this](int brushIndex) {
+        if (brushIndex >= 0 && brushIndex < (int)m_brushColors.size()) {
+            if (brushIndex == 0) {
+                // Reset brush 0 to vertex/colormap mode
+                m_brushColors[0] = {0.15f, 0.4f, 1.0f, 1.0f, SYMBOL_CIRCLE, 0.0f, true};
+            } else {
+                // Reset selection brush to default
+                int di = brushIndex - 1;
+                m_brushColors[brushIndex] = {
+                    kDefaultBrushes[di].r, kDefaultBrushes[di].g, kDefaultBrushes[di].b,
+                    1.0f, di % SYMBOL_COUNT, 0.0f, false};
+            }
+            for (auto* c : m_canvases)
+                c->SetBrushColors(m_brushColors);
+        }
     };
 
     m_controlPanel->onBrushColorEdited = [this](int brushIndex, float r, float g, float b, float a) {
         if (brushIndex >= 0 && brushIndex < (int)m_brushColors.size()) {
-            int sym = m_brushColors[brushIndex].symbol;  // preserve symbol
-            m_brushColors[brushIndex] = {r, g, b, a, sym};
+            int sym = m_brushColors[brushIndex].symbol;
+            float sizeOff = m_brushColors[brushIndex].sizeOffset;
+            // When user explicitly picks a color, disable vertex color mode
+            m_brushColors[brushIndex] = {r, g, b, a, sym, sizeOff, false};
             for (auto* c : m_canvases)
                 c->SetBrushColors(m_brushColors);
         }
@@ -691,39 +720,50 @@ void MainFrame::UpdatePlot(int plotIndex) {
     std::vector<PointVertex> points;
     points.reserve(numDisplay);
 
-    // Compute density-based coloring if a colormap is active
-    std::vector<float> densityValues;
+    // Compute colormap values if a non-default colormap is active
+    std::vector<float> colormapValues;
     if (m_colorMap != ColorMapType::Default) {
-        // Build 2D density grid
-        constexpr int GRID_SIZE = 128;
-        std::vector<int> grid(GRID_SIZE * GRID_SIZE, 0);
-        float dataMinX = -0.9f, dataMaxX = 0.9f;
-        float dataMinY = -0.9f, dataMaxY = 0.9f;
-        float gridW = (dataMaxX - dataMinX) / GRID_SIZE;
-        float gridH = (dataMaxY - dataMinY) / GRID_SIZE;
+        colormapValues.resize(ds.numRows);
 
-        for (size_t r = 0; r < ds.numRows; r++) {
-            int gx = static_cast<int>((xVals[r] - dataMinX) / gridW);
-            int gy = static_cast<int>((yVals[r] - dataMinY) / gridH);
-            gx = std::max(0, std::min(gx, GRID_SIZE - 1));
-            gy = std::max(0, std::min(gy, GRID_SIZE - 1));
-            grid[gy * GRID_SIZE + gx]++;
-        }
+        if (m_colorVariable == 0) {
+            // Color by density: build 2D density grid
+            constexpr int GRID_SIZE = 128;
+            std::vector<int> grid(GRID_SIZE * GRID_SIZE, 0);
+            float dataMinX = -0.9f, dataMaxX = 0.9f;
+            float dataMinY = -0.9f, dataMaxY = 0.9f;
+            float gridW = (dataMaxX - dataMinX) / GRID_SIZE;
+            float gridH = (dataMaxY - dataMinY) / GRID_SIZE;
 
-        // Find max density for normalization
-        int maxDensity = *std::max_element(grid.begin(), grid.end());
-        if (maxDensity == 0) maxDensity = 1;
+            for (size_t r = 0; r < ds.numRows; r++) {
+                int gx = static_cast<int>((xVals[r] - dataMinX) / gridW);
+                int gy = static_cast<int>((yVals[r] - dataMinY) / gridH);
+                gx = std::max(0, std::min(gx, GRID_SIZE - 1));
+                gy = std::max(0, std::min(gy, GRID_SIZE - 1));
+                grid[gy * GRID_SIZE + gx]++;
+            }
 
-        // Look up each point's density
-        densityValues.resize(ds.numRows);
-        for (size_t r = 0; r < ds.numRows; r++) {
-            int gx = static_cast<int>((xVals[r] - dataMinX) / gridW);
-            int gy = static_cast<int>((yVals[r] - dataMinY) / gridH);
-            gx = std::max(0, std::min(gx, GRID_SIZE - 1));
-            gy = std::max(0, std::min(gy, GRID_SIZE - 1));
-            // Use log scale for density to spread the dynamic range
-            float d = static_cast<float>(grid[gy * GRID_SIZE + gx]);
-            densityValues[r] = std::log(1.0f + d) / std::log(1.0f + maxDensity);
+            int maxDensity = *std::max_element(grid.begin(), grid.end());
+            if (maxDensity == 0) maxDensity = 1;
+
+            for (size_t r = 0; r < ds.numRows; r++) {
+                int gx = static_cast<int>((xVals[r] - dataMinX) / gridW);
+                int gy = static_cast<int>((yVals[r] - dataMinY) / gridH);
+                gx = std::max(0, std::min(gx, GRID_SIZE - 1));
+                gy = std::max(0, std::min(gy, GRID_SIZE - 1));
+                float d = static_cast<float>(grid[gy * GRID_SIZE + gx]);
+                colormapValues[r] = std::log(1.0f + d) / std::log(1.0f + maxDensity);
+            }
+        } else {
+            // Color by a specific column variable
+            size_t colorCol = static_cast<size_t>(m_colorVariable - 1);
+            if (colorCol < ds.numCols) {
+                float cMin, cMax;
+                ds.columnRange(colorCol, cMin, cMax);
+                float cRange = cMax - cMin;
+                if (cRange == 0.0f) cRange = 1.0f;
+                for (size_t r = 0; r < ds.numRows; r++)
+                    colormapValues[r] = (ds.value(r, colorCol) - cMin) / cRange;
+            }
         }
     }
 
@@ -732,8 +772,8 @@ void MainFrame::UpdatePlot(int plotIndex) {
         PointVertex v;
         v.x = xVals[r];
         v.y = yVals[r];
-        if (m_colorMap != ColorMapType::Default && r < densityValues.size()) {
-            ColorMapLookup(m_colorMap, densityValues[r], v.r, v.g, v.b);
+        if (m_colorMap != ColorMapType::Default && r < colormapValues.size()) {
+            ColorMapLookup(m_colorMap, colormapValues[r], v.r, v.g, v.b);
         } else {
             v.r = 0.15f; v.g = 0.4f; v.b = 1.0f;
         }

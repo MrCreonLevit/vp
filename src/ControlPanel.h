@@ -10,7 +10,7 @@
 
 struct PlotConfig;
 
-constexpr int CP_NUM_BRUSHES = 7;
+constexpr int CP_NUM_BRUSHES = 8;  // brush 0 (unselected) + brushes 1-7
 
 // Per-plot settings page
 class PlotTab : public wxScrolledWindow {
@@ -91,6 +91,7 @@ public:
     std::function<void()> onKillSelected;
     std::function<void(int brushIndex)> onBrushChanged;
     std::function<void(int brushIndex, float r, float g, float b, float a)> onBrushColorEdited;
+    std::function<void(int brushIndex)> onBrushReset;  // reset brush to default
     std::function<void(int brushIndex, int symbol)> onBrushSymbolChanged;
     std::function<void(int brushIndex, float offset)> onBrushSizeOffsetChanged;
 
