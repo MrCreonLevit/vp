@@ -53,8 +53,7 @@ std::vector<std::string> DataManager::splitTokens(const std::string& line, char 
     return tokens;
 }
 
-bool DataManager::loadFile(const std::string& path, ProgressCallback progress) {
-    // Dispatch based on file extension
+bool DataManager::loadFile(const std::string& path, ProgressCallback progress, size_t maxRows) {
     std::string ext;
     auto dot = path.find_last_of('.');
     if (dot != std::string::npos) {
@@ -62,12 +61,12 @@ bool DataManager::loadFile(const std::string& path, ProgressCallback progress) {
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
     }
     if (ext == "parquet" || ext == "pq") {
-        return loadParquetFile(path, progress);
+        return loadParquetFile(path, progress, maxRows);
     }
-    return loadAsciiFile(path, progress);
+    return loadAsciiFile(path, progress, maxRows);
 }
 
-bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progress) {
+bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progress, size_t maxRows) {
     m_filePath = path;
     m_error.clear();
     m_data = DataSet{};
@@ -222,6 +221,12 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
         parseLine(line);
         linesRead++;
 
+        // Check row limit
+        if (maxRows > 0 && m_data.numRows >= maxRows) {
+            fprintf(stderr, "Row limit reached: %zu rows\n", maxRows);
+            break;
+        }
+
         // Report progress every 10000 lines
         if (progress && linesRead % 10000 == 0) {
             if (!progress(bytesRead, totalBytes)) {
@@ -356,7 +361,7 @@ bool DataManager::saveAsCsv(const std::string& path, const std::vector<int>& sel
 #include <parquet/file_reader.h>
 #endif
 
-bool DataManager::loadParquetFile(const std::string& path, ProgressCallback progress) {
+bool DataManager::loadParquetFile(const std::string& path, ProgressCallback progress, size_t maxRows) {
 #ifndef HAS_PARQUET
     m_error = "Parquet support not available (install apache-arrow and rebuild)";
     return false;
@@ -391,7 +396,16 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
 
     int numCols = table->num_columns();
     int64_t numRows = table->num_rows();
-    fprintf(stderr, "Parquet: %lld rows x %d columns\n", numRows, numCols);
+
+    // Apply row limit
+    if (maxRows > 0 && numRows > static_cast<int64_t>(maxRows)) {
+        table = table->Slice(0, maxRows);
+        numRows = maxRows;
+        fprintf(stderr, "Parquet: limited to %lld rows (of %lld) x %d columns\n",
+                numRows, table->num_rows(), numCols);
+    } else {
+        fprintf(stderr, "Parquet: %lld rows x %d columns\n", numRows, numCols);
+    }
 
     // Identify numeric columns (skip string/binary/etc)
     std::vector<int> numericCols;

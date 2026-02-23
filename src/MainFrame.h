@@ -18,10 +18,13 @@ struct BrushColor;
 struct PlotConfig {
     size_t xCol = 0;
     size_t yCol = 1;
+    int zCol = -1;  // -1 = "None" (2D mode), 0+ = column index
     bool xLocked = false;
     bool yLocked = false;
     NormMode xNorm = NormMode::None;
     NormMode yNorm = NormMode::None;
+    NormMode zNorm = NormMode::None;
+    float rotationY = 0.0f;  // degrees, 0-360
     bool showUnselected = true;
     bool showGridLines = false;
     bool showHistograms = true;
@@ -34,6 +37,7 @@ class MainFrame : public wxFrame {
 public:
     MainFrame();
     void LoadFileFromPath(const std::string& path);
+    void SetMaxRows(size_t maxRows) { m_maxRows = maxRows; }
 
 private:
     void CreateMenuBar();
@@ -88,6 +92,7 @@ private:
     std::vector<int> m_selection;
     int m_activeBrush = 1;
     std::vector<BrushColor> m_brushColors;
+    size_t m_maxRows = 0;  // 0 = no limit
     ColorMapType m_colorMap = ColorMapType::Default;
     int m_colorVariable = 0;  // 0 = position, 1+ = column index
     float m_bgBrightness = 0.0f;

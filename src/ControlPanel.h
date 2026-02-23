@@ -30,6 +30,8 @@ public:
     std::function<void(int plotIndex, float alpha)> onOpacityChanged;
     std::function<void(int plotIndex, int bins)> onHistBinsChanged;
     std::function<void(int plotIndex, bool xLock, bool yLock)> onAxisLockChanged;
+    std::function<void(int plotIndex, int zCol, int zNorm)> onZAxisChanged;
+    std::function<void(int plotIndex, float angle)> onRotationChanged;
 
 private:
     void CreateControls(int row, int col);
@@ -39,10 +41,14 @@ private:
 
     wxChoice* m_xAxis = nullptr;
     wxChoice* m_yAxis = nullptr;
+    wxChoice* m_zAxis = nullptr;
     wxCheckBox* m_xLock = nullptr;
     wxCheckBox* m_yLock = nullptr;
     wxChoice* m_xNorm = nullptr;
     wxChoice* m_yNorm = nullptr;
+    wxChoice* m_zNorm = nullptr;
+    wxSlider* m_rotationSlider = nullptr;
+    wxStaticText* m_rotationLabel = nullptr;
     wxCheckBox* m_showUnselected = nullptr;
     wxCheckBox* m_showGridLines = nullptr;
     wxCheckBox* m_showHistograms = nullptr;
@@ -70,6 +76,8 @@ public:
     std::function<void(int plotIndex, int xCol, int yCol)> onAxisChanged;
     std::function<void(int plotIndex, bool xLock, bool yLock)> onAxisLockChanged;
     std::function<void(int plotIndex, int xNorm, int yNorm)> onNormChanged;
+    std::function<void(int plotIndex, int zCol, int zNorm)> onZAxisChanged;
+    std::function<void(int plotIndex, float angle)> onRotationChanged;
     std::function<void(int plotIndex, bool show)> onShowUnselectedChanged;
     std::function<void(int plotIndex, bool show)> onGridLinesChanged;
     std::function<void(int plotIndex, bool show)> onShowHistogramsChanged;

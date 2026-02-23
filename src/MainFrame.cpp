@@ -156,6 +156,21 @@ void MainFrame::CreateLayout() {
         }
     };
 
+    m_controlPanel->onZAxisChanged = [this](int plotIndex, int zCol, int zNorm) {
+        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
+            m_plotConfigs[plotIndex].zCol = zCol;
+            m_plotConfigs[plotIndex].zNorm = static_cast<NormMode>(zNorm);
+            UpdatePlot(plotIndex);
+        }
+    };
+
+    m_controlPanel->onRotationChanged = [this](int plotIndex, float angle) {
+        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
+            m_plotConfigs[plotIndex].rotationY = angle;
+            m_canvases[plotIndex]->SetRotation(angle);
+        }
+    };
+
     m_controlPanel->onShowUnselectedChanged = [this](int plotIndex, bool show) {
         if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
             m_plotConfigs[plotIndex].showUnselected = show;
@@ -694,6 +709,13 @@ void MainFrame::UpdatePlot(int plotIndex) {
     auto xVals = NormalizeColumn(&ds.data[cfg.xCol], ds.numRows, ds.numCols, cfg.xNorm);
     auto yVals = NormalizeColumn(&ds.data[cfg.yCol], ds.numRows, ds.numCols, cfg.yNorm);
 
+    // Z-axis normalization (optional)
+    std::vector<float> zVals;
+    bool hasZ = (cfg.zCol >= 0 && static_cast<size_t>(cfg.zCol) < ds.numCols);
+    if (hasZ) {
+        zVals = NormalizeColumn(&ds.data[cfg.zCol], ds.numRows, ds.numCols, cfg.zNorm);
+    }
+
     float opacity = m_controlPanel->GetOpacity();
 
     // Subsample if dataset is very large to avoid GPU memory issues
@@ -769,9 +791,10 @@ void MainFrame::UpdatePlot(int plotIndex) {
 
     for (size_t di = 0; di < numDisplay; di++) {
         size_t r = subsampled ? displayIndices[di] : di;
-        PointVertex v;
+        PointVertex v{};
         v.x = xVals[r];
         v.y = yVals[r];
+        v.z = hasZ ? zVals[r] : 0.0f;
         if (m_colorMap != ColorMapType::Default && r < colormapValues.size()) {
             ColorMapLookup(m_colorMap, colormapValues[r], v.r, v.g, v.b);
         } else {
@@ -783,6 +806,12 @@ void MainFrame::UpdatePlot(int plotIndex) {
         points.push_back(v);
     }
 
+    // Pass display indices for subsampled datasets
+    if (subsampled) {
+        m_canvases[plotIndex]->SetDisplayIndices(displayIndices);
+    } else {
+        m_canvases[plotIndex]->SetDisplayIndices({});  // clear
+    }
     m_canvases[plotIndex]->SetPoints(std::move(points));
 
     // Set axis labels
@@ -827,12 +856,22 @@ void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, flo
             if (s == m_activeBrush) s = 0;
     }
 
+    int matchCount = 0;
     for (size_t r = 0; r < ds.numRows; r++) {
         if (xVals[r] >= rectMinX && xVals[r] <= rectMaxX &&
             yVals[r] >= rectMinY && yVals[r] <= rectMaxY) {
             m_selection[r] = m_activeBrush;
+            matchCount++;
         }
     }
+    fprintf(stderr, "HandleBrushRect: rect=[%.3f,%.3f]x[%.3f,%.3f] matched=%d/%zu brush=%d\n",
+            rectMinX, rectMaxX, rectMinY, rectMaxY, matchCount, ds.numRows, m_activeBrush);
+    fprintf(stderr, "  xVals range: [%.3f, %.3f], yVals range: [%.3f, %.3f]\n",
+            *std::min_element(xVals.begin(), xVals.end()),
+            *std::max_element(xVals.begin(), xVals.end()),
+            *std::min_element(yVals.begin(), yVals.end()),
+            *std::max_element(yVals.begin(), yVals.end()));
+    fflush(stderr);
 
     PropagateSelection(m_selection);
 }
@@ -883,17 +922,23 @@ void MainFrame::LoadFile(const std::string& path) {
                                   wxPD_APP_MODAL | wxPD_AUTO_HIDE | wxPD_SMOOTH | wxPD_CAN_ABORT);
 
     bool cancelled = false;
-    auto progressCb = [&](size_t bytesRead, size_t totalBytes) -> bool {
-        int pct = (totalBytes > 0) ? static_cast<int>((bytesRead * 100) / totalBytes) : 0;
+    auto progressCb = [&](size_t current, size_t total) -> bool {
+        int pct = (total > 0) ? static_cast<int>((current * 100) / total) : 0;
         pct = std::min(pct, 99);
-        cancelled = !progressDlg.Update(pct,
-            wxString::Format("Loading... %zu KB / %zu KB",
-                             bytesRead / 1024, totalBytes / 1024));
-        wxYield();  // keep UI responsive
+        wxString msg;
+        if (total > 10000) {
+            // Large values = bytes (ASCII loader)
+            msg = wxString::Format("Loading... %zu KB / %zu KB", current / 1024, total / 1024);
+        } else {
+            // Small values = columns or other units (Parquet loader)
+            msg = wxString::Format("Loading... %zu / %zu", current, total);
+        }
+        cancelled = !progressDlg.Update(pct, msg);
+        wxYield();
         return !cancelled;
     };
 
-    if (!m_dataManager.loadFile(path, progressCb)) {
+    if (!m_dataManager.loadFile(path, progressCb, m_maxRows)) {
         if (!cancelled) {
             wxMessageBox("Failed to load file:\n" + m_dataManager.errorMessage(),
                          "Load Error", wxOK | wxICON_ERROR, this);

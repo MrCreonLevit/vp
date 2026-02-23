@@ -65,6 +65,25 @@ void PlotTab::CreateControls(int row, int col) {
     m_yAxis = new wxChoice(this, wxID_ANY);
     sizer->Add(m_yAxis, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 4);
 
+    // Z-axis (optional 3D)
+    auto* zRow = new wxBoxSizer(wxHORIZONTAL);
+    zRow->Add(new wxStaticText(this, wxID_ANY, "Z-axis"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    m_zNorm = new wxChoice(this, wxID_ANY);
+    for (const auto& name : AllNormModeNames()) m_zNorm->Append(name);
+    m_zNorm->SetSelection(0);
+    zRow->Add(m_zNorm, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(zRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 4);
+    m_zAxis = new wxChoice(this, wxID_ANY);
+    m_zAxis->Append("(None)");
+    m_zAxis->SetSelection(0);
+    sizer->Add(m_zAxis, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
+
+    // Rotation slider (for 3D)
+    m_rotationLabel = new wxStaticText(this, wxID_ANY, "Rotation: 0");
+    sizer->Add(m_rotationLabel, 0, wxLEFT, 8);
+    m_rotationSlider = new wxSlider(this, wxID_ANY, 0, 0, 360);
+    sizer->Add(m_rotationSlider, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
     m_showUnselected = new wxCheckBox(this, wxID_ANY, "Show unselected");
@@ -131,6 +150,26 @@ void PlotTab::CreateControls(int row, int col) {
         if (onAxisLockChanged)
             onAxisLockChanged(m_plotIndex, m_xLock->GetValue(), m_yLock->GetValue());
     });
+    m_zAxis->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        if (!m_suppress && onZAxisChanged) {
+            int sel = m_zAxis->GetSelection();
+            int zCol = (sel == 0) ? -1 : sel - 1;  // 0="(None)", 1+=column index
+            onZAxisChanged(m_plotIndex, zCol, m_zNorm->GetSelection());
+        }
+    });
+    m_zNorm->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        if (!m_suppress && onZAxisChanged) {
+            int sel = m_zAxis->GetSelection();
+            int zCol = (sel == 0) ? -1 : sel - 1;
+            onZAxisChanged(m_plotIndex, zCol, m_zNorm->GetSelection());
+        }
+    });
+    m_rotationSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
+        if (m_suppress) return;
+        float angle = static_cast<float>(m_rotationSlider->GetValue());
+        m_rotationLabel->SetLabel(wxString::Format("Rotation: %d\u00B0", (int)angle));
+        if (onRotationChanged) onRotationChanged(m_plotIndex, angle);
+    });
     m_showHistograms->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
         if (onShowHistogramsChanged)
             onShowHistogramsChanged(m_plotIndex, m_showHistograms->GetValue());
@@ -159,12 +198,18 @@ void PlotTab::SetColumns(const std::vector<std::string>& names) {
     m_suppress = true;
     int xSel = m_xAxis->GetSelection();
     int ySel = m_yAxis->GetSelection();
+    int zSel = m_zAxis->GetSelection();
     m_xAxis->Clear(); m_yAxis->Clear();
-    for (const auto& name : names) { m_xAxis->Append(name); m_yAxis->Append(name); }
+    m_zAxis->Clear(); m_zAxis->Append("(None)");
+    for (const auto& name : names) {
+        m_xAxis->Append(name); m_yAxis->Append(name); m_zAxis->Append(name);
+    }
     if (xSel >= 0 && xSel < (int)names.size()) m_xAxis->SetSelection(xSel);
     else if (!names.empty()) m_xAxis->SetSelection(0);
     if (ySel >= 0 && ySel < (int)names.size()) m_yAxis->SetSelection(ySel);
     else if (names.size() > 1) m_yAxis->SetSelection(1);
+    if (zSel >= 0 && zSel < (int)m_zAxis->GetCount()) m_zAxis->SetSelection(zSel);
+    else m_zAxis->SetSelection(0);
     m_suppress = false;
 }
 
@@ -176,6 +221,11 @@ void PlotTab::SyncFromConfig(const PlotConfig& cfg) {
     m_yLock->SetValue(cfg.yLocked);
     if ((int)cfg.xNorm < m_xNorm->GetCount()) m_xNorm->SetSelection(static_cast<int>(cfg.xNorm));
     if ((int)cfg.yNorm < m_yNorm->GetCount()) m_yNorm->SetSelection(static_cast<int>(cfg.yNorm));
+    // Z-axis: -1="(None)" maps to dropdown index 0, column N maps to index N+1
+    m_zAxis->SetSelection(cfg.zCol < 0 ? 0 : std::min(cfg.zCol + 1, (int)m_zAxis->GetCount() - 1));
+    if ((int)cfg.zNorm < m_zNorm->GetCount()) m_zNorm->SetSelection(static_cast<int>(cfg.zNorm));
+    m_rotationSlider->SetValue(static_cast<int>(cfg.rotationY));
+    m_rotationLabel->SetLabel(wxString::Format("Rotation: %d\u00B0", (int)cfg.rotationY));
     m_showUnselected->SetValue(cfg.showUnselected);
     m_showGridLines->SetValue(cfg.showGridLines);
     m_showHistograms->SetValue(cfg.showHistograms);
@@ -286,6 +336,12 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
         };
         tab->onNormChanged = [this](int pi, int xn, int yn) {
             if (onNormChanged) onNormChanged(pi, xn, yn);
+        };
+        tab->onZAxisChanged = [this](int pi, int zCol, int zNorm) {
+            if (onZAxisChanged) onZAxisChanged(pi, zCol, zNorm);
+        };
+        tab->onRotationChanged = [this](int pi, float angle) {
+            if (onRotationChanged) onRotationChanged(pi, angle);
         };
         tab->onShowUnselectedChanged = [this](int pi, bool show) {
             if (onShowUnselectedChanged) onShowUnselectedChanged(pi, show);

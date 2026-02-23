@@ -10,18 +10,19 @@
 class WebGPUContext;
 
 struct PointVertex {
-    float x, y;
+    float x, y, z;    // 3D position (z=0 for 2D mode)
     float r, g, b, a;
-    float symbol;     // 0=circle, 1=square, 2=diamond, 3=triangle, etc.
-    float sizeScale;  // multiplier for point size (1.0 = default)
+    float symbol;
+    float sizeScale;
 };
+// 36 bytes
 
 struct Uniforms {
     float projection[16];
     float pointSize;
     float viewportW;
     float viewportH;
-    float _pad;
+    float rotationY;  // radians, rotation around screen Y axis
 };
 
 // Symbol types
@@ -55,6 +56,7 @@ public:
     ~WebGPUCanvas() override;
 
     void SetPoints(std::vector<PointVertex> points);
+    void SetDisplayIndices(std::vector<size_t> indices);  // for subsampled datasets
     void SetAxisInfo(const std::string& xLabel, const std::string& yLabel,
                      float xDataMin, float xDataMax, float yDataMin, float yDataMax);
     void SetPointSize(float size);
@@ -67,6 +69,7 @@ public:
     void SetUseAdditiveBlending(bool additive);
     void SetColorMap(int colorMap, int colorVariable = 0);  // colorVariable: 0=density, 1+=column
     void SetDeferRedraws(bool defer) { m_deferRedraws = defer; }
+    void SetRotation(float degrees);
     void SetPanZoom(float panX, float panY, float zoomX, float zoomY);
     float GetPanX() const { return m_panX; }
     float GetPanY() const { return m_panY; }
@@ -150,6 +153,7 @@ private:
     std::vector<PointVertex> m_points;
     std::vector<float> m_basePositions;
     std::vector<float> m_baseColors;  // original r,g,b per point (3 floats each)
+    std::vector<size_t> m_displayIndices;  // maps display point → original data row
     Uniforms m_uniforms = {};
 
     // Selection state (0 = unselected, 1-7 = brush index)
@@ -188,6 +192,7 @@ private:
     // View state (independent X and Y zoom for axis lock)
     float m_panX = 0.0f, m_panY = 0.0f;
     float m_zoomX = 1.0f, m_zoomY = 1.0f;
+    float m_rotationY = 0.0f;  // degrees
 
     // Selection rectangle rendering
     WGPUBuffer m_selRectBuffer = nullptr;

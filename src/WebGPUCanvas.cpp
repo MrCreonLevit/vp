@@ -66,6 +66,10 @@ WebGPUCanvas::~WebGPUCanvas() {
     Cleanup();
 }
 
+void WebGPUCanvas::SetDisplayIndices(std::vector<size_t> indices) {
+    m_displayIndices = std::move(indices);
+}
+
 void WebGPUCanvas::SetPoints(std::vector<PointVertex> points) {
     m_basePositions.resize(points.size() * 2);
     m_baseColors.resize(points.size() * 3);
@@ -133,6 +137,11 @@ void WebGPUCanvas::SetShowHistograms(bool show) {
     Refresh();
 }
 
+void WebGPUCanvas::SetRotation(float degrees) {
+    m_rotationY = degrees;
+    Refresh();
+}
+
 void WebGPUCanvas::SetBackground(float brightness) {
     m_bgBrightness = brightness;
     Refresh();
@@ -190,14 +199,37 @@ void WebGPUCanvas::SetBrushColors(const std::vector<BrushColor>& colors) {
 }
 
 void WebGPUCanvas::SetSelection(const std::vector<int>& sel) {
-    if (sel.size() != m_selection.size()) return;
-    m_selection = sel;
+    // If subsampled, remap full-dataset selection to display indices
+    if (!m_displayIndices.empty()) {
+        if (sel.size() < m_displayIndices.back() + 1) {
+            fprintf(stderr, "  Plot %d: SetSelection SKIP: sel=%zu < displayIndices.back()+1=%zu\n",
+                    m_plotIndex, sel.size(), m_displayIndices.back() + 1);
+            return;
+        }
+        m_selection.resize(m_displayIndices.size());
+        int selCount = 0;
+        for (size_t i = 0; i < m_displayIndices.size(); i++) {
+            m_selection[i] = sel[m_displayIndices[i]];
+            if (m_selection[i] > 0) selCount++;
+        }
+        static int dbgCount = 0;
+        if (dbgCount++ % 20 == 0) {
+            int fullSelCount = 0;
+            for (auto s : sel) if (s > 0) fullSelCount++;
+            fprintf(stderr, "  Plot %d: remap %zu→%zu, fullSel=%d, displaySel=%d, points=%zu\n",
+                    m_plotIndex, sel.size(), m_displayIndices.size(),
+                    fullSelCount, selCount, m_points.size());
+        }
+    } else {
+        if (sel.size() != m_selection.size()) return;
+        m_selection = sel;
+    }
 
-    // Upload selection to GPU storage buffer (fast path!)
+    // Upload remapped selection to GPU storage buffer
     if (m_initialized && m_ctx) {
         auto device = m_ctx->GetDevice();
         auto queue = m_ctx->GetQueue();
-        size_t numPoints = sel.size();
+        size_t numPoints = m_selection.size();  // use remapped size, not raw input
 
         // Resize GPU selection buffer if needed
         if (numPoints != m_selectionBufferSize) {
@@ -226,10 +258,10 @@ void WebGPUCanvas::SetSelection(const std::vector<int>& sel) {
             m_selectionBindGroup = wgpuDeviceCreateBindGroup(device, &bgDesc);
         }
 
-        // Convert int selection to u32 and upload
+        // Convert remapped selection to u32 and upload
         std::vector<uint32_t> selU32(numPoints);
         for (size_t i = 0; i < numPoints; i++)
-            selU32[i] = static_cast<uint32_t>(sel[i]);
+            selU32[i] = static_cast<uint32_t>(m_selection[i]);
         wgpuQueueWriteBuffer(queue, m_selectionGpuBuffer, 0,
                              selU32.data(), numPoints * sizeof(uint32_t));
     }
@@ -272,6 +304,7 @@ void WebGPUCanvas::ResetView() {
     m_panY = 0.0f;
     m_zoomX = 1.0f;
     m_zoomY = 1.0f;
+    m_rotationY = 0.0f;
     if (m_initialized) {
         Refresh();
         Update();  // force immediate repaint
@@ -527,7 +560,7 @@ void WebGPUCanvas::CreatePipeline() {
     quadAttr.shaderLocation = 0;
 
     WGPUVertexAttribute instanceAttrs[4] = {};
-    instanceAttrs[0].format = WGPUVertexFormat_Float32x2;  // position
+    instanceAttrs[0].format = WGPUVertexFormat_Float32x3;  // position (x, y, z)
     instanceAttrs[0].offset = offsetof(PointVertex, x);
     instanceAttrs[0].shaderLocation = 1;
     instanceAttrs[1].format = WGPUVertexFormat_Float32x4;  // color
@@ -823,10 +856,10 @@ void WebGPUCanvas::UpdateHistograms() {
     // Filled rectangle helper
     auto addFilledBar = [&](float x0, float y0, float x1, float y1,
                             float r, float g, float b, float a) {
-        PointVertex tl = {x0, y1, r, g, b, a};
-        PointVertex tr = {x1, y1, r, g, b, a};
-        PointVertex bl = {x0, y0, r, g, b, a};
-        PointVertex br = {x1, y0, r, g, b, a};
+        PointVertex tl = {x0, y1, 0, r, g, b, a};
+        PointVertex tr = {x1, y1, 0, r, g, b, a};
+        PointVertex bl = {x0, y0, 0, r, g, b, a};
+        PointVertex br = {x1, y0, 0, r, g, b, a};
         histVerts.push_back(bl); histVerts.push_back(br); histVerts.push_back(tr);
         histVerts.push_back(bl); histVerts.push_back(tr); histVerts.push_back(tl);
     };
@@ -956,10 +989,10 @@ void WebGPUCanvas::UpdateGridLines() {
     float r = 0.3f, g = 0.3f, b = 0.4f, a = 0.5f;
 
     auto addFilledBar = [&](float x0, float y0, float x1, float y1) {
-        PointVertex tl = {x0, y1, r, g, b, a};
-        PointVertex tr = {x1, y1, r, g, b, a};
-        PointVertex bl = {x0, y0, r, g, b, a};
-        PointVertex br = {x1, y0, r, g, b, a};
+        PointVertex tl = {x0, y1, 0, r, g, b, a};
+        PointVertex tr = {x1, y1, 0, r, g, b, a};
+        PointVertex bl = {x0, y0, 0, r, g, b, a};
+        PointVertex br = {x1, y0, 0, r, g, b, a};
         lineVerts.push_back(bl); lineVerts.push_back(br); lineVerts.push_back(tr);
         lineVerts.push_back(bl); lineVerts.push_back(tr); lineVerts.push_back(tl);
     };
@@ -1018,10 +1051,10 @@ void WebGPUCanvas::UpdateSelectionRect() {
     std::vector<PointVertex> verts;
     float r = 1.0f, g = 1.0f, b = 1.0f, a = 0.8f;
     auto addBar = [&](float x0, float y0, float x1, float y1) {
-        PointVertex tl = {x0, y1, r, g, b, a, 1.0f, 1.0f};
-        PointVertex tr = {x1, y1, r, g, b, a, 1.0f, 1.0f};
-        PointVertex bl = {x0, y0, r, g, b, a, 1.0f, 1.0f};
-        PointVertex br = {x1, y0, r, g, b, a, 1.0f, 1.0f};
+        PointVertex tl = {x0, y1, 0, r, g, b, a, 1.0f, 1.0f};
+        PointVertex tr = {x1, y1, 0, r, g, b, a, 1.0f, 1.0f};
+        PointVertex bl = {x0, y0, 0, r, g, b, a, 1.0f, 1.0f};
+        PointVertex br = {x1, y0, 0, r, g, b, a, 1.0f, 1.0f};
         verts.push_back(bl); verts.push_back(br); verts.push_back(tr);
         verts.push_back(bl); verts.push_back(tr); verts.push_back(tl);
     };
@@ -1130,6 +1163,7 @@ void WebGPUCanvas::UpdateUniforms() {
     m_uniforms.pointSize = m_pointSize * static_cast<float>(scale);
     m_uniforms.viewportW = static_cast<float>(size.GetWidth() * scale);
     m_uniforms.viewportH = static_cast<float>(size.GetHeight() * scale);
+    m_uniforms.rotationY = m_rotationY * 3.14159265f / 180.0f;  // degrees to radians
 
     wgpuQueueWriteBuffer(m_ctx->GetQueue(), m_uniformBuffer, 0, &m_uniforms, sizeof(Uniforms));
 }

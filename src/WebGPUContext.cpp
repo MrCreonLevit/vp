@@ -11,7 +11,7 @@ struct Uniforms {
     point_size: f32,
     viewport_w: f32,
     viewport_h: f32,
-    _pad: f32,
+    rotation_y: f32,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -32,7 +32,7 @@ struct VertexOutput {
 fn vs_main(
     @builtin(instance_index) instance_id: u32,
     @location(0) quad_pos: vec2f,
-    @location(1) point_pos: vec2f,
+    @location(1) point_pos: vec3f,
     @location(2) point_color: vec4f,
     @location(3) point_symbol: f32,
     @location(4) point_size_scale: f32,
@@ -68,7 +68,16 @@ fn vs_main(
     var sym = brush_params[brush_idx].x;
     var size_scale = brush_params[brush_idx].y;
 
-    let clip = uniforms.projection * vec4f(point_pos, 0.0, 1.0);
+    // Apply Y-axis rotation for 3D isometric view
+    let cos_r = cos(uniforms.rotation_y);
+    let sin_r = sin(uniforms.rotation_y);
+    let rotated = vec3f(
+        point_pos.x * cos_r + point_pos.z * sin_r,
+        point_pos.y,
+        -point_pos.x * sin_r + point_pos.z * cos_r
+    );
+    // Orthographic projection of rotated XY (drop Z after rotation)
+    let clip = uniforms.projection * vec4f(rotated.xy, 0.0, 1.0);
     let effective_size = uniforms.point_size * size_scale;
     let pixel_offset = quad_pos * effective_size;
     let ndc_offset = vec2f(
