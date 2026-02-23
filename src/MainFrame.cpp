@@ -693,6 +693,21 @@ void MainFrame::HighlightAllPlots() {
     for (auto* c : m_canvases) c->SetActive(false);
 }
 
+const std::vector<float>& MainFrame::GetNormalized(size_t col, NormMode mode) {
+    NormCacheKey key{col, mode};
+    auto it = m_normCache.find(key);
+    if (it != m_normCache.end())
+        return it->second;
+    const auto& ds = m_dataManager.dataset();
+    auto& cached = m_normCache[key];
+    cached = NormalizeColumn(&ds.data[col], ds.numRows, ds.numCols, mode);
+    return cached;
+}
+
+void MainFrame::InvalidateNormCache() {
+    m_normCache.clear();
+}
+
 void MainFrame::UpdatePlot(int plotIndex) {
     const auto& ds = m_dataManager.dataset();
     if (ds.numRows == 0 || plotIndex < 0 || plotIndex >= (int)m_canvases.size())
@@ -705,15 +720,15 @@ void MainFrame::UpdatePlot(int plotIndex) {
     if (cfg.xCol >= ds.numCols) cfg.xCol = 0;
     if (cfg.yCol >= ds.numCols) cfg.yCol = 0;
 
-    // Normalize each axis according to its per-plot per-axis mode
-    auto xVals = NormalizeColumn(&ds.data[cfg.xCol], ds.numRows, ds.numCols, cfg.xNorm);
-    auto yVals = NormalizeColumn(&ds.data[cfg.yCol], ds.numRows, ds.numCols, cfg.yNorm);
+    // Normalize each axis using cache
+    const auto& xVals = GetNormalized(cfg.xCol, cfg.xNorm);
+    const auto& yVals = GetNormalized(cfg.yCol, cfg.yNorm);
 
     // Z-axis normalization (optional)
-    std::vector<float> zVals;
     bool hasZ = (cfg.zCol >= 0 && static_cast<size_t>(cfg.zCol) < ds.numCols);
+    const std::vector<float>* zValsPtr = nullptr;
     if (hasZ) {
-        zVals = NormalizeColumn(&ds.data[cfg.zCol], ds.numRows, ds.numCols, cfg.zNorm);
+        zValsPtr = &GetNormalized(static_cast<size_t>(cfg.zCol), cfg.zNorm);
     }
 
     float opacity = m_controlPanel->GetOpacity();
@@ -794,7 +809,7 @@ void MainFrame::UpdatePlot(int plotIndex) {
         PointVertex v{};
         v.x = xVals[r];
         v.y = yVals[r];
-        v.z = hasZ ? zVals[r] : 0.0f;
+        v.z = hasZ ? (*zValsPtr)[r] : 0.0f;
         if (m_colorMap != ColorMapType::Default && r < colormapValues.size()) {
             ColorMapLookup(m_colorMap, colormapValues[r], v.r, v.g, v.b);
         } else {
@@ -836,11 +851,11 @@ void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, flo
         return;
 
     // The brush rect is in the normalized coordinate space of the brushing plot.
-    // Re-normalize the data using the same normalization to test against the rect.
+    // Use cached normalization to avoid recomputing on every drag event.
     auto& cfg = m_plotConfigs[plotIndex];
 
-    auto xVals = NormalizeColumn(&ds.data[cfg.xCol], ds.numRows, ds.numCols, cfg.xNorm);
-    auto yVals = NormalizeColumn(&ds.data[cfg.yCol], ds.numRows, ds.numCols, cfg.yNorm);
+    const auto& xVals = GetNormalized(cfg.xCol, cfg.xNorm);
+    const auto& yVals = GetNormalized(cfg.yCol, cfg.yNorm);
 
     float rectMinX = std::min(x0, x1);
     float rectMaxX = std::max(x0, x1);
@@ -906,6 +921,7 @@ void MainFrame::KillSelectedPoints() {
     size_t removed = m_dataManager.removeSelectedRows(m_selection);
     if (removed == 0) return;
 
+    InvalidateNormCache();
     // Reset selection and rebuild all plots with reduced data
     const auto& ds = m_dataManager.dataset();
     m_selection.assign(ds.numRows, 0);
@@ -952,6 +968,7 @@ void MainFrame::LoadFile(const std::string& path) {
     fprintf(stderr, "Processing %zu rows x %zu cols\n", ds.numRows, ds.numCols);
     fflush(stderr);
 
+    InvalidateNormCache();
     m_controlPanel->SetColumns(ds.columnLabels);
     m_selection.assign(ds.numRows, 0);
 

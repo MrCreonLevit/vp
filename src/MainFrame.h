@@ -10,6 +10,7 @@
 #include "VerticalLabel.h"
 #include <vector>
 #include <array>
+#include <unordered_map>
 
 class WebGPUCanvas;
 class ControlPanel;
@@ -96,6 +97,21 @@ private:
     ColorMapType m_colorMap = ColorMapType::Default;
     int m_colorVariable = 0;  // 0 = position, 1+ = column index
     float m_bgBrightness = 0.0f;
+
+    // Normalized column cache: avoids recomputing on every brush drag
+    struct NormCacheKey {
+        size_t col;
+        NormMode mode;
+        bool operator==(const NormCacheKey& o) const { return col == o.col && mode == o.mode; }
+    };
+    struct NormCacheHash {
+        size_t operator()(const NormCacheKey& k) const {
+            return std::hash<size_t>()(k.col) ^ (std::hash<int>()(static_cast<int>(k.mode)) << 16);
+        }
+    };
+    std::unordered_map<NormCacheKey, std::vector<float>, NormCacheHash> m_normCache;
+    const std::vector<float>& GetNormalized(size_t col, NormMode mode);
+    void InvalidateNormCache();
 
     enum {
         ID_AddRow = wxID_HIGHEST + 1,
