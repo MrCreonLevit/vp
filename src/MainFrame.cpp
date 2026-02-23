@@ -853,7 +853,7 @@ void MainFrame::LoadFile(const std::string& path) {
         return !cancelled;
     };
 
-    if (!m_dataManager.loadAsciiFile(path, progressCb)) {
+    if (!m_dataManager.loadFile(path, progressCb)) {
         if (!cancelled) {
             wxMessageBox("Failed to load file:\n" + m_dataManager.errorMessage(),
                          "Load Error", wxOK | wxICON_ERROR, this);
@@ -890,7 +890,8 @@ void MainFrame::OnOpen(wxCommandEvent& event) {
     for (auto* c : m_canvases) c->Hide();
 
     wxFileDialog dialog(this, "Open Data File", "", "",
-        "All supported files|*.txt;*.csv;*.dat;*.tsv|"
+        "All supported files|*.txt;*.csv;*.dat;*.tsv;*.parquet;*.pq|"
+        "Parquet files (*.parquet)|*.parquet;*.pq|"
         "Text files (*.txt)|*.txt|"
         "CSV files (*.csv)|*.csv|"
         "All files (*.*)|*.*",

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(viewpoints LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -22,6 +22,10 @@ include(${wxWidgets_USE_FILE})
 # --- wgpu-native (WebGPU) ---
 find_library(WGPU_LIBRARY NAMES wgpu_native REQUIRED)
 find_path(WGPU_INCLUDE_DIR NAMES webgpu.h REQUIRED)
+
+# --- Apache Arrow / Parquet ---
+find_package(Arrow QUIET)
+find_package(Parquet QUIET)
 
 # --- Sources ---
 set(VIEWPOINTS_SOURCES
@@ -48,6 +52,15 @@ target_link_libraries(vp PRIVATE
     ${wxWidgets_LIBRARIES}
     ${WGPU_LIBRARY}
 )
+
+# Link Arrow/Parquet if found
+if(Arrow_FOUND AND Parquet_FOUND)
+    target_link_libraries(vp PRIVATE Arrow::arrow_shared Parquet::parquet_shared)
+    target_compile_definitions(vp PRIVATE HAS_PARQUET=1)
+    message(STATUS "Parquet support: enabled")
+else()
+    message(STATUS "Parquet support: disabled (install apache-arrow)")
+endif()
 
 # macOS frameworks needed by wgpu-native (Metal backend)
 if(APPLE)
