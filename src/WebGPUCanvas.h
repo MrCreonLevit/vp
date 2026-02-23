@@ -99,6 +99,7 @@ public:
     std::function<void(int plotIndex, float x0, float y0, float x1, float y1)> onSelectionDrag;
     std::function<void()> onInvertRequested;
     std::function<void()> onResetViewRequested;
+    std::function<void()> onToggleUnselected;
     // Called on each render with current visible range in normalized coords
     std::function<void(int plotIndex, float xMin, float xMax, float yMin, float yMax)> onViewportChanged;
 

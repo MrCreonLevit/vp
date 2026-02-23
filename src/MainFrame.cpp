@@ -429,6 +429,16 @@ void MainFrame::RebuildGrid() {
         canvas->onClearRequested = [this]() { ClearAllSelections(); };
         canvas->onInvertRequested = [this]() { InvertAllSelections(); };
         canvas->onKillRequested = [this]() { KillSelectedPoints(); };
+        canvas->onToggleUnselected = [this]() {
+            // Toggle globally across all plots
+            bool newState = !m_plotConfigs[0].showUnselected;
+            for (int j = 0; j < (int)m_canvases.size(); j++) {
+                m_plotConfigs[j].showUnselected = newState;
+                m_canvases[j]->SetShowUnselected(newState);
+            }
+            if (m_activePlot >= 0 && m_activePlot < (int)m_plotConfigs.size())
+                m_controlPanel->SetPlotConfig(m_activePlot, m_plotConfigs[m_activePlot]);
+        };
 
         // Linked axis view: propagate pan/zoom to plots sharing locked variables
         canvas->onViewChanged = [this](int pi, float panX, float panY, float zoomX, float zoomY) {
@@ -484,11 +494,25 @@ void MainFrame::RebuildGrid() {
             float dBottom = yDataMin + ((y0 + 0.9f) / 1.8f) * yRange;
             float dTop    = yDataMin + ((y1 + 0.9f) / 1.8f) * yRange;
 
+            // Format boundary values, showing category strings for categorical axes
+            auto fmtVal = [&](float val, size_t col) -> wxString {
+                if (col < ds.columnMeta.size() && ds.columnMeta[col].isCategorical) {
+                    const auto& cats = ds.columnMeta[col].categories;
+                    if (!cats.empty()) {
+                        int idx = std::max(0, std::min(static_cast<int>(std::round(val)),
+                                                       static_cast<int>(cats.size()) - 1));
+                        return wxString::FromUTF8(cats[idx]);
+                    }
+                }
+                return wxString::Format("%.4g", val);
+            };
+
             int selCount = 0;
             for (int s : m_selection) if (s > 0) selCount++;
             float pct = ds.numRows > 0 ? (100.0f * selCount / ds.numRows) : 0;
-            SetStatusText(wxString::Format("Selection: X [%.4g, %.4g]  Y [%.4g, %.4g]  |  %d / %zu (%.1f%%)",
-                                            dLeft, dRight, dBottom, dTop,
+            SetStatusText(wxString::Format("Selection: X [%s, %s]  Y [%s, %s]  |  %d / %zu (%.1f%%)",
+                                            fmtVal(dLeft, cfg.xCol), fmtVal(dRight, cfg.xCol),
+                                            fmtVal(dBottom, cfg.yCol), fmtVal(dTop, cfg.yCol),
                                             selCount, ds.numRows, pct));
         };
 
@@ -538,8 +562,57 @@ void MainFrame::RebuildGrid() {
             float visDataYMin = normToDataY(vyMin);
             float visDataYMax = normToDataY(vyMax);
 
+            bool xCat = cfg.xCol < ds.columnMeta.size() && ds.columnMeta[cfg.xCol].isCategorical;
+            bool yCat = cfg.yCol < ds.columnMeta.size() && ds.columnMeta[cfg.yCol].isCategorical;
+
+            // Helper: truncate long category strings for tick labels
+            auto truncate = [](const std::string& s, size_t maxLen) -> std::string {
+                if (s.size() <= maxLen) return s;
+                return s.substr(0, maxLen - 1) + "\xe2\x80\xa6"; // UTF-8 ellipsis
+            };
+
+            // Helper: get tick label for a data value (categorical or numeric)
+            auto tickLabel = [&](float dataVal, bool isCat, const std::vector<std::string>& cats, size_t maxLen) -> wxString {
+                if (isCat && !cats.empty()) {
+                    int idx = std::max(0, std::min(static_cast<int>(std::round(dataVal)), static_cast<int>(cats.size()) - 1));
+                    return wxString::FromUTF8(truncate(cats[idx], maxLen));
+                }
+                return wxString::Format("%.4g", dataVal);
+            };
+
+            // Compute ticks: categorical low-cardinality uses explicit integer positions
             auto xNiceTicks = computeNiceTicks(visDataXMin, visDataXMax, NUM_TICKS + 1);
             auto yNiceTicks = computeNiceTicks(visDataYMin, visDataYMax, NUM_TICKS + 1);
+            std::vector<wxString> xTickLabels, yTickLabels;
+
+            if (xCat) {
+                const auto& xCats = ds.columnMeta[cfg.xCol].categories;
+                if ((int)xCats.size() <= MAX_NICE_TICKS) {
+                    // Low cardinality: explicit integer ticks 0..N-1
+                    xNiceTicks.clear();
+                    for (int i = 0; i < (int)xCats.size(); i++)
+                        xNiceTicks.push_back(static_cast<float>(i));
+                }
+                for (float v : xNiceTicks)
+                    xTickLabels.push_back(tickLabel(v, true, xCats, 8));
+            } else {
+                for (float v : xNiceTicks)
+                    xTickLabels.push_back(wxString::Format("%.4g", v));
+            }
+
+            if (yCat) {
+                const auto& yCats = ds.columnMeta[cfg.yCol].categories;
+                if ((int)yCats.size() <= MAX_NICE_TICKS) {
+                    yNiceTicks.clear();
+                    for (int i = 0; i < (int)yCats.size(); i++)
+                        yNiceTicks.push_back(static_cast<float>(i));
+                }
+                for (float v : yNiceTicks)
+                    yTickLabels.push_back(tickLabel(v, true, yCats, 8));
+            } else {
+                for (float v : yNiceTicks)
+                    yTickLabels.push_back(wxString::Format("%.4g", v));
+            }
 
             // Map nice tick data values to clip space for grid lines
             std::vector<float> xClipPositions, yClipPositions;
@@ -563,11 +636,7 @@ void MainFrame::RebuildGrid() {
             if (canvasW < 10 || canvasH < 10) return;
 
             // Get canvas position relative to its cell panel to align tick labels
-            // The canvas is inside rightSizer, which is offset from the cell panel
-            // by the Y label + Y tick panel width. The Y tick panel needs the
-            // canvas's vertical offset (top of canvas relative to cell top).
             wxPoint canvasPos = m_canvases[pi]->GetPosition();
-            // Walk up to find position relative to the cell panel
             wxWindow* w = m_canvases[pi]->GetParent();
             while (w && w != pw2.cellPanel && w->GetParent() != pw2.cellPanel) {
                 wxPoint parentPos = w->GetPosition();
@@ -575,9 +644,6 @@ void MainFrame::RebuildGrid() {
                 canvasPos.y += parentPos.y;
                 w = w->GetParent();
             }
-            // canvasPos.y = vertical offset of canvas top within the cell
-            // The Y tick panel starts at the cell top, so Y tick labels need
-            // this offset to align with the canvas.
             int canvasTopY = canvasPos.y;
 
             // Position X tick labels at grid line pixel positions
@@ -586,7 +652,7 @@ void MainFrame::RebuildGrid() {
                     float clipX = xClipPositions[t];
                     if (clipX > -0.9f && clipX < 0.9f) {
                         int px = static_cast<int>((clipX + 1.0f) * 0.5f * canvasW);
-                        pw2.xTicks[t]->SetLabel(wxString::Format("%.4g", xNiceTicks[t]));
+                        pw2.xTicks[t]->SetLabel(xTickLabels[t]);
                         pw2.xTicks[t]->SetSize(pw2.xTicks[t]->GetBestSize());
                         wxSize tsz = pw2.xTicks[t]->GetSize();
                         pw2.xTicks[t]->SetPosition(wxPoint(px - tsz.GetWidth() / 2, 0));
@@ -600,13 +666,12 @@ void MainFrame::RebuildGrid() {
             }
 
             // Position Y tick labels at grid line pixel positions
-            // Offset by canvasTopY so labels align with the canvas, not the cell
             for (int t = 0; t < MAX_NICE_TICKS; t++) {
                 if (t < (int)yNiceTicks.size() && t < (int)yClipPositions.size()) {
                     float clipY = yClipPositions[t];
                     if (clipY > -0.9f && clipY < 0.9f) {
                         int py = canvasTopY + static_cast<int>((1.0f - clipY) * 0.5f * canvasH);
-                        pw2.yTicks[t]->SetLabel(wxString::Format("%.4g", yNiceTicks[t]));
+                        pw2.yTicks[t]->SetLabel(yTickLabels[t]);
                         pw2.yTicks[t]->SetSize(pw2.yTicks[t]->GetBestSize());
                         wxSize tsz = pw2.yTicks[t]->GetSize();
                         pw2.yTicks[t]->SetPosition(wxPoint(46 - tsz.GetWidth() - 2, py - tsz.GetHeight() / 2));

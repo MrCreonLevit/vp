@@ -6,6 +6,8 @@
 #include <cmath>
 #include <limits>
 #include <cstdio>
+#include <set>
+#include <map>
 
 void DataSet::columnRange(size_t col, float& minVal, float& maxVal) const {
     minVal = std::numeric_limits<float>::max();
@@ -127,13 +129,15 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
         return false;
     }
 
-    // Try to parse first token as a number. If it fails, this line has labels.
-    bool firstLineIsLabels = false;
-    {
-        std::istringstream test(tokens[0]);
+    // Treat as header only if ALL tokens fail numeric parse.
+    // If at least one token parses as a number, the line is data.
+    bool firstLineIsLabels = true;
+    for (const auto& tok : tokens) {
+        std::istringstream test(tok);
         double val;
-        if (!(test >> val)) {
-            firstLineIsLabels = true;
+        if (test >> val) {
+            firstLineIsLabels = false;
+            break;
         }
     }
 
@@ -172,6 +176,11 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
         totalBytes / (m_data.numCols * 8) : 10000;
     m_data.data.reserve(m_data.numCols * estRows);
 
+    // Track candidate categorical (string) columns
+    std::vector<bool> candidateCategorical(m_data.numCols, false);
+    std::vector<std::vector<std::string>> rawStrings(m_data.numCols);
+    bool firstDataRow = true;
+
     auto parseLine = [&](const std::string& dataLine) -> bool {
         auto dataTokens = splitTokens(dataLine, m_delimiter);
         if (dataTokens.size() < m_data.numCols) {
@@ -184,21 +193,40 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
 
             if (tok.empty()) {
                 val = 0.0f;
-            } else if (tok == "NaN" || tok == "nan" || tok == "NAN" ||
-                       tok == "NA" || tok == "na" || tok == "inf" || tok == "-inf") {
+                if (candidateCategorical[col])
+                    rawStrings[col].push_back(tok);
+            } else if (candidateCategorical[col]) {
+                // Already known categorical — store raw string, placeholder float
+                rawStrings[col].push_back(tok);
                 val = 0.0f;
             } else {
-                std::istringstream ss(tok);
-                double dval;
-                if (ss >> dval) {
-                    val = static_cast<float>(dval);
+                // Try numeric parse
+                bool isSpecial = (tok == "NaN" || tok == "nan" || tok == "NAN" ||
+                                  tok == "NA" || tok == "na" || tok == "inf" || tok == "-inf");
+                if (isSpecial) {
+                    val = 0.0f;
                 } else {
-                    val = 0.0f;  // unparseable → bad value proxy
+                    std::istringstream ss(tok);
+                    double dval;
+                    if (ss >> dval) {
+                        val = static_cast<float>(dval);
+                    } else {
+                        // Failed numeric parse
+                        if (firstDataRow) {
+                            // Mark as candidate categorical
+                            candidateCategorical[col] = true;
+                            rawStrings[col].push_back(tok);
+                            val = 0.0f;
+                        } else {
+                            val = 0.0f;  // unparseable in non-first row of numeric col
+                        }
+                    }
                 }
             }
             m_data.data.push_back(val);
         }
         m_data.numRows++;
+        firstDataRow = false;
         return true;
     };
 
@@ -244,6 +272,34 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
     fprintf(stderr, "Loaded %s: %zu rows x %zu columns\n",
             path.c_str(), m_data.numRows, m_data.numCols);
 
+    // Encode confirmed categorical columns
+    m_data.columnMeta.resize(m_data.numCols);
+    for (size_t col = 0; col < m_data.numCols; col++) {
+        if (candidateCategorical[col] && !rawStrings[col].empty()) {
+            // Collect unique strings, sorted alphabetically
+            std::set<std::string> uniqueSet(rawStrings[col].begin(), rawStrings[col].end());
+            std::vector<std::string> sorted(uniqueSet.begin(), uniqueSet.end());
+            std::map<std::string, int> indexMap;
+            for (int i = 0; i < (int)sorted.size(); i++)
+                indexMap[sorted[i]] = i;
+
+            // Overwrite placeholder floats with category indices
+            for (size_t row = 0; row < m_data.numRows; row++) {
+                auto it = indexMap.find(rawStrings[col][row]);
+                float idx = (it != indexMap.end()) ? static_cast<float>(it->second) : 0.0f;
+                m_data.data[row * m_data.numCols + col] = idx;
+            }
+
+            m_data.columnMeta[col].isCategorical = true;
+            m_data.columnMeta[col].categories = std::move(sorted);
+            fprintf(stderr, "  Categorical column '%s': %zu categories\n",
+                    m_data.columnLabels[col].c_str(), m_data.columnMeta[col].categories.size());
+        }
+        // Free raw string memory
+        rawStrings[col].clear();
+        rawStrings[col].shrink_to_fit();
+    }
+
     // Remove constant columns (all values identical)
     {
         std::vector<bool> keep(m_data.numCols, true);
@@ -268,12 +324,15 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
         if (removed > 0) {
             size_t newCols = m_data.numCols - removed;
             std::vector<std::string> newLabels;
+            std::vector<ColumnMeta> newMeta;
             std::vector<float> newData;
             newData.reserve(m_data.numRows * newCols);
 
             for (size_t col = 0; col < m_data.numCols; col++) {
-                if (keep[col])
+                if (keep[col]) {
                     newLabels.push_back(m_data.columnLabels[col]);
+                    newMeta.push_back(m_data.columnMeta[col]);
+                }
             }
 
             for (size_t row = 0; row < m_data.numRows; row++) {
@@ -284,6 +343,7 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
             }
 
             m_data.columnLabels = std::move(newLabels);
+            m_data.columnMeta = std::move(newMeta);
             m_data.data = std::move(newData);
             m_data.numCols = newCols;
             fprintf(stderr, "  Removed %d constant columns, %zu columns remaining\n",
@@ -343,7 +403,14 @@ bool DataManager::saveAsCsv(const std::string& path, const std::vector<int>& sel
             continue;
         for (size_t col = 0; col < m_data.numCols; col++) {
             if (col > 0) file << ',';
-            file << m_data.data[row * m_data.numCols + col];
+            float val = m_data.data[row * m_data.numCols + col];
+            if (col < m_data.columnMeta.size() && m_data.columnMeta[col].isCategorical) {
+                const auto& cats = m_data.columnMeta[col].categories;
+                int idx = std::max(0, std::min(static_cast<int>(val), static_cast<int>(cats.size()) - 1));
+                file << cats[idx];
+            } else {
+                file << val;
+            }
         }
         file << '\n';
         written++;
@@ -378,26 +445,48 @@ bool DataManager::saveAsParquet(const std::string& path, const std::vector<int>&
         outRows = m_data.numRows;
     }
 
-    // Build one Float32 array per column
+    // Build one array per column (Float32 for numeric, String for categorical)
     std::vector<std::shared_ptr<arrow::Field>> fields;
     std::vector<std::shared_ptr<arrow::Array>> arrays;
 
     for (size_t col = 0; col < m_data.numCols; col++) {
-        fields.push_back(arrow::field(m_data.columnLabels[col], arrow::float32()));
+        bool isCat = col < m_data.columnMeta.size() && m_data.columnMeta[col].isCategorical;
 
-        arrow::FloatBuilder builder;
-        auto st = builder.Reserve(static_cast<int64_t>(outRows));
-        if (!st.ok()) { fprintf(stderr, "Arrow reserve failed\n"); return false; }
+        if (isCat) {
+            fields.push_back(arrow::field(m_data.columnLabels[col], arrow::utf8()));
+            arrow::StringBuilder builder;
+            auto st = builder.Reserve(static_cast<int64_t>(outRows));
+            if (!st.ok()) { fprintf(stderr, "Arrow reserve failed\n"); return false; }
 
-        for (size_t row = 0; row < m_data.numRows; row++) {
-            if (filterSelected && selection[row] == 0) continue;
-            builder.UnsafeAppend(m_data.data[row * m_data.numCols + col]);
+            const auto& cats = m_data.columnMeta[col].categories;
+            for (size_t row = 0; row < m_data.numRows; row++) {
+                if (filterSelected && selection[row] == 0) continue;
+                float val = m_data.data[row * m_data.numCols + col];
+                int idx = std::max(0, std::min(static_cast<int>(val), static_cast<int>(cats.size()) - 1));
+                st = builder.Append(cats[idx]);
+                if (!st.ok()) { fprintf(stderr, "Arrow append failed\n"); return false; }
+            }
+
+            std::shared_ptr<arrow::Array> arr;
+            st = builder.Finish(&arr);
+            if (!st.ok()) { fprintf(stderr, "Arrow build failed\n"); return false; }
+            arrays.push_back(arr);
+        } else {
+            fields.push_back(arrow::field(m_data.columnLabels[col], arrow::float32()));
+            arrow::FloatBuilder builder;
+            auto st = builder.Reserve(static_cast<int64_t>(outRows));
+            if (!st.ok()) { fprintf(stderr, "Arrow reserve failed\n"); return false; }
+
+            for (size_t row = 0; row < m_data.numRows; row++) {
+                if (filterSelected && selection[row] == 0) continue;
+                builder.UnsafeAppend(m_data.data[row * m_data.numCols + col]);
+            }
+
+            std::shared_ptr<arrow::Array> arr;
+            st = builder.Finish(&arr);
+            if (!st.ok()) { fprintf(stderr, "Arrow build failed\n"); return false; }
+            arrays.push_back(arr);
         }
-
-        std::shared_ptr<arrow::Array> arr;
-        st = builder.Finish(&arr);
-        if (!st.ok()) { fprintf(stderr, "Arrow build failed\n"); return false; }
-        arrays.push_back(arr);
     }
 
     auto schema = arrow::schema(fields);
@@ -467,8 +556,9 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
         fprintf(stderr, "Parquet: %lld rows x %d columns\n", numRows, numCols);
     }
 
-    // Identify numeric columns (skip string/binary/etc)
-    std::vector<int> numericCols;
+    // Identify accepted columns (numeric + string types)
+    std::vector<int> acceptedCols;
+    std::vector<bool> isStringCol;
     for (int c = 0; c < numCols; c++) {
         auto type = table->column(c)->type();
         if (type->id() == arrow::Type::DOUBLE || type->id() == arrow::Type::FLOAT ||
@@ -476,27 +566,32 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
             type->id() == arrow::Type::INT32 || type->id() == arrow::Type::INT64 ||
             type->id() == arrow::Type::UINT8 || type->id() == arrow::Type::UINT16 ||
             type->id() == arrow::Type::UINT32 || type->id() == arrow::Type::UINT64) {
-            numericCols.push_back(c);
+            acceptedCols.push_back(c);
+            isStringCol.push_back(false);
+        } else if (type->id() == arrow::Type::STRING || type->id() == arrow::Type::LARGE_STRING) {
+            acceptedCols.push_back(c);
+            isStringCol.push_back(true);
         }
     }
 
-    if (numericCols.empty()) {
-        m_error = "No numeric columns found in parquet file";
+    if (acceptedCols.empty()) {
+        m_error = "No usable columns found in parquet file";
         return false;
     }
 
-    m_data.numCols = numericCols.size();
+    m_data.numCols = acceptedCols.size();
     m_data.numRows = static_cast<size_t>(numRows);
+    m_data.columnMeta.resize(m_data.numCols);
 
     // Column labels
-    for (int c : numericCols) {
+    for (int c : acceptedCols) {
         m_data.columnLabels.push_back(table->field(c)->name());
     }
 
     // Extract data row-major
     fprintf(stderr, "  Allocating %zu x %zu = %zu floats (%.1f MB)\n",
             m_data.numRows, m_data.numCols, m_data.numRows * m_data.numCols,
-            m_data.numRows * m_data.numCols * 4.0 / 1048576.0);  // 1048576 = 2^20 = bytes per MB
+            m_data.numRows * m_data.numCols * 4.0 / 1048576.0);
     fflush(stderr);
     try {
         m_data.data.resize(m_data.numRows * m_data.numCols, 0.0f);
@@ -505,79 +600,115 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
         return false;
     }
 
-    // Extract each numeric column using raw value access
-    for (size_t ci = 0; ci < numericCols.size(); ci++) {
-        int colIdx = numericCols[ci];
+    // Extract each column
+    for (size_t ci = 0; ci < acceptedCols.size(); ci++) {
+        int colIdx = acceptedCols[ci];
         auto chunked = table->column(colIdx);
         auto typeId = chunked->type()->id();
-        fprintf(stderr, "  Col %zu/%zu: %s (%s)\n", ci, numericCols.size(),
+        fprintf(stderr, "  Col %zu/%zu: %s (%s)\n", ci, acceptedCols.size(),
                 table->field(colIdx)->name().c_str(),
                 chunked->type()->ToString().c_str());
         fflush(stderr);
 
-        // Use Arrow's built-in GetScalar for safe extraction
-        size_t rowOffset = 0;
-        for (int chunk = 0; chunk < chunked->num_chunks(); chunk++) {
-            auto arr = chunked->chunk(chunk);
-            int64_t len = arr->length();
-
-            // Get raw data pointer for fast access
-            const uint8_t* rawData = arr->data()->buffers[1]->data();
-            int nullCount = arr->null_count();
-
-            for (int64_t r = 0; r < len; r++) {
-                size_t idx = (rowOffset + r) * m_data.numCols + ci;
-                if (idx >= m_data.data.size()) break;
-
-                if (nullCount > 0 && arr->IsNull(r)) {
-                    m_data.data[idx] = 0.0f;
-                    continue;
-                }
-
-                switch (typeId) {
-                    case arrow::Type::DOUBLE:
-                        m_data.data[idx] = static_cast<float>(reinterpret_cast<const double*>(rawData)[r]);
-                        break;
-                    case arrow::Type::FLOAT:
-                        m_data.data[idx] = reinterpret_cast<const float*>(rawData)[r];
-                        break;
-                    case arrow::Type::INT64:
-                        m_data.data[idx] = static_cast<float>(reinterpret_cast<const int64_t*>(rawData)[r]);
-                        break;
-                    case arrow::Type::INT32:
-                        m_data.data[idx] = static_cast<float>(reinterpret_cast<const int32_t*>(rawData)[r]);
-                        break;
-                    case arrow::Type::INT16:
-                        m_data.data[idx] = static_cast<float>(reinterpret_cast<const int16_t*>(rawData)[r]);
-                        break;
-                    case arrow::Type::INT8:
-                        m_data.data[idx] = static_cast<float>(reinterpret_cast<const int8_t*>(rawData)[r]);
-                        break;
-                    case arrow::Type::UINT64:
-                        m_data.data[idx] = static_cast<float>(reinterpret_cast<const uint64_t*>(rawData)[r]);
-                        break;
-                    case arrow::Type::UINT32:
-                        m_data.data[idx] = static_cast<float>(reinterpret_cast<const uint32_t*>(rawData)[r]);
-                        break;
-                    default:
-                        m_data.data[idx] = 0.0f;
-                        break;
+        if (isStringCol[ci]) {
+            // String column: collect all values, then encode as categorical
+            std::vector<std::string> allStrings;
+            allStrings.reserve(m_data.numRows);
+            for (int chunk = 0; chunk < chunked->num_chunks(); chunk++) {
+                auto arr = chunked->chunk(chunk);
+                int64_t len = arr->length();
+                auto strArr = std::static_pointer_cast<arrow::StringArray>(arr);
+                for (int64_t r = 0; r < len; r++) {
+                    if (arr->IsNull(r)) {
+                        allStrings.emplace_back();
+                    } else {
+                        allStrings.push_back(strArr->GetString(r));
+                    }
                 }
             }
-            rowOffset += len;
-            fprintf(stderr, "    chunk %d: %lld rows (offset %zu)\n", chunk, len, rowOffset);
-            fflush(stderr);
+
+            // Build sorted category index
+            std::set<std::string> uniqueSet(allStrings.begin(), allStrings.end());
+            std::vector<std::string> sorted(uniqueSet.begin(), uniqueSet.end());
+            std::map<std::string, int> indexMap;
+            for (int i = 0; i < (int)sorted.size(); i++)
+                indexMap[sorted[i]] = i;
+
+            // Write float indices into data
+            for (size_t row = 0; row < m_data.numRows; row++) {
+                auto it = indexMap.find(allStrings[row]);
+                m_data.data[row * m_data.numCols + ci] =
+                    (it != indexMap.end()) ? static_cast<float>(it->second) : 0.0f;
+            }
+
+            m_data.columnMeta[ci].isCategorical = true;
+            m_data.columnMeta[ci].categories = std::move(sorted);
+            fprintf(stderr, "    Categorical: %zu categories\n",
+                    m_data.columnMeta[ci].categories.size());
+        } else {
+            // Numeric column: use raw value access
+            size_t rowOffset = 0;
+            for (int chunk = 0; chunk < chunked->num_chunks(); chunk++) {
+                auto arr = chunked->chunk(chunk);
+                int64_t len = arr->length();
+
+                const uint8_t* rawData = arr->data()->buffers[1]->data();
+                int nullCount = arr->null_count();
+
+                for (int64_t r = 0; r < len; r++) {
+                    size_t idx = (rowOffset + r) * m_data.numCols + ci;
+                    if (idx >= m_data.data.size()) break;
+
+                    if (nullCount > 0 && arr->IsNull(r)) {
+                        m_data.data[idx] = 0.0f;
+                        continue;
+                    }
+
+                    switch (typeId) {
+                        case arrow::Type::DOUBLE:
+                            m_data.data[idx] = static_cast<float>(reinterpret_cast<const double*>(rawData)[r]);
+                            break;
+                        case arrow::Type::FLOAT:
+                            m_data.data[idx] = reinterpret_cast<const float*>(rawData)[r];
+                            break;
+                        case arrow::Type::INT64:
+                            m_data.data[idx] = static_cast<float>(reinterpret_cast<const int64_t*>(rawData)[r]);
+                            break;
+                        case arrow::Type::INT32:
+                            m_data.data[idx] = static_cast<float>(reinterpret_cast<const int32_t*>(rawData)[r]);
+                            break;
+                        case arrow::Type::INT16:
+                            m_data.data[idx] = static_cast<float>(reinterpret_cast<const int16_t*>(rawData)[r]);
+                            break;
+                        case arrow::Type::INT8:
+                            m_data.data[idx] = static_cast<float>(reinterpret_cast<const int8_t*>(rawData)[r]);
+                            break;
+                        case arrow::Type::UINT64:
+                            m_data.data[idx] = static_cast<float>(reinterpret_cast<const uint64_t*>(rawData)[r]);
+                            break;
+                        case arrow::Type::UINT32:
+                            m_data.data[idx] = static_cast<float>(reinterpret_cast<const uint32_t*>(rawData)[r]);
+                            break;
+                        default:
+                            m_data.data[idx] = 0.0f;
+                            break;
+                    }
+                }
+                rowOffset += len;
+                fprintf(stderr, "    chunk %d: %lld rows (offset %zu)\n", chunk, len, rowOffset);
+                fflush(stderr);
+            }
         }
 
         if (progress && ci % 3 == 0) {
-            if (!progress(ci + 1, numericCols.size())) {
+            if (!progress(ci + 1, acceptedCols.size())) {
                 m_error = "Loading cancelled";
                 return false;
             }
         }
     }
 
-    fprintf(stderr, "Loaded parquet %s: %zu rows x %zu numeric columns\n",
+    fprintf(stderr, "Loaded parquet %s: %zu rows x %zu columns\n",
             path.c_str(), m_data.numRows, m_data.numCols);
 
     // Remove constant columns (same logic as ASCII loader)
@@ -603,14 +734,20 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
         if (removed > 0) {
             size_t newCols = m_data.numCols - removed;
             std::vector<std::string> newLabels;
+            std::vector<ColumnMeta> newMeta;
             std::vector<float> newData;
             newData.reserve(m_data.numRows * newCols);
-            for (size_t col = 0; col < m_data.numCols; col++)
-                if (keep[col]) newLabels.push_back(m_data.columnLabels[col]);
+            for (size_t col = 0; col < m_data.numCols; col++) {
+                if (keep[col]) {
+                    newLabels.push_back(m_data.columnLabels[col]);
+                    newMeta.push_back(m_data.columnMeta[col]);
+                }
+            }
             for (size_t row = 0; row < m_data.numRows; row++)
                 for (size_t col = 0; col < m_data.numCols; col++)
                     if (keep[col]) newData.push_back(m_data.data[row * m_data.numCols + col]);
             m_data.columnLabels = std::move(newLabels);
+            m_data.columnMeta = std::move(newMeta);
             m_data.data = std::move(newData);
             m_data.numCols = newCols;
             fprintf(stderr, "  Removed %d constant columns, %zu remaining\n", removed, m_data.numCols);

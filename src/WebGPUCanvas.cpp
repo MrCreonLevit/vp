@@ -1521,6 +1521,9 @@ void WebGPUCanvas::OnKeyDown(wxKeyEvent& event) {
             if (onResetViewRequested) onResetViewRequested();
             else ResetView();
             break;
+        case 'D':
+            if (onToggleUnselected) onToggleUnselected();
+            break;
         case 'K':
             if (onKillRequested) onKillRequested();
             break;

@@ -6,9 +6,15 @@
 #include <functional>
 #include <cstddef>
 
+struct ColumnMeta {
+    bool isCategorical = false;
+    std::vector<std::string> categories; // sorted alphabetically; index = float value stored in data
+};
+
 struct DataSet {
     std::vector<std::string> columnLabels;
     std::vector<float> data;  // row-major: data[row * numCols + col]
+    std::vector<ColumnMeta> columnMeta; // parallel to columnLabels, one per column
     size_t numRows = 0;
     size_t numCols = 0;
 

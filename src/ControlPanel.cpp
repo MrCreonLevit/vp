@@ -312,6 +312,7 @@ ControlPanel::ControlPanel(wxWindow* parent)
         "Shift+drag: pan\n"
         "Scroll/pinch: zoom\n"
         "C: clear selection\n"
+        "D: toggle deselected points\n"
         "I: invert selection\n"
         "K: kill selected points\n"
         "R: reset active view\n"
