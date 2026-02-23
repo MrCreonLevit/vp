@@ -81,9 +81,9 @@ void PlotTab::CreateControls(int row, int col) {
 
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
-    m_pointSizeLabel = new wxStaticText(this, wxID_ANY, "Point Size: 6");
+    m_pointSizeLabel = new wxStaticText(this, wxID_ANY, "Point Size: 6.0");
     sizer->Add(m_pointSizeLabel, 0, wxLEFT | wxTOP, 8);
-    m_pointSizeSlider = new wxSlider(this, wxID_ANY, 6, 1, 30);
+    m_pointSizeSlider = new wxSlider(this, wxID_ANY, 60, 5, 300);
     sizer->Add(m_pointSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
     m_opacityLabel = new wxStaticText(this, wxID_ANY, "Opacity: 5%");
@@ -137,9 +137,9 @@ void PlotTab::CreateControls(int row, int col) {
     });
     m_pointSizeSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         if (m_suppress) return;
-        int val = m_pointSizeSlider->GetValue();
-        m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %d", val));
-        if (onPointSizeChanged) onPointSizeChanged(m_plotIndex, static_cast<float>(val));
+        float val = m_pointSizeSlider->GetValue() / 10.0f;
+        m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %.1f", val));
+        if (onPointSizeChanged) onPointSizeChanged(m_plotIndex, val);
     });
     m_opacitySlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         if (m_suppress) return;
@@ -179,8 +179,8 @@ void PlotTab::SyncFromConfig(const PlotConfig& cfg) {
     m_showUnselected->SetValue(cfg.showUnselected);
     m_showGridLines->SetValue(cfg.showGridLines);
     m_showHistograms->SetValue(cfg.showHistograms);
-    m_pointSizeSlider->SetValue(static_cast<int>(cfg.pointSize));
-    m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %d", (int)cfg.pointSize));
+    m_pointSizeSlider->SetValue(static_cast<int>(cfg.pointSize * 10));
+    m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %.1f", cfg.pointSize));
     m_opacitySlider->SetValue(static_cast<int>(cfg.opacity * 100));
     m_opacityLabel->SetLabel(wxString::Format("Opacity: %d%%", (int)(cfg.opacity * 100)));
     m_histBinsSlider->SetValue(cfg.histBins);
@@ -426,9 +426,9 @@ void ControlPanel::CreateAllPage() {
 
     sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
-    m_pointSizeLabel = new wxStaticText(m_allPage, wxID_ANY, "Point Size: 6");
+    m_pointSizeLabel = new wxStaticText(m_allPage, wxID_ANY, "Point Size: 6.0");
     sizer->Add(m_pointSizeLabel, 0, wxLEFT | wxTOP, 8);
-    m_pointSizeSlider = new wxSlider(m_allPage, wxID_ANY, 6, 1, 30);
+    m_pointSizeSlider = new wxSlider(m_allPage, wxID_ANY, 60, 5, 300);
     sizer->Add(m_pointSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
     m_opacityLabel = new wxStaticText(m_allPage, wxID_ANY, "Opacity: 5%");
@@ -612,9 +612,9 @@ void ControlPanel::CreateAllPage() {
     m_book->AddPage(m_allPage, "");
 
     m_pointSizeSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
-        int val = m_pointSizeSlider->GetValue();
-        m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %d", val));
-        if (onPointSizeChanged) onPointSizeChanged(static_cast<float>(val));
+        float val = m_pointSizeSlider->GetValue() / 10.0f;
+        m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %.1f", val));
+        if (onPointSizeChanged) onPointSizeChanged(val);
     });
     m_opacitySlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         int val = m_opacitySlider->GetValue();
