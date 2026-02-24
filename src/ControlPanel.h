@@ -34,7 +34,6 @@ public:
     std::function<void(int plotIndex, bool xLock, bool yLock)> onAxisLockChanged;
     std::function<void(int plotIndex, int zCol, int zNorm)> onZAxisChanged;
     std::function<void(int plotIndex, float angle)> onRotationChanged;
-    std::function<void(int plotIndex, bool show)> onShowTooltipChanged;
 
 private:
     friend class ControlPanel;
@@ -63,7 +62,6 @@ private:
     wxCheckBox* m_showUnselected = nullptr;
     wxCheckBox* m_showGridLines = nullptr;
     wxCheckBox* m_showHistograms = nullptr;
-    wxCheckBox* m_showTooltip = nullptr;
     wxSlider* m_pointSizeSlider = nullptr;
     wxSlider* m_opacitySlider = nullptr;
     wxSlider* m_histBinsSlider = nullptr;
@@ -97,7 +95,6 @@ public:
     std::function<void(int plotIndex, float size)> onPlotPointSizeChanged;
     std::function<void(int plotIndex, float alpha)> onPlotOpacityChanged;
     std::function<void(int plotIndex, int bins)> onPlotHistBinsChanged;
-    std::function<void(int plotIndex, bool show)> onShowTooltipChanged;
     std::function<void(int plotIndex)> onTabSelected;
     std::function<void()> onAllSelected;
 
@@ -121,6 +118,7 @@ public:
 
     float GetPointSize() const;
     void SetGlobalPointSize(float size);
+    void SetGlobalTooltip(bool on);
 
 private:
     void CreateAllPage();
@@ -167,4 +165,5 @@ private:
     std::array<int, CP_NUM_BRUSHES> m_brushSymbols = {};
     std::array<float, CP_NUM_BRUSHES> m_brushSizeOffsets = {};
     std::array<float, CP_NUM_BRUSHES> m_brushOpacityOffsets = {};
+    wxCheckBox* m_globalTooltipCheck = nullptr;
 };

@@ -30,7 +30,6 @@ struct PlotConfig {
     bool showUnselected = true;
     bool showGridLines = false;
     bool showHistograms = true;
-    bool showTooltip = false;
     float pointSize = 6.0f;
     float opacity = 0.05f;
     int histBins = 64;
@@ -129,7 +128,6 @@ private:
     bool m_globalTooltip = false;
     int m_hoveredDataRow = -1;
     wxString BuildTooltipText(int dataRow);
-    void ShowTooltipForPlot(int plotIdx, int dataRow, const wxString& text);
     void HideAllTooltips();
 
     // Normalized column cache: avoids recomputing on every brush drag

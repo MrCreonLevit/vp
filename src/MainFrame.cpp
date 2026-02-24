@@ -234,20 +234,10 @@ void MainFrame::CreateLayout() {
         }
     };
 
-    m_controlPanel->onShowTooltipChanged = [this](int plotIndex, bool show) {
-        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            m_plotConfigs[plotIndex].showTooltip = show;
-            m_canvases[plotIndex]->SetShowTooltip(show || m_globalTooltip);
-            if (!show && !m_globalTooltip && plotIndex < (int)m_tooltips.size())
-                m_tooltips[plotIndex]->Hide();
-        }
-    };
-
     m_controlPanel->onGlobalTooltipChanged = [this](bool show) {
         m_globalTooltip = show;
-        for (int i = 0; i < (int)m_canvases.size(); i++) {
-            m_canvases[i]->SetShowTooltip(show || m_plotConfigs[i].showTooltip);
-        }
+        for (auto* c : m_canvases)
+            c->SetShowTooltip(show);
         if (!show) HideAllTooltips();
     };
 
@@ -603,10 +593,11 @@ void MainFrame::RebuildGrid() {
         m_tooltips.push_back(new PointTooltip(this));
 
         canvas->onTooltipToggled = [this](int pi, bool show) {
-            if (pi >= 0 && pi < (int)m_plotConfigs.size()) {
-                m_plotConfigs[pi].showTooltip = show;
-                m_controlPanel->SetPlotConfig(pi, m_plotConfigs[pi]);
-            }
+            m_globalTooltip = show;
+            for (auto* c : m_canvases)
+                c->SetShowTooltip(show);
+            m_controlPanel->SetGlobalTooltip(show);
+            if (!show) HideAllTooltips();
         };
 
         // Tooltip hover callback
@@ -621,19 +612,12 @@ void MainFrame::RebuildGrid() {
             m_hoveredDataRow = dataRow;
             wxString text = BuildTooltipText(dataRow);
 
-            if (m_globalTooltip) {
-                // Show in all plots at the appropriate position
-                for (int j = 0; j < (int)m_canvases.size(); j++)
-                    ShowTooltipForPlot(j, dataRow, text);
-            } else {
-                // Show only in the hovering plot
-                if (pi >= 0 && pi < (int)m_tooltips.size()) {
-                    wxPoint screenPos = m_canvases[pi]->ClientToScreen(wxPoint(sx, sy));
-                    m_tooltips[pi]->ShowAt(text, screenPos + wxPoint(12, 12));
-                }
-                for (int j = 0; j < (int)m_tooltips.size(); j++) {
-                    if (j != pi) m_tooltips[j]->Hide();
-                }
+            if (pi >= 0 && pi < (int)m_tooltips.size()) {
+                wxPoint screenPos = m_canvases[pi]->ClientToScreen(wxPoint(sx, sy));
+                m_tooltips[pi]->ShowAt(text, screenPos + wxPoint(12, 12));
+            }
+            for (int j = 0; j < (int)m_tooltips.size(); j++) {
+                if (j != pi) m_tooltips[j]->Hide();
             }
         };
 
@@ -1413,27 +1397,6 @@ wxString MainFrame::BuildTooltipText(int dataRow) {
         text += wxString::Format("%s: %s", ds.columnLabels[c], valStr);
     }
     return text;
-}
-
-void MainFrame::ShowTooltipForPlot(int plotIdx, int dataRow, const wxString& text) {
-    if (plotIdx < 0 || plotIdx >= (int)m_canvases.size()) return;
-    if (plotIdx >= (int)m_tooltips.size()) return;
-    const auto& ds = m_dataManager.dataset();
-    if (dataRow < 0 || dataRow >= (int)ds.numRows) return;
-
-    auto& cfg = m_plotConfigs[plotIdx];
-    const auto& xVals = GetNormalized(cfg.xCol, cfg.xNorm);
-    const auto& yVals = GetNormalized(cfg.yCol, cfg.yNorm);
-    if (dataRow >= (int)xVals.size() || dataRow >= (int)yVals.size()) return;
-
-    float wx = xVals[dataRow];
-    float wy = yVals[dataRow];
-
-    int sx, sy;
-    m_canvases[plotIdx]->WorldToScreen(wx, wy, sx, sy);
-
-    wxPoint screenPos = m_canvases[plotIdx]->ClientToScreen(wxPoint(sx, sy));
-    m_tooltips[plotIdx]->ShowAt(text, screenPos + wxPoint(12, 12));
 }
 
 void MainFrame::HideAllTooltips() {
