@@ -733,7 +733,7 @@ void ControlPanel::CreateAllPage() {
     sizer->Add(brushSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
     // "All" button below brush grid (affects all brushes)
-    m_allBrushButton = new wxButton(m_allPage, wxID_ANY, "All",
+    m_allBrushButton = new wxButton(m_allPage, wxID_ANY, "All Brushes",
                                      wxDefaultPosition, wxSize(-1, 24), wxBU_EXACTFIT);
     m_allBrushButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         SelectBrush(-1);
@@ -867,7 +867,7 @@ void ControlPanel::SelectBrush(int index) {
                 i == index ? wxString::Format("[%d]", i) : wxString::Format("%d", i));
     }
     if (m_allBrushButton)
-        m_allBrushButton->SetLabel(index == -1 ? "[All]" : "All");
+        m_allBrushButton->SetLabel(index == -1 ? "[All Brushes]" : "All Brushes");
 
     // Show values from the last individually selected brush
     int displayBrush = (index >= 0) ? index : m_lastIndividualBrush;
