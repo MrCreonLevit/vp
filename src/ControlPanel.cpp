@@ -301,11 +301,7 @@ ControlPanel::ControlPanel(wxWindow* parent)
 
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxALL, 4);
 
-    auto* helpScroll = new wxScrolledWindow(this, wxID_ANY, wxDefaultPosition,
-                                              wxDefaultSize, wxVSCROLL);
-    helpScroll->SetScrollRate(0, 10);
-    auto* helpSizer = new wxBoxSizer(wxVERTICAL);
-    auto* helpText = new wxStaticText(helpScroll, wxID_ANY,
+    auto* helpText = new wxStaticText(this, wxID_ANY,
         "Click plot: activate\n"
         "Drag: select (brush) points\n"
         "Opt+drag: move selection\n"
@@ -326,9 +322,15 @@ ControlPanel::ControlPanel(wxWindow* parent)
     auto hFont = helpText->GetFont();
     hFont.SetPointSize(hFont.GetPointSize() - 1);
     helpText->SetFont(hFont);
-    helpSizer->Add(helpText, 0, wxALL, 8);
-    helpScroll->SetSizer(helpSizer);
-    sizer->Add(helpScroll, 1, wxEXPAND);
+    sizer->Add(helpText, 0, wxALL, 8);
+    // Cap help text to at most 30% of panel height
+    Bind(wxEVT_SIZE, [this, helpText](wxSizeEvent& evt) {
+        int panelH = evt.GetSize().GetHeight();
+        int contentH = helpText->GetBestSize().GetHeight() + 16;
+        int maxH = panelH * 3 / 10;
+        helpText->SetMaxSize(wxSize(-1, std::min(contentH, maxH)));
+        evt.Skip();
+    });
 
     SetSizer(sizer);
     RebuildTabs(2, 2);
