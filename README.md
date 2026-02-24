@@ -9,16 +9,18 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 ## Features
 
 ### Data Visualization
-- **Multi-plot grid** — configurable NxM grid of scatter plots, each showing a different pair of variables
+- **Multi-plot grid** — configurable NxM grid of scatter plots, each showing a different pair of variables; **draggable dividers** between plots to resize rows and columns independently
 - **Linked brushing** — select points in any plot, see them highlighted everywhere
-- **7 simultaneous brushes** — each with independent color, opacity, symbol, and size
+- **7 simultaneous brushes** — each with independent color, opacity offset, symbol, and size; "All" button to apply changes to every brush at once
 - **10 procedural point symbols** — circle, square, diamond, triangles, cross, plus, star, ring, outlines (SDF-based, crisp at any zoom)
 - **Additive blending** — dense regions glow brighter, revealing structure in overplotted data
 - **9 density-based colormaps** — Viridis, Plasma, Inferno, Turbo, Hot, Cool, Grayscale, Blue-Red (viewport-aware density recomputation on zoom/pan)
 - **Marginal histograms** — staircase outlines along each axis, adjustable bins, per-plot toggle
 - **Grid lines** at nice values with aligned tick labels
+- **Point tooltip** — hover over a point to see all variable values in a popup (toggle with **T** key or global checkbox)
 - **Selection rectangle** with real-time coordinate and percentage display
-- **Automatic point sizing** — default point size scales with dataset size via log10
+- **Status bar** — persistent display of dataset info and selection count with percentage
+- **Automatic point sizing and opacity** — default point size and opacity scale with dataset size
 
 ### Data Handling
 - **ASCII/CSV/TSV** file loading with progress bar
@@ -35,6 +37,7 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 - **Cmd+drag** to extend selection (add to existing)
 - **Option+drag** to translate/move the selection rectangle
 - **Shift+drag** or right-drag to pan
+- **Scroll** (two-finger) to pan
 - **Scroll wheel** to zoom centered on cursor position
 - **Trackpad pinch** to zoom centered on pinch point
 - **Axis lock** — lock a variable so panning/zooming propagates to all plots showing it (independent X/Y zoom)
@@ -42,12 +45,12 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 - **Randomize Axes** button per plot
 - **Kill Selected** — permanently remove selected points from dataset
 - **3D rotation** — optional Z-axis with rotation slider, spin (continuous 10°/s), and rock (sinusoidal ±3°)
-- Keyboard shortcuts: **C** clear, **I** invert, **D** delete selected, **R** reset view, **Cmd+S** save all, **Cmd+Shift+S** save selected, **Q** quit
+- Keyboard shortcuts: **C** clear selection, **I** invert selection, **D** toggle deselected points, **K** kill selected, **T** toggle tooltip, **R** reset active view, **Shift+R** reset all views, **Cmd+S** save all, **Cmd+Shift+S** save selected, **Q** quit
 
 ### Control Panel
 - **Grid-based plot selector** matching the plot layout, plus an "All" tab for global settings
 - **Per-plot controls** — axis selectors, normalization, lock, point size, opacity, histogram bins, show/hide unselected, grid lines, histograms
-- **Per-brush controls** — color picker with alpha (double-click), symbol selector, size offset
+- **Per-brush controls** — color picker with alpha (double-click), symbol selector, size offset, opacity offset; right-click to reset
 - **Color map controls** — density-based colormaps with background brightness adjustment
 - **Scrollable panels** for small windows
 
