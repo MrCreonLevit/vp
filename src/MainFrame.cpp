@@ -963,8 +963,17 @@ void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, flo
 
 void MainFrame::PropagateSelection(const std::vector<int>& selection) {
     m_selection = selection;
-    for (auto* c : m_canvases)
-        c->SetSelection(m_selection);
+    // Update the active plot immediately and defer the rest to the
+    // next event loop iteration so it gets a full frame to itself.
+    if (m_activePlot >= 0 && m_activePlot < (int)m_canvases.size()) {
+        m_canvases[m_activePlot]->SetSelection(m_selection);
+        m_canvases[m_activePlot]->Update();
+    }
+    CallAfter([this, selection]() {
+        for (int i = 0; i < (int)m_canvases.size(); i++)
+            if (i != m_activePlot)
+                m_canvases[i]->SetSelection(selection);
+    });
 
     int count = 0;
     for (int s : m_selection) if (s > 0) count++;
