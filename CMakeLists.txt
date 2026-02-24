@@ -1,4 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
+
+# Default to RelWithDebInfo: -O2 with debug symbols
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
+endif()
+
 project(viewpoints LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -17,7 +23,6 @@ endif()
 
 # --- wxWidgets ---
 find_package(wxWidgets REQUIRED COMPONENTS core base)
-include(${wxWidgets_USE_FILE})
 
 # --- wgpu-native (WebGPU) ---
 find_library(WGPU_LIBRARY NAMES wgpu_native REQUIRED)
@@ -47,8 +52,10 @@ add_executable(vp ${VIEWPOINTS_SOURCES})
 
 target_include_directories(vp PRIVATE
     ${WGPU_INCLUDE_DIR}
+    ${wxWidgets_INCLUDE_DIRS}
     src
 )
+target_compile_definitions(vp PRIVATE ${wxWidgets_DEFINITIONS})
 
 target_link_libraries(vp PRIVATE
     ${wxWidgets_LIBRARIES}

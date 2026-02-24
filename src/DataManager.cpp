@@ -8,6 +8,8 @@
 #include <cstdio>
 #include <set>
 #include <map>
+#include <unordered_map>
+#include <chrono>
 
 void DataSet::columnRange(size_t col, float& minVal, float& maxVal) const {
     minVal = std::numeric_limits<float>::max();
@@ -69,6 +71,12 @@ bool DataManager::loadFile(const std::string& path, ProgressCallback progress, s
 }
 
 bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progress, size_t maxRows) {
+    using Clock = std::chrono::steady_clock;
+    auto tStart = Clock::now();
+    auto elapsed = [](Clock::time_point since) {
+        return std::chrono::duration<double>(Clock::now() - since).count();
+    };
+
     m_filePath = path;
     m_error.clear();
     m_data = DataSet{};
@@ -271,27 +279,34 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
 
     fprintf(stderr, "Loaded %s: %zu rows x %zu columns\n",
             path.c_str(), m_data.numRows, m_data.numCols);
+    fprintf(stderr, "TIMING:   read+parse        %.3f s\n", elapsed(tStart));
 
     // Encode confirmed categorical columns
+    auto tCat = Clock::now();
     m_data.columnMeta.resize(m_data.numCols);
     for (size_t col = 0; col < m_data.numCols; col++) {
         if (candidateCategorical[col] && !rawStrings[col].empty()) {
-            // Collect unique strings, sorted alphabetically
-            std::set<std::string> uniqueSet(rawStrings[col].begin(), rawStrings[col].end());
-            std::vector<std::string> sorted(uniqueSet.begin(), uniqueSet.end());
-            std::map<std::string, int> indexMap;
-            for (int i = 0; i < (int)sorted.size(); i++)
-                indexMap[sorted[i]] = i;
+            // Collect unique strings with O(1) lookup
+            std::unordered_map<std::string, int> tempMap;
+            tempMap.reserve(rawStrings[col].size());
+            std::vector<std::string> uniqueStrings;
+            for (const auto& s : rawStrings[col]) {
+                if (tempMap.emplace(s, 0).second)
+                    uniqueStrings.push_back(s);
+            }
+            std::sort(uniqueStrings.begin(), uniqueStrings.end());
+            // Assign sorted indices
+            std::unordered_map<std::string, int> indexMap;
+            indexMap.reserve(uniqueStrings.size() * 2);
+            for (int i = 0; i < (int)uniqueStrings.size(); i++)
+                indexMap[uniqueStrings[i]] = i;
 
             // Overwrite placeholder floats with category indices
-            for (size_t row = 0; row < m_data.numRows; row++) {
-                auto it = indexMap.find(rawStrings[col][row]);
-                float idx = (it != indexMap.end()) ? static_cast<float>(it->second) : 0.0f;
-                m_data.data[row * m_data.numCols + col] = idx;
-            }
+            for (size_t row = 0; row < m_data.numRows; row++)
+                m_data.data[row * m_data.numCols + col] = static_cast<float>(indexMap[rawStrings[col][row]]);
 
             m_data.columnMeta[col].isCategorical = true;
-            m_data.columnMeta[col].categories = std::move(sorted);
+            m_data.columnMeta[col].categories = std::move(uniqueStrings);
             fprintf(stderr, "  Categorical column '%s': %zu categories\n",
                     m_data.columnLabels[col].c_str(), m_data.columnMeta[col].categories.size());
         }
@@ -300,7 +315,10 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
         rawStrings[col].shrink_to_fit();
     }
 
+    fprintf(stderr, "TIMING:   categorical encode %.3f s\n", elapsed(tCat));
+
     // Remove constant columns (all values identical)
+    auto tConst = Clock::now();
     {
         std::vector<bool> keep(m_data.numCols, true);
         int removed = 0;
@@ -352,6 +370,8 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
     }
 
     m_data.data.shrink_to_fit();
+    fprintf(stderr, "TIMING:   const col removal  %.3f s\n", elapsed(tConst));
+    fprintf(stderr, "TIMING:   ASCII loader total %.3f s\n", elapsed(tStart));
 
     return true;
 }
@@ -510,16 +530,44 @@ bool DataManager::saveAsParquet(const std::string& path, const std::vector<int>&
 #endif
 }
 
+#ifdef HAS_PARQUET
+// Type-dispatched column extraction — switch is outside the inner loop
+// so the compiler can optimize each instantiation as a tight typed loop.
+template<typename T>
+static void extractTypedColumn(const T* src, int64_t len, size_t rowOffset,
+                               float* data, size_t numCols, size_t ci,
+                               const std::shared_ptr<arrow::Array>& arr, int nullCount) {
+    if (nullCount == 0) {
+        for (int64_t r = 0; r < len; r++)
+            data[(rowOffset + r) * numCols + ci] = static_cast<float>(src[r]);
+    } else {
+        for (int64_t r = 0; r < len; r++) {
+            if (arr->IsNull(r))
+                data[(rowOffset + r) * numCols + ci] = 0.0f;
+            else
+                data[(rowOffset + r) * numCols + ci] = static_cast<float>(src[r]);
+        }
+    }
+}
+#endif
+
 bool DataManager::loadParquetFile(const std::string& path, ProgressCallback progress, size_t maxRows) {
 #ifndef HAS_PARQUET
     m_error = "Parquet support not available (install apache-arrow and rebuild)";
     return false;
 #else
+    using Clock = std::chrono::steady_clock;
+    auto tStart = Clock::now();
+    auto elapsed = [](Clock::time_point since) {
+        return std::chrono::duration<double>(Clock::now() - since).count();
+    };
+
     m_filePath = path;
     m_error.clear();
     m_data = DataSet{};
 
     // Open file
+    auto tRead = Clock::now();
     auto result = arrow::io::ReadableFile::Open(path);
     if (!result.ok()) {
         m_error = "Cannot open parquet file: " + result.status().ToString();
@@ -528,21 +576,25 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
     auto infile = *result;
 
     // Create Parquet reader
-    std::unique_ptr<parquet::arrow::FileReader> reader;
-    auto st = parquet::arrow::FileReader::Make(arrow::default_memory_pool(), parquet::ParquetFileReader::Open(infile), &reader);
-    if (!st.ok()) {
-        m_error = "Cannot read parquet file: " + st.ToString();
+    auto readerResult = parquet::arrow::FileReader::Make(
+        arrow::default_memory_pool(), parquet::ParquetFileReader::Open(infile));
+    if (!readerResult.ok()) {
+        m_error = "Cannot read parquet file: " + readerResult.status().ToString();
         return false;
     }
+    auto reader = std::move(*readerResult);
 
     // Read entire table
     std::shared_ptr<arrow::Table> table;
-    st = reader->ReadTable(&table);
+    auto st = reader->ReadTable(&table);
     if (!st.ok()) {
         m_error = "Failed to read parquet table: " + st.ToString();
         return false;
     }
 
+    fprintf(stderr, "TIMING:   parquet read       %.3f s\n", elapsed(tRead));
+
+    auto tExtract = Clock::now();
     int numCols = table->num_columns();
     int64_t numRows = table->num_rows();
 
@@ -600,118 +652,157 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
         return false;
     }
 
-    // Extract each column
+    // --- Extract columns ---
+    // Check if we can use the fast all-float row-major path:
+    // all numeric columns are single-chunk float with no nulls.
+    bool canFastPath = true;
+    size_t numStringCols = 0;
     for (size_t ci = 0; ci < acceptedCols.size(); ci++) {
-        int colIdx = acceptedCols[ci];
-        auto chunked = table->column(colIdx);
-        auto typeId = chunked->type()->id();
-        fprintf(stderr, "  Col %zu/%zu: %s (%s)\n", ci, acceptedCols.size(),
-                table->field(colIdx)->name().c_str(),
-                chunked->type()->ToString().c_str());
-        fflush(stderr);
+        if (isStringCol[ci]) { numStringCols++; continue; }
+        auto chunked = table->column(acceptedCols[ci]);
+        if (chunked->num_chunks() != 1 ||
+            chunked->type()->id() != arrow::Type::FLOAT ||
+            chunked->chunk(0)->null_count() > 0) {
+            canFastPath = false;
+        }
+    }
 
-        if (isStringCol[ci]) {
-            // String column: collect all values, then encode as categorical
-            std::vector<std::string> allStrings;
-            allStrings.reserve(m_data.numRows);
-            for (int chunk = 0; chunk < chunked->num_chunks(); chunk++) {
-                auto arr = chunked->chunk(chunk);
-                int64_t len = arr->length();
-                auto strArr = std::static_pointer_cast<arrow::StringArray>(arr);
-                for (int64_t r = 0; r < len; r++) {
-                    if (arr->IsNull(r)) {
-                        allStrings.emplace_back();
-                    } else {
-                        allStrings.push_back(strArr->GetString(r));
-                    }
-                }
-            }
-
-            // Build sorted category index
-            std::set<std::string> uniqueSet(allStrings.begin(), allStrings.end());
-            std::vector<std::string> sorted(uniqueSet.begin(), uniqueSet.end());
-            std::map<std::string, int> indexMap;
-            for (int i = 0; i < (int)sorted.size(); i++)
-                indexMap[sorted[i]] = i;
-
-            // Write float indices into data
-            for (size_t row = 0; row < m_data.numRows; row++) {
-                auto it = indexMap.find(allStrings[row]);
-                m_data.data[row * m_data.numCols + ci] =
-                    (it != indexMap.end()) ? static_cast<float>(it->second) : 0.0f;
-            }
-
-            m_data.columnMeta[ci].isCategorical = true;
-            m_data.columnMeta[ci].categories = std::move(sorted);
-            fprintf(stderr, "    Categorical: %zu categories\n",
-                    m_data.columnMeta[ci].categories.size());
-        } else {
-            // Numeric column: use raw value access
-            size_t rowOffset = 0;
-            for (int chunk = 0; chunk < chunked->num_chunks(); chunk++) {
-                auto arr = chunked->chunk(chunk);
-                int64_t len = arr->length();
-
-                const uint8_t* rawData = arr->data()->buffers[1]->data();
-                int nullCount = arr->null_count();
-
-                for (int64_t r = 0; r < len; r++) {
-                    size_t idx = (rowOffset + r) * m_data.numCols + ci;
-                    if (idx >= m_data.data.size()) break;
-
-                    if (nullCount > 0 && arr->IsNull(r)) {
-                        m_data.data[idx] = 0.0f;
-                        continue;
-                    }
-
-                    switch (typeId) {
-                        case arrow::Type::DOUBLE:
-                            m_data.data[idx] = static_cast<float>(reinterpret_cast<const double*>(rawData)[r]);
-                            break;
-                        case arrow::Type::FLOAT:
-                            m_data.data[idx] = reinterpret_cast<const float*>(rawData)[r];
-                            break;
-                        case arrow::Type::INT64:
-                            m_data.data[idx] = static_cast<float>(reinterpret_cast<const int64_t*>(rawData)[r]);
-                            break;
-                        case arrow::Type::INT32:
-                            m_data.data[idx] = static_cast<float>(reinterpret_cast<const int32_t*>(rawData)[r]);
-                            break;
-                        case arrow::Type::INT16:
-                            m_data.data[idx] = static_cast<float>(reinterpret_cast<const int16_t*>(rawData)[r]);
-                            break;
-                        case arrow::Type::INT8:
-                            m_data.data[idx] = static_cast<float>(reinterpret_cast<const int8_t*>(rawData)[r]);
-                            break;
-                        case arrow::Type::UINT64:
-                            m_data.data[idx] = static_cast<float>(reinterpret_cast<const uint64_t*>(rawData)[r]);
-                            break;
-                        case arrow::Type::UINT32:
-                            m_data.data[idx] = static_cast<float>(reinterpret_cast<const uint32_t*>(rawData)[r]);
-                            break;
-                        default:
-                            m_data.data[idx] = 0.0f;
-                            break;
-                    }
-                }
-                rowOffset += len;
-                fprintf(stderr, "    chunk %d: %lld rows (offset %zu)\n", chunk, len, rowOffset);
-                fflush(stderr);
+    if (canFastPath && numStringCols == 0) {
+        // Ultra-fast path: all single-chunk float columns, no nulls, no strings.
+        // Collect raw float pointers, then do a tiled row-major pass
+        // so writes are sequential and source reads stay in L2 cache.
+        std::vector<const float*> colPtrs(m_data.numCols);
+        for (size_t ci = 0; ci < acceptedCols.size(); ci++) {
+            auto arr = table->column(acceptedCols[ci])->chunk(0);
+            colPtrs[ci] = reinterpret_cast<const float*>(arr->data()->buffers[1]->data());
+        }
+        // Process in column tiles to limit concurrent read streams
+        constexpr size_t COL_TILE = 8;
+        size_t nc = m_data.numCols;
+        for (size_t c0 = 0; c0 < nc; c0 += COL_TILE) {
+            size_t c1 = std::min(c0 + COL_TILE, nc);
+            for (size_t r = 0; r < m_data.numRows; r++) {
+                float* dst = &m_data.data[r * nc + c0];
+                for (size_t ci = c0; ci < c1; ci++)
+                    *dst++ = colPtrs[ci][r];
             }
         }
+        fprintf(stderr, "  Fast float path: %zu cols x %zu rows\n",
+                m_data.numCols, m_data.numRows);
+    } else {
+        // General path: per-column extraction with type dispatch
+        for (size_t ci = 0; ci < acceptedCols.size(); ci++) {
+            int colIdx = acceptedCols[ci];
+            auto chunked = table->column(colIdx);
+            auto typeId = chunked->type()->id();
+            fprintf(stderr, "  Col %zu/%zu: %s (%s)\n", ci, acceptedCols.size(),
+                    table->field(colIdx)->name().c_str(),
+                    chunked->type()->ToString().c_str());
 
-        if (progress && ci % 3 == 0) {
-            if (!progress(ci + 1, acceptedCols.size())) {
-                m_error = "Loading cancelled";
-                return false;
+            if (isStringCol[ci]) {
+                // String column: collect all values, then encode as categorical
+                std::vector<std::string> allStrings;
+                allStrings.reserve(m_data.numRows);
+                for (int chunk = 0; chunk < chunked->num_chunks(); chunk++) {
+                    auto arr = chunked->chunk(chunk);
+                    int64_t len = arr->length();
+                    auto strArr = std::static_pointer_cast<arrow::StringArray>(arr);
+                    for (int64_t r = 0; r < len; r++) {
+                        if (arr->IsNull(r))
+                            allStrings.emplace_back();
+                        else
+                            allStrings.push_back(strArr->GetString(r));
+                    }
+                }
+
+                // Build category index with O(1) hash lookups instead of O(log n) tree
+                std::unordered_map<std::string, int> tempMap;
+                tempMap.reserve(allStrings.size());
+                std::vector<std::string> uniqueStrings;
+                for (const auto& s : allStrings) {
+                    if (tempMap.emplace(s, 0).second)
+                        uniqueStrings.push_back(s);
+                }
+                std::sort(uniqueStrings.begin(), uniqueStrings.end());
+                std::unordered_map<std::string, int> indexMap;
+                indexMap.reserve(uniqueStrings.size() * 2);
+                for (int i = 0; i < (int)uniqueStrings.size(); i++)
+                    indexMap[uniqueStrings[i]] = i;
+
+                // Write float indices into data
+                for (size_t row = 0; row < m_data.numRows; row++)
+                    m_data.data[row * m_data.numCols + ci] = static_cast<float>(indexMap[allStrings[row]]);
+
+                m_data.columnMeta[ci].isCategorical = true;
+                m_data.columnMeta[ci].categories = std::move(uniqueStrings);
+                fprintf(stderr, "    Categorical: %zu categories\n",
+                        m_data.columnMeta[ci].categories.size());
+            } else {
+                // Numeric column: type-dispatched extraction (switch outside inner loop)
+                size_t rowOffset = 0;
+                for (int chunk = 0; chunk < chunked->num_chunks(); chunk++) {
+                    auto arr = chunked->chunk(chunk);
+                    int64_t len = arr->length();
+                    const uint8_t* rawData = arr->data()->buffers[1]->data();
+                    int nullCount = arr->null_count();
+
+                    switch (typeId) {
+                        case arrow::Type::FLOAT:
+                            extractTypedColumn(reinterpret_cast<const float*>(rawData),
+                                len, rowOffset, m_data.data.data(), m_data.numCols, ci, arr, nullCount);
+                            break;
+                        case arrow::Type::DOUBLE:
+                            extractTypedColumn(reinterpret_cast<const double*>(rawData),
+                                len, rowOffset, m_data.data.data(), m_data.numCols, ci, arr, nullCount);
+                            break;
+                        case arrow::Type::INT64:
+                            extractTypedColumn(reinterpret_cast<const int64_t*>(rawData),
+                                len, rowOffset, m_data.data.data(), m_data.numCols, ci, arr, nullCount);
+                            break;
+                        case arrow::Type::INT32:
+                            extractTypedColumn(reinterpret_cast<const int32_t*>(rawData),
+                                len, rowOffset, m_data.data.data(), m_data.numCols, ci, arr, nullCount);
+                            break;
+                        case arrow::Type::INT16:
+                            extractTypedColumn(reinterpret_cast<const int16_t*>(rawData),
+                                len, rowOffset, m_data.data.data(), m_data.numCols, ci, arr, nullCount);
+                            break;
+                        case arrow::Type::INT8:
+                            extractTypedColumn(reinterpret_cast<const int8_t*>(rawData),
+                                len, rowOffset, m_data.data.data(), m_data.numCols, ci, arr, nullCount);
+                            break;
+                        case arrow::Type::UINT64:
+                            extractTypedColumn(reinterpret_cast<const uint64_t*>(rawData),
+                                len, rowOffset, m_data.data.data(), m_data.numCols, ci, arr, nullCount);
+                            break;
+                        case arrow::Type::UINT32:
+                            extractTypedColumn(reinterpret_cast<const uint32_t*>(rawData),
+                                len, rowOffset, m_data.data.data(), m_data.numCols, ci, arr, nullCount);
+                            break;
+                        default:
+                            for (int64_t r = 0; r < len; r++)
+                                m_data.data[(rowOffset + r) * m_data.numCols + ci] = 0.0f;
+                            break;
+                    }
+                    rowOffset += len;
+                }
+            }
+
+            if (progress && ci % 3 == 0) {
+                if (!progress(ci + 1, acceptedCols.size())) {
+                    m_error = "Loading cancelled";
+                    return false;
+                }
             }
         }
     }
 
     fprintf(stderr, "Loaded parquet %s: %zu rows x %zu columns\n",
             path.c_str(), m_data.numRows, m_data.numCols);
+    fprintf(stderr, "TIMING:   col extraction     %.3f s\n", elapsed(tExtract));
 
     // Remove constant columns (same logic as ASCII loader)
+    auto tConst = Clock::now();
     {
         std::vector<bool> keep(m_data.numCols, true);
         int removed = 0;
@@ -755,6 +846,8 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
     }
 
     m_data.data.shrink_to_fit();
+    fprintf(stderr, "TIMING:   const col removal  %.3f s\n", elapsed(tConst));
+    fprintf(stderr, "TIMING:   parquet total      %.3f s\n", elapsed(tStart));
     return true;
 #endif // HAS_PARQUET
 }

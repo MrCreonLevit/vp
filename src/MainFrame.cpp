@@ -7,6 +7,9 @@
 #include <numeric>
 #include <cmath>
 #include <random>
+#include <chrono>
+#include <queue>
+#include <unordered_set>
 
 // Compute "nice" tick values (1, 2, 5 × 10^n series)
 static std::vector<float> computeNiceTicks(float rangeMin, float rangeMax, int approxCount) {
@@ -779,6 +782,12 @@ void MainFrame::InvalidateNormCache() {
 }
 
 void MainFrame::UpdatePlot(int plotIndex) {
+    using Clock = std::chrono::steady_clock;
+    auto tPlotStart = Clock::now();
+    auto elapsed = [](Clock::time_point since) {
+        return std::chrono::duration<double>(Clock::now() - since).count();
+    };
+
     const auto& ds = m_dataManager.dataset();
     if (ds.numRows == 0 || plotIndex < 0 || plotIndex >= (int)m_canvases.size())
         return;
@@ -791,6 +800,7 @@ void MainFrame::UpdatePlot(int plotIndex) {
     if (cfg.yCol >= ds.numCols) cfg.yCol = 0;
 
     // Normalize each axis using cache
+    auto tNorm = Clock::now();
     const auto& xVals = GetNormalized(cfg.xCol, cfg.xNorm);
     const auto& yVals = GetNormalized(cfg.yCol, cfg.yNorm);
 
@@ -800,6 +810,7 @@ void MainFrame::UpdatePlot(int plotIndex) {
     if (hasZ) {
         zValsPtr = &GetNormalized(static_cast<size_t>(cfg.zCol), cfg.zNorm);
     }
+    fprintf(stderr, "    normalize: %.3f s\n", elapsed(tNorm));
 
     float opacity = m_controlPanel->GetOpacity();
 
@@ -809,18 +820,60 @@ void MainFrame::UpdatePlot(int plotIndex) {
     bool subsampled = false;
     if (ds.numRows > MAX_DISPLAY_POINTS) {
         subsampled = true;
-        // Reservoir sampling for uniform random subset
-        displayIndices.resize(ds.numRows);
-        std::iota(displayIndices.begin(), displayIndices.end(), 0);
+
+        // Guarantee the top/bottom EXTREME_K points in each plotted dimension
+        // are included so outliers aren't lost to random subsampling.
+        constexpr size_t EXTREME_K = 10;
+        std::vector<size_t> mustInclude;
+        auto findExtremes = [&](const std::vector<float>& vals) {
+            using P = std::pair<float, size_t>;
+            std::priority_queue<P> bottomK;  // max-heap: tracks smallest values
+            std::priority_queue<P, std::vector<P>, std::greater<P>> topK;  // min-heap: tracks largest
+            for (size_t i = 0; i < vals.size(); i++) {
+                if (bottomK.size() < EXTREME_K || vals[i] < bottomK.top().first) {
+                    bottomK.push({vals[i], i});
+                    if (bottomK.size() > EXTREME_K) bottomK.pop();
+                }
+                if (topK.size() < EXTREME_K || vals[i] > topK.top().first) {
+                    topK.push({vals[i], i});
+                    if (topK.size() > EXTREME_K) topK.pop();
+                }
+            }
+            while (!bottomK.empty()) { mustInclude.push_back(bottomK.top().second); bottomK.pop(); }
+            while (!topK.empty()) { mustInclude.push_back(topK.top().second); topK.pop(); }
+        };
+        findExtremes(xVals);
+        findExtremes(yVals);
+        if (hasZ) findExtremes(*zValsPtr);
+
+        // Deduplicate
+        std::sort(mustInclude.begin(), mustInclude.end());
+        mustInclude.erase(std::unique(mustInclude.begin(), mustInclude.end()), mustInclude.end());
+        std::unordered_set<size_t> mustSet(mustInclude.begin(), mustInclude.end());
+
+        // Reservoir sampling for remaining budget (avoids allocating a full N-element array)
+        size_t budget = MAX_DISPLAY_POINTS - mustInclude.size();
         std::mt19937 rng(plotIndex * 42 + 7);  // deterministic per-plot seed
-        for (size_t i = ds.numRows - 1; i > MAX_DISPLAY_POINTS; i--) {
-            std::uniform_int_distribution<size_t> dist(0, i);
-            std::swap(displayIndices[i], displayIndices[dist(rng)]);
+        std::vector<size_t> reservoir;
+        reservoir.reserve(budget);
+        size_t seen = 0;
+        for (size_t i = 0; i < ds.numRows; i++) {
+            if (mustSet.count(i)) continue;
+            if (reservoir.size() < budget) {
+                reservoir.push_back(i);
+            } else {
+                std::uniform_int_distribution<size_t> dist(0, seen);
+                size_t j = dist(rng);
+                if (j < budget) reservoir[j] = i;
+            }
+            seen++;
         }
-        displayIndices.resize(MAX_DISPLAY_POINTS);
+
+        displayIndices = std::move(mustInclude);
+        displayIndices.insert(displayIndices.end(), reservoir.begin(), reservoir.end());
         std::sort(displayIndices.begin(), displayIndices.end());
-        fprintf(stderr, "  Subsampled %zu -> %zu points for display\n", ds.numRows, MAX_DISPLAY_POINTS);
-        fflush(stderr);
+        fprintf(stderr, "  Subsampled %zu -> %zu points (%zu extremes preserved)\n",
+                ds.numRows, displayIndices.size(), mustSet.size());
     }
 
     size_t numDisplay = subsampled ? displayIndices.size() : ds.numRows;
@@ -874,6 +927,7 @@ void MainFrame::UpdatePlot(int plotIndex) {
         }
     }
 
+    auto tVerts = Clock::now();
     for (size_t di = 0; di < numDisplay; di++) {
         size_t r = subsampled ? displayIndices[di] : di;
         PointVertex v{};
@@ -891,7 +945,10 @@ void MainFrame::UpdatePlot(int plotIndex) {
         points.push_back(v);
     }
 
+    fprintf(stderr, "    build verts: %.3f s\n", elapsed(tVerts));
+
     // Pass display indices for subsampled datasets
+    auto tGpu = Clock::now();
     if (subsampled) {
         m_canvases[plotIndex]->SetDisplayIndices(displayIndices);
     } else {
@@ -905,14 +962,41 @@ void MainFrame::UpdatePlot(int plotIndex) {
         m_plotWidgets[plotIndex].yLabel->SetLabel(ds.columnLabels[cfg.yCol]);
     }
 
+    fprintf(stderr, "    GPU upload: %.3f s\n", elapsed(tGpu));
+
     // Re-apply current selection
     if (!m_selection.empty())
         m_canvases[plotIndex]->SetSelection(m_selection);
+
+    fprintf(stderr, "  UpdatePlot(%d) total       %.3f s\n", plotIndex, elapsed(tPlotStart));
 }
 
 void MainFrame::UpdateAllPlots() {
+    using Clock = std::chrono::steady_clock;
+    auto tAll = Clock::now();
+
+    // Pre-normalize all needed columns before building plots.
+    // This populates the cache so UpdatePlot doesn't do strided reads
+    // interleaved with vertex construction.
+    auto tPreNorm = Clock::now();
+    for (int i = 0; i < (int)m_canvases.size(); i++) {
+        auto& cfg = m_plotConfigs[i];
+        const auto& ds = m_dataManager.dataset();
+        if (ds.numRows == 0) continue;
+        size_t xc = std::min(cfg.xCol, ds.numCols - 1);
+        size_t yc = std::min(cfg.yCol, ds.numCols - 1);
+        GetNormalized(xc, cfg.xNorm);
+        GetNormalized(yc, cfg.yNorm);
+        if (cfg.zCol >= 0 && static_cast<size_t>(cfg.zCol) < ds.numCols)
+            GetNormalized(static_cast<size_t>(cfg.zCol), cfg.zNorm);
+    }
+    fprintf(stderr, "  pre-normalize all: %.3f s\n",
+            std::chrono::duration<double>(Clock::now() - tPreNorm).count());
+
     for (int i = 0; i < (int)m_canvases.size(); i++)
         UpdatePlot(i);
+    fprintf(stderr, "TIMING: UpdateAllPlots total %.3f s\n",
+            std::chrono::duration<double>(Clock::now() - tAll).count());
 }
 
 void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, float y1, bool extend) {
@@ -1012,6 +1096,12 @@ void MainFrame::KillSelectedPoints() {
 }
 
 void MainFrame::LoadFile(const std::string& path) {
+    using Clock = std::chrono::steady_clock;
+    auto t0 = Clock::now();
+    auto elapsed = [&](Clock::time_point since) {
+        return std::chrono::duration<double>(Clock::now() - since).count();
+    };
+
     wxProgressDialog progressDlg("Loading Data", "Loading " + wxString(path).AfterLast('/'),
                                   100, this,
                                   wxPD_APP_MODAL | wxPD_AUTO_HIDE | wxPD_SMOOTH | wxPD_CAN_ABORT);
@@ -1022,10 +1112,8 @@ void MainFrame::LoadFile(const std::string& path) {
         pct = std::min(pct, 99);
         wxString msg;
         if (total > 10000) {
-            // Large values = bytes (ASCII loader)
             msg = wxString::Format("Loading... %zu KB / %zu KB", current / 1024, total / 1024);
         } else {
-            // Small values = columns or other units (Parquet loader)
             msg = wxString::Format("Loading... %zu / %zu", current, total);
         }
         cancelled = !progressDlg.Update(pct, msg);
@@ -1033,6 +1121,7 @@ void MainFrame::LoadFile(const std::string& path) {
         return !cancelled;
     };
 
+    auto tLoad = Clock::now();
     if (!m_dataManager.loadFile(path, progressCb, m_maxRows)) {
         if (!cancelled) {
             wxMessageBox("Failed to load file:\n" + m_dataManager.errorMessage(),
@@ -1040,12 +1129,12 @@ void MainFrame::LoadFile(const std::string& path) {
         }
         return;
     }
+    fprintf(stderr, "TIMING: loadFile            %.3f s\n", elapsed(tLoad));
 
-    progressDlg.Update(100, "Processing...");
+    auto tProcess = Clock::now();
 
     const auto& ds = m_dataManager.dataset();
     fprintf(stderr, "Processing %zu rows x %zu cols\n", ds.numRows, ds.numCols);
-    fflush(stderr);
 
     InvalidateNormCache();
     m_controlPanel->SetColumns(ds.columnLabels);
@@ -1059,20 +1148,24 @@ void MainFrame::LoadFile(const std::string& path) {
         m_plotConfigs[i] = {col1, col2};
     }
 
-    // Set default point size based on dataset size: larger for small datasets,
-    // smaller for large datasets to reduce overplotting
+    // Set default point size based on dataset size
     float defaultSize = std::max(0.5f, std::min(30.0f,
         14.0f - 2.0f * std::log10(static_cast<float>(ds.numRows))));
-    defaultSize = std::round(defaultSize * 10.0f) / 10.0f;  // round to 0.1
+    defaultSize = std::round(defaultSize * 10.0f) / 10.0f;
     for (auto& cfg : m_plotConfigs) cfg.pointSize = defaultSize;
     for (auto* c : m_canvases) c->SetPointSize(defaultSize);
     fprintf(stderr, "Default point size: %.1f (for %zu rows)\n", defaultSize, ds.numRows);
+    fprintf(stderr, "TIMING: processing          %.3f s\n", elapsed(tProcess));
 
     SetTitle("Viewpoints — " + wxString(path).AfterLast('/'));
-    fprintf(stderr, "Updating plots...\n"); fflush(stderr);
+
+    auto tPlots = Clock::now();
     UpdateAllPlots();
-    fprintf(stderr, "Plots updated\n"); fflush(stderr);
+    fprintf(stderr, "TIMING: UpdateAllPlots      %.3f s\n", elapsed(tPlots));
+
     SetActivePlot(0);
+    fprintf(stderr, "TIMING: total load-to-ready %.3f s\n", elapsed(t0));
+    fflush(stderr);
 }
 
 void MainFrame::OnOpen(wxCommandEvent& event) {
