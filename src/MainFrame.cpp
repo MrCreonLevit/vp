@@ -449,6 +449,7 @@ void MainFrame::RebuildGrid() {
         auto* rightSizer = new wxBoxSizer(wxVERTICAL);
 
         auto* canvas = new WebGPUCanvas(cellPanel, &m_gpuContext, i);
+        canvas->SetShowTooltip(m_globalTooltip);
         m_canvases[i] = canvas;
         rightSizer->Add(canvas, 1, wxEXPAND);
 

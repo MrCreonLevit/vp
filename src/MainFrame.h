@@ -125,7 +125,7 @@ private:
 
     // Tooltip state
     std::vector<PointTooltip*> m_tooltips;
-    bool m_globalTooltip = false;
+    bool m_globalTooltip = true;
     int m_hoveredDataRow = -1;
     wxString BuildTooltipText(int dataRow);
     void HideAllTooltips();

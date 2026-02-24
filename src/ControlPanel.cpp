@@ -313,7 +313,7 @@ ControlPanel::ControlPanel(wxWindow* parent)
         "D: toggle deselected points\n"
         "I: invert selection\n"
         "K: kill selected points\n"
-        "T: toggle tooltip\n"
+        "T: toggle hover details\n"
         "R: reset active view\n"
         "Shift+R: reset all views\n"
         "Cmd+S: save all data\n"
@@ -633,8 +633,8 @@ void ControlPanel::CreateAllPage() {
     allHistograms->SetValue(true);
     sizer->Add(allHistograms, 0, wxLEFT, 8);
 
-    m_globalTooltipCheck = new wxCheckBox(m_allPage, wxID_ANY, "Tooltips");
-    m_globalTooltipCheck->SetValue(false);
+    m_globalTooltipCheck = new wxCheckBox(m_allPage, wxID_ANY, "Hover shows datapoint details");
+    m_globalTooltipCheck->SetValue(true);
     sizer->Add(m_globalTooltipCheck, 0, wxLEFT, 8);
 
     auto* deferRedraws = new wxCheckBox(m_allPage, wxID_ANY, "Defer redraws");

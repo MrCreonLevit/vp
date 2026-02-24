@@ -17,7 +17,7 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 - **9 density-based colormaps** — Viridis, Plasma, Inferno, Turbo, Hot, Cool, Grayscale, Blue-Red (viewport-aware density recomputation on zoom/pan)
 - **Marginal histograms** — staircase outlines along each axis, adjustable bins, per-plot toggle
 - **Grid lines** at nice values with aligned tick labels
-- **Point tooltip** — hover over a point to see all variable values in a popup (toggle with **T** key or global checkbox)
+- **Hover datapoint details** — hover over a point to see all variable values in a popup (toggle with **T** key or global checkbox; on by default)
 - **Selection rectangle** with real-time coordinate and percentage display
 - **Status bar** — persistent display of dataset info and selection count with percentage
 - **Automatic point sizing and opacity** — default point size and opacity scale with dataset size
@@ -45,7 +45,7 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 - **Randomize Axes** button per plot
 - **Kill Selected** — permanently remove selected points from dataset
 - **3D rotation** — optional Z-axis with rotation slider, spin (continuous 10°/s), and rock (sinusoidal ±3°)
-- Keyboard shortcuts: **C** clear selection, **I** invert selection, **D** toggle deselected points, **K** kill selected, **T** toggle tooltip, **R** reset active view, **Shift+R** reset all views, **Cmd+S** save all, **Cmd+Shift+S** save selected, **Q** quit
+- Keyboard shortcuts: **C** clear selection, **I** invert selection, **D** toggle deselected points, **K** kill selected, **T** toggle hover details, **R** reset active view, **Shift+R** reset all views, **Cmd+S** save all, **Cmd+Shift+S** save selected, **Q** quit
 
 ### Control Panel
 - **Grid-based plot selector** matching the plot layout, plus an "All" tab for global settings
