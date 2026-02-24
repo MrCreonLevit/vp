@@ -377,15 +377,15 @@ void MainFrame::RebuildGrid() {
         pw.cellPanel = cellPanel;
         auto* cellSizer = new wxBoxSizer(wxHORIZONTAL);
 
-        // Left column: Y label + Y tick panel
+        // Left column: margin + Y label + Y tick panel
         auto* leftSizer = new wxBoxSizer(wxHORIZONTAL);
 
         pw.yLabel = new VerticalLabel(cellPanel);
-        leftSizer->Add(pw.yLabel, 0, wxEXPAND);
+        leftSizer->Add(pw.yLabel, 0, wxEXPAND | wxLEFT, 4);
 
         // Y tick panel: manually positioned labels
-        pw.yTickPanel = new wxPanel(cellPanel, wxID_ANY, wxDefaultPosition, wxSize(20, -1));
-        pw.yTickPanel->SetMinSize(wxSize(20, -1));
+        pw.yTickPanel = new wxPanel(cellPanel, wxID_ANY, wxDefaultPosition, wxSize(16, -1));
+        pw.yTickPanel->SetMinSize(wxSize(16, -1));
         pw.yTickPanel->SetBackgroundColour(bgColor);
         for (int t = 0; t < MAX_NICE_TICKS; t++) {
             auto* tickLabel = new wxStaticText(pw.yTickPanel, wxID_ANY, "",
@@ -431,7 +431,7 @@ void MainFrame::RebuildGrid() {
         xFont.SetPointSize(xFont.GetPointSize() - 1);
         pw.xLabel->SetFont(xFont);
         pw.xLabel->SetBackgroundColour(bgColor);
-        rightSizer->Add(pw.xLabel, 0, wxEXPAND);
+        rightSizer->Add(pw.xLabel, 0, wxEXPAND | wxBOTTOM, 4);
 
         cellSizer->Add(rightSizer, 1, wxEXPAND);
         cellPanel->SetSizer(cellSizer);
@@ -688,7 +688,7 @@ void MainFrame::RebuildGrid() {
                         pw2.yTicks[t]->SetLabel(yTickLabels[t]);
                         pw2.yTicks[t]->SetSize(pw2.yTicks[t]->GetBestSize());
                         wxSize tsz = pw2.yTicks[t]->GetSize();
-                        pw2.yTicks[t]->SetPosition(wxPoint(20 - tsz.GetWidth() - 2, py - tsz.GetHeight() / 2));
+                        pw2.yTicks[t]->SetPosition(wxPoint(16 - tsz.GetWidth() - 2, py - tsz.GetHeight() / 2));
                         pw2.yTicks[t]->Show();
                     } else {
                         pw2.yTicks[t]->Hide();
