@@ -14,6 +14,7 @@
 
 class WebGPUCanvas;
 class ControlPanel;
+class PointTooltip;
 struct BrushColor;
 
 struct PlotConfig {
@@ -29,6 +30,7 @@ struct PlotConfig {
     bool showUnselected = true;
     bool showGridLines = false;
     bool showHistograms = true;
+    bool showTooltip = false;
     float pointSize = 6.0f;
     float opacity = 0.05f;
     int histBins = 64;
@@ -121,6 +123,14 @@ private:
     ColorMapType m_colorMap = ColorMapType::Default;
     int m_colorVariable = 0;  // 0 = position, 1+ = column index
     float m_bgBrightness = 0.0f;
+
+    // Tooltip state
+    std::vector<PointTooltip*> m_tooltips;
+    bool m_globalTooltip = false;
+    int m_hoveredDataRow = -1;
+    wxString BuildTooltipText(int dataRow);
+    void ShowTooltipForPlot(int plotIdx, int dataRow, const wxString& text);
+    void HideAllTooltips();
 
     // Normalized column cache: avoids recomputing on every brush drag
     struct NormCacheKey {

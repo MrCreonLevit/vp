@@ -88,6 +88,10 @@ public:
     int GetPlotIndex() const { return m_plotIndex; }
     void SetActive(bool active);
     void ResetView();
+    void SetShowTooltip(bool show);
+    int FindNearestPoint(int sx, int sy);
+    size_t GetOriginalDataRow(int displayIndex) const;
+    void WorldToScreen(float wx, float wy, int& sx, int& sy);
 
     // Called when user completes a brush rectangle in this canvas.
     // Provides world-space rect so MainFrame can test rows and propagate.
@@ -102,6 +106,9 @@ public:
     std::function<void()> onResetViewRequested;
     std::function<void()> onResetAllViewsRequested;
     std::function<void()> onToggleUnselected;
+    // Called when mouse hovers near a point (tooltip mode); dataRow=-1 means no point
+    std::function<void(int plotIndex, int dataRow, int screenX, int screenY)> onPointHover;
+    std::function<void(int plotIndex, bool show)> onTooltipToggled;
     // Called on each render with current visible range in normalized coords
     std::function<void(int plotIndex, float xMin, float xMax, float yMin, float yMax)> onViewportChanged;
 
@@ -119,7 +126,6 @@ private:
     void Cleanup();
 
     void ScreenToWorld(int sx, int sy, float& wx, float& wy);
-    void WorldToScreen(float wx, float wy, int& sx, int& sy);
 
     void OnPaint(wxPaintEvent& event);
     void OnSize(wxSizeEvent& event);
@@ -187,6 +193,7 @@ private:
     size_t m_gridLineVertexCount = 0;
 
     // Display settings
+    bool m_showTooltip = false;
     bool m_showUnselected = true;
     float m_bgBrightness = 0.0f;
     bool m_useAdditive = true;

@@ -34,6 +34,7 @@ public:
     std::function<void(int plotIndex, bool xLock, bool yLock)> onAxisLockChanged;
     std::function<void(int plotIndex, int zCol, int zNorm)> onZAxisChanged;
     std::function<void(int plotIndex, float angle)> onRotationChanged;
+    std::function<void(int plotIndex, bool show)> onShowTooltipChanged;
 
 private:
     friend class ControlPanel;
@@ -62,6 +63,7 @@ private:
     wxCheckBox* m_showUnselected = nullptr;
     wxCheckBox* m_showGridLines = nullptr;
     wxCheckBox* m_showHistograms = nullptr;
+    wxCheckBox* m_showTooltip = nullptr;
     wxSlider* m_pointSizeSlider = nullptr;
     wxSlider* m_opacitySlider = nullptr;
     wxSlider* m_histBinsSlider = nullptr;
@@ -95,10 +97,12 @@ public:
     std::function<void(int plotIndex, float size)> onPlotPointSizeChanged;
     std::function<void(int plotIndex, float alpha)> onPlotOpacityChanged;
     std::function<void(int plotIndex, int bins)> onPlotHistBinsChanged;
+    std::function<void(int plotIndex, bool show)> onShowTooltipChanged;
     std::function<void(int plotIndex)> onTabSelected;
     std::function<void()> onAllSelected;
 
     // Global callbacks
+    std::function<void(bool show)> onGlobalTooltipChanged;
     std::function<void(float size)> onPointSizeChanged;
     std::function<void(int bins)> onHistBinsChanged;
     std::function<void(int colormap, int colorVar)> onColorMapChanged;

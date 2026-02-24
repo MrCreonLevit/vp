@@ -2,6 +2,7 @@
 #include "MainFrame.h"
 #include "WebGPUCanvas.h"
 #include "ControlPanel.h"
+#include <wx/popupwin.h>
 #include <wx/progdlg.h>
 #include <algorithm>
 #include <numeric>
@@ -10,6 +11,35 @@
 #include <chrono>
 #include <queue>
 #include <unordered_set>
+
+// Lightweight tooltip popup for displaying point values
+class PointTooltip : public wxPopupWindow {
+public:
+    PointTooltip(wxWindow* parent) : wxPopupWindow(parent, wxBORDER_SIMPLE) {
+        SetBackgroundColour(wxColour(25, 25, 38));
+        m_text = new wxStaticText(this, wxID_ANY, "");
+        m_text->SetForegroundColour(wxColour(200, 210, 230));
+        m_text->SetBackgroundColour(wxColour(25, 25, 38));
+        auto font = m_text->GetFont();
+        font.SetPointSize(font.GetPointSize() - 1);
+        font.SetFamily(wxFONTFAMILY_TELETYPE);
+        m_text->SetFont(font);
+        auto* sizer = new wxBoxSizer(wxVERTICAL);
+        sizer->Add(m_text, 0, wxALL, 4);
+        SetSizer(sizer);
+    }
+
+    void ShowAt(const wxString& content, const wxPoint& screenPos) {
+        m_text->SetLabel(content);
+        Layout();
+        Fit();
+        SetPosition(screenPos);
+        if (!IsShown()) Show();
+    }
+
+private:
+    wxStaticText* m_text;
+};
 
 // Compute "nice" tick values (1, 2, 5 × 10^n series)
 static std::vector<float> computeNiceTicks(float rangeMin, float rangeMax, int approxCount) {
@@ -204,6 +234,23 @@ void MainFrame::CreateLayout() {
         }
     };
 
+    m_controlPanel->onShowTooltipChanged = [this](int plotIndex, bool show) {
+        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
+            m_plotConfigs[plotIndex].showTooltip = show;
+            m_canvases[plotIndex]->SetShowTooltip(show || m_globalTooltip);
+            if (!show && !m_globalTooltip && plotIndex < (int)m_tooltips.size())
+                m_tooltips[plotIndex]->Hide();
+        }
+    };
+
+    m_controlPanel->onGlobalTooltipChanged = [this](bool show) {
+        m_globalTooltip = show;
+        for (int i = 0; i < (int)m_canvases.size(); i++) {
+            m_canvases[i]->SetShowTooltip(show || m_plotConfigs[i].showTooltip);
+        }
+        if (!show) HideAllTooltips();
+    };
+
     // Per-plot rendering callbacks
     m_controlPanel->onPlotPointSizeChanged = [this](int plotIndex, float size) {
         if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
@@ -354,6 +401,11 @@ void MainFrame::CreateLayout() {
 }
 
 void MainFrame::RebuildGrid() {
+    // Clean up old tooltips
+    for (auto* tt : m_tooltips) tt->Destroy();
+    m_tooltips.clear();
+    m_hoveredDataRow = -1;
+
     m_gridPanel->DestroyChildren();
     m_canvases.clear();
     m_plotWidgets.clear();
@@ -544,6 +596,44 @@ void MainFrame::RebuildGrid() {
                 m_canvases[j]->ResetView();
                 m_plotConfigs[j].rotationY = 0.0f;
                 m_controlPanel->StopSpinRock(j);
+            }
+        };
+
+        // Create tooltip popup for this canvas
+        m_tooltips.push_back(new PointTooltip(this));
+
+        canvas->onTooltipToggled = [this](int pi, bool show) {
+            if (pi >= 0 && pi < (int)m_plotConfigs.size()) {
+                m_plotConfigs[pi].showTooltip = show;
+                m_controlPanel->SetPlotConfig(pi, m_plotConfigs[pi]);
+            }
+        };
+
+        // Tooltip hover callback
+        canvas->onPointHover = [this](int pi, int dataRow, int sx, int sy) {
+            if (dataRow < 0) {
+                HideAllTooltips();
+                m_hoveredDataRow = -1;
+                return;
+            }
+            const auto& ds = m_dataManager.dataset();
+            if (dataRow >= (int)ds.numRows) return;
+            m_hoveredDataRow = dataRow;
+            wxString text = BuildTooltipText(dataRow);
+
+            if (m_globalTooltip) {
+                // Show in all plots at the appropriate position
+                for (int j = 0; j < (int)m_canvases.size(); j++)
+                    ShowTooltipForPlot(j, dataRow, text);
+            } else {
+                // Show only in the hovering plot
+                if (pi >= 0 && pi < (int)m_tooltips.size()) {
+                    wxPoint screenPos = m_canvases[pi]->ClientToScreen(wxPoint(sx, sy));
+                    m_tooltips[pi]->ShowAt(text, screenPos + wxPoint(12, 12));
+                }
+                for (int j = 0; j < (int)m_tooltips.size(); j++) {
+                    if (j != pi) m_tooltips[j]->Hide();
+                }
             }
         };
 
@@ -1075,7 +1165,8 @@ void MainFrame::PropagateSelection(const std::vector<int>& selection) {
     int count = 0;
     for (int s : m_selection) if (s > 0) count++;
     m_controlPanel->SetSelectionInfo(count, static_cast<int>(m_selection.size()));
-    SetStatusText(m_dataStatusText + wxString::Format("  |  Selected: %d / %zu points", count, m_selection.size()));
+    float pct = m_selection.size() > 0 ? (100.0f * count / m_selection.size()) : 0;
+    SetStatusText(m_dataStatusText + wxString::Format("  |  Selected: %d / %zu (%.1f%%)", count, m_selection.size(), pct));
 }
 
 void MainFrame::ClearAllSelections() {
@@ -1153,8 +1244,8 @@ void MainFrame::LoadFile(const std::string& path) {
     InvalidateNormCache();
     m_controlPanel->SetColumns(ds.columnLabels);
     m_dataStatusText = wxString::Format("%zu rows x %zu columns", ds.numRows, ds.numCols);
-    SetStatusText(m_dataStatusText);
     m_selection.assign(ds.numRows, 0);
+    SetStatusText(m_dataStatusText + wxString::Format("  |  Selected: 0 / %zu (0.0%%)", ds.numRows));
 
     // Auto-assign column pairs to plots
     int numPlots = m_gridRows * m_gridCols;
@@ -1295,6 +1386,59 @@ void MainFrame::OnRemoveCol(wxCommandEvent& event) {
     if (m_gridCols > 1) {
         m_gridCols--;
         RebuildGrid();
+    }
+}
+
+wxString MainFrame::BuildTooltipText(int dataRow) {
+    const auto& ds = m_dataManager.dataset();
+    if (dataRow < 0 || dataRow >= (int)ds.numRows) return "";
+
+    wxString text;
+    for (size_t c = 0; c < ds.numCols; c++) {
+        float val = ds.value(dataRow, c);
+        wxString valStr;
+        if (c < ds.columnMeta.size() && ds.columnMeta[c].isCategorical) {
+            const auto& cats = ds.columnMeta[c].categories;
+            if (!cats.empty()) {
+                int idx = std::max(0, std::min(static_cast<int>(std::round(val)),
+                                               static_cast<int>(cats.size()) - 1));
+                valStr = wxString::FromUTF8(cats[idx]);
+            } else {
+                valStr = wxString::Format("%.6g", val);
+            }
+        } else {
+            valStr = wxString::Format("%.6g", val);
+        }
+        if (c > 0) text += "\n";
+        text += wxString::Format("%s: %s", ds.columnLabels[c], valStr);
+    }
+    return text;
+}
+
+void MainFrame::ShowTooltipForPlot(int plotIdx, int dataRow, const wxString& text) {
+    if (plotIdx < 0 || plotIdx >= (int)m_canvases.size()) return;
+    if (plotIdx >= (int)m_tooltips.size()) return;
+    const auto& ds = m_dataManager.dataset();
+    if (dataRow < 0 || dataRow >= (int)ds.numRows) return;
+
+    auto& cfg = m_plotConfigs[plotIdx];
+    const auto& xVals = GetNormalized(cfg.xCol, cfg.xNorm);
+    const auto& yVals = GetNormalized(cfg.yCol, cfg.yNorm);
+    if (dataRow >= (int)xVals.size() || dataRow >= (int)yVals.size()) return;
+
+    float wx = xVals[dataRow];
+    float wy = yVals[dataRow];
+
+    int sx, sy;
+    m_canvases[plotIdx]->WorldToScreen(wx, wy, sx, sy);
+
+    wxPoint screenPos = m_canvases[plotIdx]->ClientToScreen(wxPoint(sx, sy));
+    m_tooltips[plotIdx]->ShowAt(text, screenPos + wxPoint(12, 12));
+}
+
+void MainFrame::HideAllTooltips() {
+    for (auto* tt : m_tooltips) {
+        if (tt->IsShown()) tt->Hide();
     }
 }
 

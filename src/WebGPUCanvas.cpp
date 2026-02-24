@@ -58,6 +58,11 @@ WebGPUCanvas::WebGPUCanvas(wxWindow* parent, WebGPUContext* ctx, int plotIndex)
     Bind(wxEVT_MAGNIFY, &WebGPUCanvas::OnMagnify, this);
     Bind(wxEVT_KEY_DOWN, &WebGPUCanvas::OnKeyDown, this);
     Bind(wxEVT_CHAR, &WebGPUCanvas::OnKeyDown, this);
+    Bind(wxEVT_LEAVE_WINDOW, [this](wxMouseEvent& event) {
+        if (m_showTooltip && onPointHover)
+            onPointHover(m_plotIndex, -1, 0, 0);
+        event.Skip();
+    });
 
     CallAfter([this]() { InitSurface(); });
 }
@@ -117,6 +122,69 @@ void WebGPUCanvas::SetPanZoom(float panX, float panY, float zoomX, float zoomY) 
     m_zoomX = zoomX;
     m_zoomY = zoomY;
     Refresh();
+}
+
+void WebGPUCanvas::SetShowTooltip(bool show) {
+    m_showTooltip = show;
+    if (!show && onPointHover)
+        onPointHover(m_plotIndex, -1, 0, 0);
+}
+
+int WebGPUCanvas::FindNearestPoint(int sx, int sy) {
+    size_t numPoints = m_basePositions.size() / 2;
+    if (numPoints == 0) return -1;
+
+    float wx, wy;
+    ScreenToWorld(sx, sy, wx, wy);
+
+    wxSize size = GetClientSize();
+    if (size.GetWidth() < 1 || size.GetHeight() < 1) return -1;
+
+    float hw = 1.0f / m_zoomX;
+    float hh = 1.0f / m_zoomY;
+    float threshX = 10.0f / size.GetWidth() * 2.0f * hw;
+    float threshY = 10.0f / size.GetHeight() * 2.0f * hh;
+    float threshSq = threshX * threshX + threshY * threshY;
+
+    int bestIdx = -1;
+    float bestDistSq = threshSq;
+
+    bool hasRotation = (std::abs(m_rotationY) > 0.01f);
+    float cosA = 1.0f, sinA = 0.0f;
+    if (hasRotation) {
+        cosA = std::cos(m_rotationY * 3.14159265f / 180.0f);
+        sinA = std::sin(m_rotationY * 3.14159265f / 180.0f);
+    }
+
+    for (size_t i = 0; i < numPoints; i++) {
+        float px = m_basePositions[i * 2];
+        float py = m_basePositions[i * 2 + 1];
+
+        if (hasRotation && i < m_points.size()) {
+            float pz = m_points[i].z;
+            px = px * cosA + pz * sinA;
+        }
+
+        float dx = px - wx;
+        float dy = py - wy;
+        float distSq = dx * dx + dy * dy;
+        if (distSq < bestDistSq) {
+            bestDistSq = distSq;
+            bestIdx = static_cast<int>(i);
+        }
+    }
+
+    return bestIdx;
+}
+
+size_t WebGPUCanvas::GetOriginalDataRow(int displayIndex) const {
+    if (displayIndex < 0) return static_cast<size_t>(-1);
+    if (!m_displayIndices.empty()) {
+        if (displayIndex < static_cast<int>(m_displayIndices.size()))
+            return m_displayIndices[displayIndex];
+        return static_cast<size_t>(-1);
+    }
+    return static_cast<size_t>(displayIndex);
 }
 
 void WebGPUCanvas::SetShowUnselected(bool show) {
@@ -1422,6 +1490,9 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
 
     if (event.LeftDown() || event.MiddleDown() || event.RightDown()) {
         SetFocus();
+        // Hide tooltip on any mouse button press
+        if (m_showTooltip && onPointHover)
+            onPointHover(m_plotIndex, -1, 0, 0);
         if (isPan || event.MiddleDown() || event.RightDown()) {
             m_panning = true;
         } else if (isTranslate) {
@@ -1532,6 +1603,9 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             }
         }
     } else if (event.GetWheelRotation() != 0) {
+        // Hide tooltip during scroll
+        if (m_showTooltip && onPointHover)
+            onPointHover(m_plotIndex, -1, 0, 0);
         // Two-finger scroll: pan the view
         wxSize sz = GetClientSize();
         float dx = 0.0f, dy = 0.0f;
@@ -1546,6 +1620,15 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
         if (onViewChanged) onViewChanged(m_plotIndex, m_panX, m_panY, m_zoomX, m_zoomY);
         if (m_colorMap != 0) RecomputeDensityColors();
         Refresh();
+    } else if (m_showTooltip && event.Moving()) {
+        // Tooltip hover detection: find nearest point under cursor
+        int idx = FindNearestPoint(event.GetX(), event.GetY());
+        if (idx >= 0 && onPointHover) {
+            size_t dataRow = GetOriginalDataRow(idx);
+            onPointHover(m_plotIndex, static_cast<int>(dataRow), event.GetX(), event.GetY());
+        } else if (onPointHover) {
+            onPointHover(m_plotIndex, -1, 0, 0);
+        }
     }
     event.Skip();
 }
@@ -1553,6 +1636,8 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
 void WebGPUCanvas::OnMagnify(wxMouseEvent& event) {
     float magnification = event.GetMagnification();  // typically -0.1 to +0.1 per event
     if (magnification == 0.0f) return;
+    if (m_showTooltip && onPointHover)
+        onPointHover(m_plotIndex, -1, 0, 0);
 
     float factor = 1.0f + magnification;
     factor = std::max(0.5f, std::min(factor, 2.0f));
@@ -1611,6 +1696,13 @@ void WebGPUCanvas::OnKeyDown(wxKeyEvent& event) {
             break;
         case 'K':
             if (onKillRequested) onKillRequested();
+            break;
+        case 'T':
+            m_showTooltip = !m_showTooltip;
+            if (!m_showTooltip && onPointHover)
+                onPointHover(m_plotIndex, -1, 0, 0);
+            if (onTooltipToggled)
+                onTooltipToggled(m_plotIndex, m_showTooltip);
             break;
         case 'Q':
             if (auto* frame = wxDynamicCast(wxGetTopLevelParent(this), wxFrame))

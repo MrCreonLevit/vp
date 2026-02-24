@@ -105,7 +105,11 @@ void PlotTab::CreateControls(int row, int col) {
 
     m_showHistograms = new wxCheckBox(this, wxID_ANY, "Histograms");
     m_showHistograms->SetValue(true);
-    sizer->Add(m_showHistograms, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 8);
+    sizer->Add(m_showHistograms, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+
+    m_showTooltip = new wxCheckBox(this, wxID_ANY, "Tooltip");
+    m_showTooltip->SetValue(false);
+    sizer->Add(m_showTooltip, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 8);
 
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
@@ -202,6 +206,10 @@ void PlotTab::CreateControls(int row, int col) {
         if (onShowHistogramsChanged)
             onShowHistogramsChanged(m_plotIndex, m_showHistograms->GetValue());
     });
+    m_showTooltip->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+        if (onShowTooltipChanged)
+            onShowTooltipChanged(m_plotIndex, m_showTooltip->GetValue());
+    });
     m_pointSizeSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         if (m_suppress) return;
         float val = m_pointSizeSlider->GetValue() / 10.0f;
@@ -262,6 +270,7 @@ void PlotTab::SyncFromConfig(const PlotConfig& cfg) {
     m_showUnselected->SetValue(cfg.showUnselected);
     m_showGridLines->SetValue(cfg.showGridLines);
     m_showHistograms->SetValue(cfg.showHistograms);
+    m_showTooltip->SetValue(cfg.showTooltip);
     m_pointSizeSlider->SetValue(static_cast<int>(cfg.pointSize * 10));
     m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %.1f", cfg.pointSize));
     m_opacitySlider->SetValue(static_cast<int>(cfg.opacity * 100));
@@ -313,6 +322,7 @@ ControlPanel::ControlPanel(wxWindow* parent)
         "D: toggle deselected points\n"
         "I: invert selection\n"
         "K: kill selected points\n"
+        "T: toggle tooltip\n"
         "R: reset active view\n"
         "Shift+R: reset all views\n"
         "Cmd+S: save all data\n"
@@ -426,6 +436,9 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
         };
         tab->onShowHistogramsChanged = [this](int pi, bool show) {
             if (onShowHistogramsChanged) onShowHistogramsChanged(pi, show);
+        };
+        tab->onShowTooltipChanged = [this](int pi, bool show) {
+            if (onShowTooltipChanged) onShowTooltipChanged(pi, show);
         };
         tab->onPointSizeChanged = [this](int pi, float size) {
             if (onPlotPointSizeChanged) onPlotPointSizeChanged(pi, size);
@@ -632,10 +645,17 @@ void ControlPanel::CreateAllPage() {
     allHistograms->SetValue(true);
     sizer->Add(allHistograms, 0, wxLEFT, 8);
 
+    auto* allTooltip = new wxCheckBox(m_allPage, wxID_ANY, "Tooltips");
+    allTooltip->SetValue(false);
+    sizer->Add(allTooltip, 0, wxLEFT, 8);
+
     auto* deferRedraws = new wxCheckBox(m_allPage, wxID_ANY, "Defer redraws");
     deferRedraws->SetValue(false);
     sizer->Add(deferRedraws, 0, wxLEFT | wxBOTTOM, 8);
 
+    allTooltip->Bind(wxEVT_CHECKBOX, [this, allTooltip](wxCommandEvent&) {
+        if (onGlobalTooltipChanged) onGlobalTooltipChanged(allTooltip->GetValue());
+    });
     deferRedraws->Bind(wxEVT_CHECKBOX, [this, deferRedraws](wxCommandEvent&) {
         if (onDeferRedrawsChanged) onDeferRedrawsChanged(deferRedraws->GetValue());
     });
