@@ -122,9 +122,7 @@ void WebGPUCanvas::SetPanZoom(float panX, float panY, float zoomX, float zoomY) 
 void WebGPUCanvas::SetShowUnselected(bool show) {
     m_showUnselected = show;
     UpdatePointColors();
-    // Re-upload brush colors to GPU to ensure they're current after vertex rebuild
-    if (m_initialized && !m_brushColors.empty())
-        SetBrushColors(m_brushColors);
+    Update();
 }
 
 void WebGPUCanvas::SetShowGridLines(bool show) {
