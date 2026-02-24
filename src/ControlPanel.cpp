@@ -379,6 +379,8 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
     m_opacitySlider = nullptr;
     m_histBinsSlider = nullptr;
     m_selectionLabel = nullptr;
+    m_brushSymbolChoice = nullptr;
+    m_brushSizeSlider = nullptr;
 
     int numPlots = rows * cols;
     for (int i = 0; i < numPlots; i++) {
@@ -696,31 +698,44 @@ void ControlPanel::CreateAllPage() {
         });
         // Right-click: reset brush to default (especially useful for brush 0)
         btn->Bind(wxEVT_RIGHT_DOWN, [this, i](wxMouseEvent&) {
+            m_brushSymbols[i] = (i == 0) ? SYMBOL_CIRCLE : (i - 1) % SYMBOL_COUNT;
+            m_brushSizeOffsets[i] = 0.0f;
+            if (i == m_activeBrush) {
+                if (m_brushSymbolChoice) m_brushSymbolChoice->SetSelection(m_brushSymbols[i]);
+                if (m_brushSizeSlider) m_brushSizeSlider->SetValue(0);
+            }
             if (onBrushReset) onBrushReset(i);
         });
     }
     sizer->Add(brushSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+    // Initialize per-brush defaults to match MainFrame defaults
+    for (int i = 0; i < CP_NUM_BRUSHES; i++) {
+        m_brushSymbols[i] = (i == 0) ? SYMBOL_CIRCLE : (i - 1) % SYMBOL_COUNT;
+        m_brushSizeOffsets[i] = 0.0f;
+    }
     SelectBrush(0);
 
     // Symbol chooser for active brush
     sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Brush Symbol"), 0, wxLEFT | wxTOP, 8);
-    auto* symbolChoice = new wxChoice(m_allPage, wxID_ANY);
+    m_brushSymbolChoice = new wxChoice(m_allPage, wxID_ANY);
     for (int s = 0; s < SYMBOL_COUNT; s++)
-        symbolChoice->Append(SymbolName(s));
-    symbolChoice->SetSelection(0);
-    sizer->Add(symbolChoice, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
-    symbolChoice->Bind(wxEVT_CHOICE, [this, symbolChoice](wxCommandEvent&) {
-        int sym = symbolChoice->GetSelection();
+        m_brushSymbolChoice->Append(SymbolName(s));
+    m_brushSymbolChoice->SetSelection(0);
+    sizer->Add(m_brushSymbolChoice, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+    m_brushSymbolChoice->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        int sym = m_brushSymbolChoice->GetSelection();
+        m_brushSymbols[m_activeBrush] = sym;
         if (onBrushSymbolChanged)
             onBrushSymbolChanged(m_activeBrush, sym);
     });
 
     // Per-brush size offset slider
     sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Brush Size +/-"), 0, wxLEFT | wxTOP, 8);
-    auto* brushSizeSlider = new wxSlider(m_allPage, wxID_ANY, 0, -10, 20);
-    sizer->Add(brushSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
-    brushSizeSlider->Bind(wxEVT_SLIDER, [this, brushSizeSlider](wxCommandEvent&) {
-        float offset = static_cast<float>(brushSizeSlider->GetValue());
+    m_brushSizeSlider = new wxSlider(m_allPage, wxID_ANY, 0, -10, 20);
+    sizer->Add(m_brushSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+    m_brushSizeSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
+        float offset = static_cast<float>(m_brushSizeSlider->GetValue());
+        m_brushSizeOffsets[m_activeBrush] = offset;
         if (onBrushSizeOffsetChanged)
             onBrushSizeOffsetChanged(m_activeBrush, offset);
     });
@@ -792,6 +807,10 @@ void ControlPanel::SelectBrush(int index) {
             m_brushButtons[i]->SetLabel(
                 i == index ? wxString::Format("[%d]", i) : wxString::Format("%d", i));
     }
+    if (m_brushSymbolChoice)
+        m_brushSymbolChoice->SetSelection(m_brushSymbols[index]);
+    if (m_brushSizeSlider)
+        m_brushSizeSlider->SetValue(static_cast<int>(m_brushSizeOffsets[index]));
     if (onBrushChanged) onBrushChanged(index);
 }
 

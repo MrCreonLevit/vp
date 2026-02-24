@@ -157,4 +157,8 @@ private:
     wxStaticText* m_infoLabel = nullptr;
     std::array<wxButton*, CP_NUM_BRUSHES> m_brushButtons = {};
     int m_activeBrush = 0;
+    wxChoice* m_brushSymbolChoice = nullptr;
+    wxSlider* m_brushSizeSlider = nullptr;
+    std::array<int, CP_NUM_BRUSHES> m_brushSymbols = {};
+    std::array<float, CP_NUM_BRUSHES> m_brushSizeOffsets = {};
 };
