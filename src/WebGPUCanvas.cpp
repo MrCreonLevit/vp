@@ -266,7 +266,12 @@ void WebGPUCanvas::SetSelection(const std::vector<int>& sel) {
                              selU32.data(), numPoints * sizeof(uint32_t));
     }
 
-    // GPU shader handles selection coloring — no vertex buffer rebuild needed.
+    // When unselected points are hidden, we must rebuild the vertex buffer
+    // so newly-unselected points get alpha=0 and newly-selected points become visible.
+    if (!m_showUnselected) {
+        UpdatePointColors();
+    }
+
     // Clear the overlay buffer so old selections don't persist on screen.
     if (m_selVertexBuffer) {
         wgpuBufferRelease(m_selVertexBuffer);
