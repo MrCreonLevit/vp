@@ -1599,8 +1599,12 @@ void WebGPUCanvas::OnKeyDown(wxKeyEvent& event) {
             if (onInvertRequested) onInvertRequested();
             break;
         case 'R':
-            if (onResetViewRequested) onResetViewRequested();
-            else ResetView();
+            if (event.ShiftDown()) {
+                if (onResetAllViewsRequested) onResetAllViewsRequested();
+            } else {
+                if (onResetViewRequested) onResetViewRequested();
+                else ResetView();
+            }
             break;
         case 'D':
             if (onToggleUnselected) onToggleUnselected();

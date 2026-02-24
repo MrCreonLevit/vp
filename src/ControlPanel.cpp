@@ -318,6 +318,7 @@ ControlPanel::ControlPanel(wxWindow* parent)
         "I: invert selection\n"
         "K: kill selected points\n"
         "R: reset active view\n"
+        "Shift+R: reset all views\n"
         "Cmd+S: save all data\n"
         "Cmd+Shift+S: save selected\n"
         "Q: quit");
@@ -517,6 +518,19 @@ void ControlPanel::SelectTab(int plotIndex) {
 void ControlPanel::SetPlotConfig(int plotIndex, const PlotConfig& cfg) {
     if (plotIndex >= 0 && plotIndex < (int)m_plotTabs.size())
         m_plotTabs[plotIndex]->SyncFromConfig(cfg);
+}
+
+void ControlPanel::StopSpinRock(int plotIndex) {
+    if (plotIndex >= 0 && plotIndex < (int)m_plotTabs.size()) {
+        auto* tab = m_plotTabs[plotIndex];
+        tab->m_spinning = false;
+        tab->m_rocking = false;
+        tab->m_spinAngle = 0.0f;
+        tab->m_spinButton->SetValue(false);
+        tab->m_rockButton->SetValue(false);
+        tab->m_rotationSlider->SetValue(0);
+        tab->m_rotationLabel->SetLabel(wxString::Format("Rotation: 0\u00B0"));
+    }
 }
 
 void ControlPanel::SetColumns(const std::vector<std::string>& names) {

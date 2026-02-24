@@ -97,8 +97,11 @@ void MainFrame::CreateMenuBar() {
     Bind(wxEVT_MENU, &MainFrame::OnRemoveRow, this, ID_RemoveRow);
     Bind(wxEVT_MENU, &MainFrame::OnRemoveCol, this, ID_RemoveCol);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) {
-        if (m_activePlot >= 0 && m_activePlot < (int)m_canvases.size())
+        if (m_activePlot >= 0 && m_activePlot < (int)m_canvases.size()) {
             m_canvases[m_activePlot]->ResetView();
+            m_plotConfigs[m_activePlot].rotationY = 0.0f;
+            m_controlPanel->StopSpinRock(m_activePlot);
+        }
     }, ID_ResetViews);
 }
 
@@ -533,6 +536,15 @@ void MainFrame::RebuildGrid() {
         canvas->SetBrushColors(m_brushColors);
         canvas->onResetViewRequested = [this, i]() {
             m_canvases[i]->ResetView();
+            m_plotConfigs[i].rotationY = 0.0f;
+            m_controlPanel->StopSpinRock(i);
+        };
+        canvas->onResetAllViewsRequested = [this]() {
+            for (int j = 0; j < (int)m_canvases.size(); j++) {
+                m_canvases[j]->ResetView();
+                m_plotConfigs[j].rotationY = 0.0f;
+                m_controlPanel->StopSpinRock(j);
+            }
         };
 
         // Viewport change callback: compute nice ticks, update labels and grid lines

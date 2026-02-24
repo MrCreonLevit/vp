@@ -80,6 +80,7 @@ public:
     void RebuildTabs(int rows, int cols);
     void SelectTab(int plotIndex);
     void SetPlotConfig(int plotIndex, const PlotConfig& cfg);
+    void StopSpinRock(int plotIndex);
 
     // Per-plot callbacks
     std::function<void(int plotIndex)> onRandomizeAxes;
