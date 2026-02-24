@@ -35,6 +35,8 @@ bool ViewpointsApp::OnInit() {
 
     if (!m_inputFile.empty()) {
         frame->LoadFileFromPath(m_inputFile.ToStdString());
+    } else if (wxFileExists("data/sampledata.txt")) {
+        frame->LoadFileFromPath("data/sampledata.txt");
     }
 
     return true;
