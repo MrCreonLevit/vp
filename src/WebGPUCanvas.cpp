@@ -25,7 +25,7 @@ const char* SymbolName(int symbol) {
 
 #ifdef __WXMAC__
 #include <Cocoa/Cocoa.h>
-#include <QuartzCore/CAMetalLayer.h>
+#include <QuartzCore/QuartzCore.h>
 #endif
 
 static void makeOrtho(float* m, float left, float right, float bottom, float top) {
@@ -385,6 +385,16 @@ void WebGPUCanvas::ScreenToWorld(int sx, int sy, float& wx, float& wy) {
     float hh = 1.0f / m_zoomY;
     wx = m_panX + ndcX * hw;
     wy = m_panY + ndcY * hh;
+}
+
+void WebGPUCanvas::WorldToScreen(float wx, float wy, int& sx, int& sy) {
+    wxSize size = GetClientSize();
+    float hw = 1.0f / m_zoomX;
+    float hh = 1.0f / m_zoomY;
+    float ndcX = (wx - m_panX) / hw;
+    float ndcY = (wy - m_panY) / hh;
+    sx = static_cast<int>((ndcX + 1.0f) * 0.5f * size.GetWidth());
+    sy = static_cast<int>((1.0f - ndcY) * 0.5f * size.GetHeight());
 }
 
 void WebGPUCanvas::InitSurface() {
@@ -1386,9 +1396,16 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             }
             m_selecting = false;
         }
+        if (m_translating && m_deferRedraws && m_hasLastRect) {
+            // Deferred translate: apply the final rect position on mouse-up
+            bool extend = event.CmdDown() || event.ControlDown();
+            if (onBrushRect)
+                onBrushRect(m_plotIndex, m_lastRectX0, m_lastRectY0, m_lastRectX1, m_lastRectY1, extend);
+        }
         m_translating = false;
         m_panning = false;
         if (HasCapture()) ReleaseMouse();
+        HideSelectionOverlay();
         if (m_colorMap != 0) RecomputeDensityColors();
         Refresh();
     } else if (event.Dragging()) {
@@ -1419,7 +1436,15 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
                 if (onBrushRect)
                     onBrushRect(m_plotIndex, m_lastRectX0, m_lastRectY0, m_lastRectX1, m_lastRectY1, extend);
             }
-            Refresh();
+            if (m_deferRedraws) {
+                // Show lightweight native overlay rectangle
+                int sx0, sy0, sx1, sy1;
+                WorldToScreen(m_lastRectX0, m_lastRectY1, sx0, sy0);  // top-left
+                WorldToScreen(m_lastRectX1, m_lastRectY0, sx1, sy1);  // bottom-right
+                ShowSelectionOverlay(sx0, sy0, sx1, sy1);
+            } else {
+                Refresh();
+            }
         } else if (m_selecting) {
             m_selectEnd = pos;
             float wx0, wy0, wx1, wy1;
@@ -1439,7 +1464,15 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
                 m_lastRectY1 = std::max(wy0, wy1);
                 m_hasLastRect = true;
             }
-            Refresh();
+            if (m_deferRedraws) {
+                ShowSelectionOverlay(
+                    std::min(m_selectStart.x, m_selectEnd.x),
+                    std::min(m_selectStart.y, m_selectEnd.y),
+                    std::max(m_selectStart.x, m_selectEnd.x),
+                    std::max(m_selectStart.y, m_selectEnd.y));
+            } else {
+                Refresh();
+            }
         }
     } else if (event.GetWheelRotation() != 0) {
         float factor = event.GetWheelRotation() > 0 ? 1.1f : 1.0f / 1.1f;
@@ -1537,7 +1570,61 @@ void WebGPUCanvas::OnKeyDown(wxKeyEvent& event) {
     }
 }
 
+void WebGPUCanvas::ShowSelectionOverlay(int x0, int y0, int x1, int y1) {
+#ifdef __WXMAC__
+    if (!m_metalLayer) return;
+    CAMetalLayer* metalLayer = (CAMetalLayer*)m_metalLayer;
+
+    // Disable implicit animations — without this, Core Animation
+    // animates path changes over 0.25s, making the rect feel laggy.
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+
+    if (!m_selectionOverlay) {
+        CAShapeLayer* overlay = [CAShapeLayer layer];
+        [overlay retain];
+        overlay.fillColor = [NSColor clearColor].CGColor;
+        overlay.strokeColor = [NSColor whiteColor].CGColor;
+        overlay.lineWidth = 1.5;
+        overlay.zPosition = 1000;
+        // Add as sublayer of the metal layer itself so coordinates
+        // are relative to this canvas, not a parent view.
+        [metalLayer addSublayer:overlay];
+        m_selectionOverlay = (void*)overlay;
+    }
+
+    CAShapeLayer* overlay = (CAShapeLayer*)m_selectionOverlay;
+
+    // wxWidgets NSView is flipped (origin at top-left), so the layer
+    // coordinate system matches wx screen coords directly.
+    CGFloat left   = std::min(x0, x1);
+    CGFloat right  = std::max(x0, x1);
+    CGFloat top    = std::min(y0, y1);
+    CGFloat bottom = std::max(y0, y1);
+    CGRect rect = CGRectMake(left, top, right - left, bottom - top);
+
+    CGPathRef path = CGPathCreateWithRect(rect, NULL);
+    overlay.path = path;
+    CGPathRelease(path);
+    overlay.hidden = NO;
+
+    [CATransaction commit];
+#endif
+}
+
+void WebGPUCanvas::HideSelectionOverlay() {
+#ifdef __WXMAC__
+    if (m_selectionOverlay) {
+        CAShapeLayer* overlay = (CAShapeLayer*)m_selectionOverlay;
+        [overlay removeFromSuperlayer];
+        [overlay release];
+        m_selectionOverlay = nullptr;
+    }
+#endif
+}
+
 void WebGPUCanvas::Cleanup() {
+    HideSelectionOverlay();
     if (m_selectionBindGroup) { wgpuBindGroupRelease(m_selectionBindGroup); m_selectionBindGroup = nullptr; }
     if (m_selectionGpuBuffer) { wgpuBufferRelease(m_selectionGpuBuffer); m_selectionGpuBuffer = nullptr; }
     if (m_brushColorGpuBuffer) { wgpuBufferRelease(m_brushColorGpuBuffer); m_brushColorGpuBuffer = nullptr; }

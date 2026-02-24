@@ -117,6 +117,7 @@ private:
     void Cleanup();
 
     void ScreenToWorld(int sx, int sy, float& wx, float& wy);
+    void WorldToScreen(float wx, float wy, int& sx, int& sy);
 
     void OnPaint(wxPaintEvent& event);
     void OnSize(wxSizeEvent& event);
@@ -199,6 +200,8 @@ private:
     WGPUBuffer m_selRectBuffer = nullptr;
     size_t m_selRectVertexCount = 0;
     void UpdateSelectionRect();
+    void ShowSelectionOverlay(int x0, int y0, int x1, int y1);
+    void HideSelectionOverlay();
 
     // Mouse interaction
     bool m_panning = false;
@@ -215,4 +218,5 @@ private:
 
     // Platform-specific
     void* m_metalLayer = nullptr;
+    void* m_selectionOverlay = nullptr;  // CAShapeLayer* (bridged)
 };

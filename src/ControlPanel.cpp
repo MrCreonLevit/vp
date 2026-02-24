@@ -429,7 +429,7 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
         };
     }
 
-    // "All" page (last)
+    // "Global" page (last)
     CreateAllPage();
 
     // Restore global state
@@ -450,8 +450,8 @@ void ControlPanel::RebuildSelectorGrid() {
 
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
-    // "All" button row
-    m_allButton = new wxButton(m_selectorPanel, wxID_ANY, "All",
+    // "Global" button row
+    m_allButton = new wxButton(m_selectorPanel, wxID_ANY, "Global",
                                 wxDefaultPosition, wxSize(-1, 24), wxBU_EXACTFIT);
     m_allButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         int allIdx = static_cast<int>(m_plotTabs.size());
