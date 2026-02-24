@@ -167,7 +167,29 @@ void WebGPUCanvas::SetGridLinePositions(const std::vector<float>& xPositions,
 
 void WebGPUCanvas::SetOpacity(float alpha) {
     m_opacity = alpha;
-    UpdatePointColors();
+    // Update vertex alpha in-place
+    for (size_t i = 0; i < m_points.size(); i++) {
+        if (!m_showUnselected && (i >= m_selection.size() || m_selection[i] == 0))
+            m_points[i].a = 0.0f;
+        else
+            m_points[i].a = m_opacity;
+    }
+    if (m_initialized) {
+        // Re-upload brush colors since brush alpha depends on m_opacity,
+        // but preserve the selection overlay buffer
+        if (!m_brushColors.empty() && m_brushColorGpuBuffer && m_brushParamsGpuBuffer) {
+            float colorData[8 * 4] = {};
+            for (size_t i = 0; i < m_brushColors.size() && i < 8; i++) {
+                colorData[i * 4 + 0] = m_brushColors[i].r;
+                colorData[i * 4 + 1] = m_brushColors[i].g;
+                colorData[i * 4 + 2] = m_brushColors[i].b;
+                colorData[i * 4 + 3] = (i == 0) ? m_brushColors[i].a : m_opacity * m_brushColors[i].a * 2.0f;
+            }
+            wgpuQueueWriteBuffer(m_ctx->GetQueue(), m_brushColorGpuBuffer, 0, colorData, sizeof(colorData));
+        }
+        UpdateVertexBuffer();
+        Refresh();
+    }
 }
 
 void WebGPUCanvas::SetBrushColors(const std::vector<BrushColor>& colors) {

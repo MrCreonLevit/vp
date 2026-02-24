@@ -1148,13 +1148,23 @@ void MainFrame::LoadFile(const std::string& path) {
         m_plotConfigs[i] = {col1, col2};
     }
 
-    // Set default point size based on dataset size
+    // Set default point size and opacity based on dataset size
     float defaultSize = std::max(0.5f, std::min(30.0f,
         14.0f - 2.0f * std::log10(static_cast<float>(ds.numRows))));
     defaultSize = std::round(defaultSize * 10.0f) / 10.0f;
-    for (auto& cfg : m_plotConfigs) cfg.pointSize = defaultSize;
-    for (auto* c : m_canvases) c->SetPointSize(defaultSize);
-    fprintf(stderr, "Default point size: %.1f (for %zu rows)\n", defaultSize, ds.numRows);
+    float defaultOpacity = std::max(0.03f, std::min(1.0f,
+        1.2f - 0.2f * std::log10(static_cast<float>(ds.numRows))));
+    defaultOpacity = std::round(defaultOpacity * 100.0f) / 100.0f;
+    for (auto& cfg : m_plotConfigs) {
+        cfg.pointSize = defaultSize;
+        cfg.opacity = defaultOpacity;
+    }
+    for (auto* c : m_canvases) {
+        c->SetPointSize(defaultSize);
+        c->SetOpacity(defaultOpacity);
+    }
+    fprintf(stderr, "Default point size: %.1f, opacity: %.0f%% (for %zu rows)\n",
+            defaultSize, defaultOpacity * 100.0f, ds.numRows);
     fprintf(stderr, "TIMING: processing          %.3f s\n", elapsed(tProcess));
 
     SetTitle("Viewpoints — " + wxString(path).AfterLast('/'));
