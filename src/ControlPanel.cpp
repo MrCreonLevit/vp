@@ -478,7 +478,7 @@ void ControlPanel::RebuildSelectorGrid() {
     sizer->Add(gridSizer, 0, wxEXPAND | wxBOTTOM, 2);
 
     // "Global" button row (below the plot grid)
-    m_allButton = new wxButton(m_selectorPanel, wxID_ANY, "All Plots",
+    m_allButton = new wxButton(m_selectorPanel, wxID_ANY, "All Plots + Brush Controls",
                                 wxDefaultPosition, wxSize(-1, 24), wxBU_EXACTFIT);
     m_allButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         int allIdx = static_cast<int>(m_plotTabs.size());
@@ -561,7 +561,7 @@ void ControlPanel::CreateAllPage() {
     static_cast<wxScrolledWindow*>(m_allPage)->SetScrollRate(0, 10);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
-    auto* header = new wxStaticText(m_allPage, wxID_ANY, "All Plots");
+    auto* header = new wxStaticText(m_allPage, wxID_ANY, "All Plots + Brush Controls");
     auto font = header->GetFont();
     font.SetWeight(wxFONTWEIGHT_BOLD);
     header->SetFont(font);
