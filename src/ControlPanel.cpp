@@ -450,16 +450,6 @@ void ControlPanel::RebuildSelectorGrid() {
 
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
-    // "Global" button row
-    m_allButton = new wxButton(m_selectorPanel, wxID_ANY, "Global",
-                                wxDefaultPosition, wxSize(-1, 24), wxBU_EXACTFIT);
-    m_allButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
-        int allIdx = static_cast<int>(m_plotTabs.size());
-        SelectPage(allIdx);
-        if (onAllSelected) onAllSelected();
-    });
-    sizer->Add(m_allButton, 0, wxEXPAND | wxBOTTOM, 2);
-
     // Plot button grid
     auto* gridSizer = new wxGridSizer(m_gridRows, m_gridCols, 2, 2);
     int numPlots = m_gridRows * m_gridCols;
@@ -476,7 +466,17 @@ void ControlPanel::RebuildSelectorGrid() {
         gridSizer->Add(btn, 1, wxEXPAND);
         m_plotButtons.push_back(btn);
     }
-    sizer->Add(gridSizer, 0, wxEXPAND);
+    sizer->Add(gridSizer, 0, wxEXPAND | wxBOTTOM, 2);
+
+    // "Global" button row (below the plot grid)
+    m_allButton = new wxButton(m_selectorPanel, wxID_ANY, "Global",
+                                wxDefaultPosition, wxSize(-1, 24), wxBU_EXACTFIT);
+    m_allButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        int allIdx = static_cast<int>(m_plotTabs.size());
+        SelectPage(allIdx);
+        if (onAllSelected) onAllSelected();
+    });
+    sizer->Add(m_allButton, 0, wxEXPAND);
 
     m_selectorPanel->SetSizer(sizer);
     m_selectorPanel->Layout();
