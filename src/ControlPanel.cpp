@@ -569,106 +569,7 @@ void ControlPanel::CreateAllPage() {
 
     sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
-    m_pointSizeLabel = new wxStaticText(m_allPage, wxID_ANY, "Point Size: 6.0");
-    sizer->Add(m_pointSizeLabel, 0, wxLEFT | wxTOP, 8);
-    m_pointSizeSlider = new wxSlider(m_allPage, wxID_ANY, 60, 5, 300);
-    sizer->Add(m_pointSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
-
-    m_histBinsLabel = new wxStaticText(m_allPage, wxID_ANY, "Hist Bins: 64");
-    sizer->Add(m_histBinsLabel, 0, wxLEFT | wxTOP, 8);
-    m_histBinsSlider = new wxSlider(m_allPage, wxID_ANY, 64, 2, 512);
-    sizer->Add(m_histBinsSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
-
-    sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
-
-    // Color map controls
-    auto* colorHeader = new wxStaticText(m_allPage, wxID_ANY, "Color Map");
-    auto cFont = colorHeader->GetFont();
-    cFont.SetWeight(wxFONTWEIGHT_BOLD);
-    colorHeader->SetFont(cFont);
-    sizer->Add(colorHeader, 0, wxLEFT, 8);
-
-    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Map"), 0, wxLEFT | wxTOP, 8);
-    auto* colorMapChoice = new wxChoice(m_allPage, wxID_ANY);
-    for (const auto& name : AllColorMapNames())
-        colorMapChoice->Append(name);
-    colorMapChoice->SetSelection(0);
-    sizer->Add(colorMapChoice, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
-
-    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Color By"), 0, wxLEFT | wxTOP, 8);
-    m_colorVarChoice = new wxChoice(m_allPage, wxID_ANY);
-    m_colorVarChoice->Append("(density)");
-    m_colorVarChoice->SetSelection(0);
-    sizer->Add(m_colorVarChoice, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
-
-    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Background"), 0, wxLEFT | wxTOP, 8);
-    auto* bgSlider = new wxSlider(m_allPage, wxID_ANY, 0, 0, 50);
-    sizer->Add(bgSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
-
-    colorMapChoice->Bind(wxEVT_CHOICE, [this, colorMapChoice](wxCommandEvent&) {
-        if (onColorMapChanged)
-            onColorMapChanged(colorMapChoice->GetSelection(), m_colorVarChoice->GetSelection());
-    });
-    m_colorVarChoice->Bind(wxEVT_CHOICE, [this, colorMapChoice](wxCommandEvent&) {
-        if (onColorMapChanged)
-            onColorMapChanged(colorMapChoice->GetSelection(), m_colorVarChoice->GetSelection());
-    });
-    bgSlider->Bind(wxEVT_SLIDER, [this, bgSlider](wxCommandEvent&) {
-        if (onBackgroundChanged)
-            onBackgroundChanged(static_cast<float>(bgSlider->GetValue()) / 100.0f);
-    });
-
-    sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
-
-    // Display toggles (apply to all plots)
-    auto* allShowUnselected = new wxCheckBox(m_allPage, wxID_ANY, "Show unselected");
-    allShowUnselected->SetValue(true);
-    sizer->Add(allShowUnselected, 0, wxLEFT, 8);
-
-    auto* allGridLines = new wxCheckBox(m_allPage, wxID_ANY, "Grid lines");
-    allGridLines->SetValue(false);
-    sizer->Add(allGridLines, 0, wxLEFT, 8);
-
-    auto* allHistograms = new wxCheckBox(m_allPage, wxID_ANY, "Histograms");
-    allHistograms->SetValue(true);
-    sizer->Add(allHistograms, 0, wxLEFT, 8);
-
-    m_globalTooltipCheck = new wxCheckBox(m_allPage, wxID_ANY, "Hover shows datapoint details");
-    m_globalTooltipCheck->SetValue(true);
-    sizer->Add(m_globalTooltipCheck, 0, wxLEFT, 8);
-
-    auto* deferRedraws = new wxCheckBox(m_allPage, wxID_ANY, "Defer redraws");
-    deferRedraws->SetValue(false);
-    sizer->Add(deferRedraws, 0, wxLEFT | wxBOTTOM, 8);
-
-    m_globalTooltipCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
-        if (onGlobalTooltipChanged) onGlobalTooltipChanged(m_globalTooltipCheck->GetValue());
-    });
-    deferRedraws->Bind(wxEVT_CHECKBOX, [this, deferRedraws](wxCommandEvent&) {
-        if (onDeferRedrawsChanged) onDeferRedrawsChanged(deferRedraws->GetValue());
-    });
-
-    allShowUnselected->Bind(wxEVT_CHECKBOX, [this, allShowUnselected](wxCommandEvent&) {
-        bool show = allShowUnselected->GetValue();
-        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
-            if (onShowUnselectedChanged) onShowUnselectedChanged(i, show);
-        }
-    });
-    allGridLines->Bind(wxEVT_CHECKBOX, [this, allGridLines](wxCommandEvent&) {
-        bool show = allGridLines->GetValue();
-        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
-            if (onGridLinesChanged) onGridLinesChanged(i, show);
-        }
-    });
-    allHistograms->Bind(wxEVT_CHECKBOX, [this, allHistograms](wxCommandEvent&) {
-        bool show = allHistograms->GetValue();
-        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
-            if (onShowHistogramsChanged) onShowHistogramsChanged(i, show);
-        }
-    });
-
-    sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
-
+    // Brush controls (at the top for quick access)
     auto* brushLabel = new wxStaticText(m_allPage, wxID_ANY, "Brush (dbl-click: edit color)");
     auto bFont = brushLabel->GetFont();
     bFont.SetWeight(wxFONTWEIGHT_BOLD);
@@ -800,6 +701,108 @@ void ControlPanel::CreateAllPage() {
             if (onBrushOpacityOffsetChanged) onBrushOpacityOffsetChanged(m_activeBrush, offset);
         }
     });
+
+    sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
+
+    m_pointSizeLabel = new wxStaticText(m_allPage, wxID_ANY, "Point Size: 6.0");
+    sizer->Add(m_pointSizeLabel, 0, wxLEFT | wxTOP, 8);
+    m_pointSizeSlider = new wxSlider(m_allPage, wxID_ANY, 60, 5, 300);
+    sizer->Add(m_pointSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    m_histBinsLabel = new wxStaticText(m_allPage, wxID_ANY, "Hist Bins: 64");
+    sizer->Add(m_histBinsLabel, 0, wxLEFT | wxTOP, 8);
+    m_histBinsSlider = new wxSlider(m_allPage, wxID_ANY, 64, 2, 512);
+    sizer->Add(m_histBinsSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
+
+    // Color map controls
+    auto* colorHeader = new wxStaticText(m_allPage, wxID_ANY, "Color Map");
+    auto cFont = colorHeader->GetFont();
+    cFont.SetWeight(wxFONTWEIGHT_BOLD);
+    colorHeader->SetFont(cFont);
+    sizer->Add(colorHeader, 0, wxLEFT, 8);
+
+    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Map"), 0, wxLEFT | wxTOP, 8);
+    auto* colorMapChoice = new wxChoice(m_allPage, wxID_ANY);
+    for (const auto& name : AllColorMapNames())
+        colorMapChoice->Append(name);
+    colorMapChoice->SetSelection(0);
+    sizer->Add(colorMapChoice, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Color By"), 0, wxLEFT | wxTOP, 8);
+    m_colorVarChoice = new wxChoice(m_allPage, wxID_ANY);
+    m_colorVarChoice->Append("(density)");
+    m_colorVarChoice->SetSelection(0);
+    sizer->Add(m_colorVarChoice, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Background"), 0, wxLEFT | wxTOP, 8);
+    auto* bgSlider = new wxSlider(m_allPage, wxID_ANY, 0, 0, 50);
+    sizer->Add(bgSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    colorMapChoice->Bind(wxEVT_CHOICE, [this, colorMapChoice](wxCommandEvent&) {
+        if (onColorMapChanged)
+            onColorMapChanged(colorMapChoice->GetSelection(), m_colorVarChoice->GetSelection());
+    });
+    m_colorVarChoice->Bind(wxEVT_CHOICE, [this, colorMapChoice](wxCommandEvent&) {
+        if (onColorMapChanged)
+            onColorMapChanged(colorMapChoice->GetSelection(), m_colorVarChoice->GetSelection());
+    });
+    bgSlider->Bind(wxEVT_SLIDER, [this, bgSlider](wxCommandEvent&) {
+        if (onBackgroundChanged)
+            onBackgroundChanged(static_cast<float>(bgSlider->GetValue()) / 100.0f);
+    });
+
+    sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
+
+    // Display toggles (apply to all plots)
+    auto* allShowUnselected = new wxCheckBox(m_allPage, wxID_ANY, "Show unselected");
+    allShowUnselected->SetValue(true);
+    sizer->Add(allShowUnselected, 0, wxLEFT, 8);
+
+    auto* allGridLines = new wxCheckBox(m_allPage, wxID_ANY, "Grid lines");
+    allGridLines->SetValue(false);
+    sizer->Add(allGridLines, 0, wxLEFT, 8);
+
+    auto* allHistograms = new wxCheckBox(m_allPage, wxID_ANY, "Histograms");
+    allHistograms->SetValue(true);
+    sizer->Add(allHistograms, 0, wxLEFT, 8);
+
+    m_globalTooltipCheck = new wxCheckBox(m_allPage, wxID_ANY, "Hover shows datapoint details");
+    m_globalTooltipCheck->SetValue(true);
+    sizer->Add(m_globalTooltipCheck, 0, wxLEFT, 8);
+
+    auto* deferRedraws = new wxCheckBox(m_allPage, wxID_ANY, "Defer redraws");
+    deferRedraws->SetValue(false);
+    sizer->Add(deferRedraws, 0, wxLEFT | wxBOTTOM, 8);
+
+    m_globalTooltipCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+        if (onGlobalTooltipChanged) onGlobalTooltipChanged(m_globalTooltipCheck->GetValue());
+    });
+    deferRedraws->Bind(wxEVT_CHECKBOX, [this, deferRedraws](wxCommandEvent&) {
+        if (onDeferRedrawsChanged) onDeferRedrawsChanged(deferRedraws->GetValue());
+    });
+
+    allShowUnselected->Bind(wxEVT_CHECKBOX, [this, allShowUnselected](wxCommandEvent&) {
+        bool show = allShowUnselected->GetValue();
+        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
+            if (onShowUnselectedChanged) onShowUnselectedChanged(i, show);
+        }
+    });
+    allGridLines->Bind(wxEVT_CHECKBOX, [this, allGridLines](wxCommandEvent&) {
+        bool show = allGridLines->GetValue();
+        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
+            if (onGridLinesChanged) onGridLinesChanged(i, show);
+        }
+    });
+    allHistograms->Bind(wxEVT_CHECKBOX, [this, allHistograms](wxCommandEvent&) {
+        bool show = allHistograms->GetValue();
+        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
+            if (onShowHistogramsChanged) onShowHistogramsChanged(i, show);
+        }
+    });
+
+    sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
 
     m_selectionLabel = new wxStaticText(m_allPage, wxID_ANY, "No selection");
     sizer->Add(m_selectionLabel, 0, wxLEFT | wxTOP, 8);
