@@ -99,7 +99,6 @@ public:
 
     // Global callbacks
     std::function<void(float size)> onPointSizeChanged;
-    std::function<void(float alpha)> onOpacityChanged;
     std::function<void(int bins)> onHistBinsChanged;
     std::function<void(int colormap, int colorVar)> onColorMapChanged;
     std::function<void(float brightness)> onBackgroundChanged;
@@ -116,7 +115,7 @@ public:
     std::function<void(bool selectedOnly)> onSaveData;
 
     float GetPointSize() const;
-    float GetOpacity() const;
+    void SetGlobalPointSize(float size);
 
 private:
     void CreateAllPage();
@@ -149,13 +148,10 @@ private:
     // "All" page widgets
     wxChoice* m_colorVarChoice = nullptr;
     wxSlider* m_pointSizeSlider = nullptr;
-    wxSlider* m_opacitySlider = nullptr;
     wxSlider* m_histBinsSlider = nullptr;
     wxStaticText* m_pointSizeLabel = nullptr;
-    wxStaticText* m_opacityLabel = nullptr;
     wxStaticText* m_histBinsLabel = nullptr;
     wxStaticText* m_selectionLabel = nullptr;
-    wxStaticText* m_infoLabel = nullptr;
     std::array<wxButton*, CP_NUM_BRUSHES> m_brushButtons = {};
     wxButton* m_allBrushButton = nullptr;
     int m_activeBrush = 0;        // -1 = "all" mode

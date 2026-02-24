@@ -301,16 +301,18 @@ ControlPanel::ControlPanel(wxWindow* parent)
 
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxALL, 4);
 
-    m_infoLabel = new wxStaticText(this, wxID_ANY, "No data loaded");
-    sizer->Add(m_infoLabel, 0, wxLEFT | wxRIGHT, 8);
-
-    auto* helpText = new wxStaticText(this, wxID_ANY,
+    auto* helpScroll = new wxScrolledWindow(this, wxID_ANY, wxDefaultPosition,
+                                              wxDefaultSize, wxVSCROLL);
+    helpScroll->SetScrollRate(0, 10);
+    auto* helpSizer = new wxBoxSizer(wxVERTICAL);
+    auto* helpText = new wxStaticText(helpScroll, wxID_ANY,
         "Click plot: activate\n"
         "Drag: select (brush) points\n"
         "Opt+drag: move selection\n"
         "Cmd+drag: extend selection\n"
         "Shift+drag: pan\n"
-        "Scroll/pinch: zoom\n"
+        "Scroll: pan\n"
+        "Pinch: zoom\n"
         "C: clear selection\n"
         "D: toggle deselected points\n"
         "I: invert selection\n"
@@ -323,7 +325,9 @@ ControlPanel::ControlPanel(wxWindow* parent)
     auto hFont = helpText->GetFont();
     hFont.SetPointSize(hFont.GetPointSize() - 1);
     helpText->SetFont(hFont);
-    sizer->Add(helpText, 0, wxALL, 8);
+    helpSizer->Add(helpText, 0, wxALL, 8);
+    helpScroll->SetSizer(helpSizer);
+    sizer->Add(helpScroll, 1, wxEXPAND);
 
     SetSizer(sizer);
     RebuildTabs(2, 2);
@@ -364,7 +368,6 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
     m_ready = false;  // suppress dialogs during rebuild
 
     float savedSize = m_pointSizeSlider ? m_pointSizeSlider->GetValue() : 6;
-    float savedOpacity = m_opacitySlider ? m_opacitySlider->GetValue() : 5;
     int savedBins = m_histBinsSlider ? m_histBinsSlider->GetValue() : 64;
     int savedBrush = m_activeBrush;
 
@@ -376,7 +379,6 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
     m_plotTabs.clear();
     m_allPage = nullptr;
     m_pointSizeSlider = nullptr;
-    m_opacitySlider = nullptr;
     m_histBinsSlider = nullptr;
     m_selectionLabel = nullptr;
     m_brushSymbolChoice = nullptr;
@@ -438,7 +440,6 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
 
     // Restore global state
     if (m_pointSizeSlider) m_pointSizeSlider->SetValue(savedSize);
-    if (m_opacitySlider) m_opacitySlider->SetValue(savedOpacity);
     if (m_histBinsSlider) m_histBinsSlider->SetValue(savedBins);
     SelectBrush(savedBrush);
 
@@ -521,7 +522,6 @@ void ControlPanel::SetPlotConfig(int plotIndex, const PlotConfig& cfg) {
 void ControlPanel::SetColumns(const std::vector<std::string>& names) {
     m_columnNames = names;
     for (auto* tab : m_plotTabs) tab->SetColumns(names);
-    m_infoLabel->SetLabel(wxString::Format("%zu columns", names.size()));
     // Update color variable dropdown
     if (m_colorVarChoice) {
         m_colorVarChoice->Clear();
@@ -556,11 +556,6 @@ void ControlPanel::CreateAllPage() {
     sizer->Add(m_pointSizeLabel, 0, wxLEFT | wxTOP, 8);
     m_pointSizeSlider = new wxSlider(m_allPage, wxID_ANY, 60, 5, 300);
     sizer->Add(m_pointSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
-
-    m_opacityLabel = new wxStaticText(m_allPage, wxID_ANY, "Opacity: 5%");
-    sizer->Add(m_opacityLabel, 0, wxLEFT | wxTOP, 8);
-    m_opacitySlider = new wxSlider(m_allPage, wxID_ANY, 5, 1, 100);
-    sizer->Add(m_opacitySlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
     m_histBinsLabel = new wxStaticText(m_allPage, wxID_ANY, "Hist Bins: 64");
     sizer->Add(m_histBinsLabel, 0, wxLEFT | wxTOP, 8);
@@ -815,11 +810,6 @@ void ControlPanel::CreateAllPage() {
         m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %.1f", val));
         if (onPointSizeChanged) onPointSizeChanged(val);
     });
-    m_opacitySlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
-        int val = m_opacitySlider->GetValue();
-        m_opacityLabel->SetLabel(wxString::Format("Opacity: %d%%", val));
-        if (onOpacityChanged) onOpacityChanged(static_cast<float>(val) / 100.0f);
-    });
     m_histBinsSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         int val = m_histBinsSlider->GetValue();
         m_histBinsLabel->SetLabel(wxString::Format("Hist Bins: %d", val));
@@ -871,6 +861,7 @@ float ControlPanel::GetPointSize() const {
     return m_pointSizeSlider ? static_cast<float>(m_pointSizeSlider->GetValue()) : 6.0f;
 }
 
-float ControlPanel::GetOpacity() const {
-    return m_opacitySlider ? static_cast<float>(m_opacitySlider->GetValue()) / 100.0f : 0.05f;
+void ControlPanel::SetGlobalPointSize(float size) {
+    if (m_pointSizeSlider) m_pointSizeSlider->SetValue(static_cast<int>(size * 10));
+    if (m_pointSizeLabel) m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %.1f", size));
 }

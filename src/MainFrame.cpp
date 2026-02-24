@@ -234,12 +234,6 @@ void MainFrame::CreateLayout() {
         }
     };
 
-    m_controlPanel->onOpacityChanged = [this](float alpha) {
-        for (int i = 0; i < (int)m_canvases.size(); i++) {
-            m_plotConfigs[i].opacity = alpha;
-            m_canvases[i]->SetOpacity(alpha);
-        }
-    };
 
     m_controlPanel->onHistBinsChanged = [this](int bins) {
         for (int i = 0; i < (int)m_canvases.size(); i++) {
@@ -522,7 +516,7 @@ void MainFrame::RebuildGrid() {
             int selCount = 0;
             for (int s : m_selection) if (s > 0) selCount++;
             float pct = ds.numRows > 0 ? (100.0f * selCount / ds.numRows) : 0;
-            SetStatusText(wxString::Format("Selection: X [%s, %s]  Y [%s, %s]  |  %d / %zu (%.1f%%)",
+            SetStatusText(m_dataStatusText + wxString::Format("  |  Selection: X [%s, %s]  Y [%s, %s]  |  %d / %zu (%.1f%%)",
                                             fmtVal(dLeft, cfg.xCol), fmtVal(dRight, cfg.xCol),
                                             fmtVal(dBottom, cfg.yCol), fmtVal(dTop, cfg.yCol),
                                             selCount, ds.numRows, pct));
@@ -821,7 +815,7 @@ void MainFrame::UpdatePlot(int plotIndex) {
     }
     fprintf(stderr, "    normalize: %.3f s\n", elapsed(tNorm));
 
-    float opacity = m_controlPanel->GetOpacity();
+    float opacity = m_plotConfigs[plotIndex].opacity;
 
     // Subsample if dataset is very large to avoid GPU memory issues
     constexpr size_t MAX_DISPLAY_POINTS = 4000000;  // 4M points max per plot
@@ -1071,7 +1065,7 @@ void MainFrame::PropagateSelection(const std::vector<int>& selection) {
     int count = 0;
     for (int s : m_selection) if (s > 0) count++;
     m_controlPanel->SetSelectionInfo(count, static_cast<int>(m_selection.size()));
-    SetStatusText(wxString::Format("Selected: %d / %zu points", count, m_selection.size()));
+    SetStatusText(m_dataStatusText + wxString::Format("  |  Selected: %d / %zu points", count, m_selection.size()));
 }
 
 void MainFrame::ClearAllSelections() {
@@ -1100,7 +1094,8 @@ void MainFrame::KillSelectedPoints() {
     UpdateAllPlots();
     PropagateSelection(m_selection);
 
-    SetStatusText(wxString::Format("Deleted %zu points, %zu remaining",
+    m_dataStatusText = wxString::Format("%zu rows x %zu columns", ds.numRows, ds.numCols);
+    SetStatusText(m_dataStatusText + wxString::Format("  |  Deleted %zu points, %zu remaining",
                                     removed, ds.numRows));
 }
 
@@ -1147,6 +1142,8 @@ void MainFrame::LoadFile(const std::string& path) {
 
     InvalidateNormCache();
     m_controlPanel->SetColumns(ds.columnLabels);
+    m_dataStatusText = wxString::Format("%zu rows x %zu columns", ds.numRows, ds.numCols);
+    SetStatusText(m_dataStatusText);
     m_selection.assign(ds.numRows, 0);
 
     // Auto-assign column pairs to plots
@@ -1172,6 +1169,7 @@ void MainFrame::LoadFile(const std::string& path) {
         c->SetPointSize(defaultSize);
         c->SetOpacity(defaultOpacity);
     }
+    m_controlPanel->SetGlobalPointSize(defaultSize);
     fprintf(stderr, "Default point size: %.1f, opacity: %.0f%% (for %zu rows)\n",
             defaultSize, defaultOpacity * 100.0f, ds.numRows);
     fprintf(stderr, "TIMING: processing          %.3f s\n", elapsed(tProcess));
@@ -1243,7 +1241,7 @@ void MainFrame::OnSave(bool selectedOnly) {
         }
 
         if (ok) {
-            SetStatusText("Saved: " + dialog.GetPath());
+            SetStatusText(m_dataStatusText + "  |  Saved: " + dialog.GetPath());
         } else {
             wxMessageBox("Failed to save file.", "Save Error", wxOK | wxICON_ERROR, this);
         }

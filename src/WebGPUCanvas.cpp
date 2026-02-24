@@ -167,12 +167,15 @@ void WebGPUCanvas::SetGridLinePositions(const std::vector<float>& xPositions,
 
 void WebGPUCanvas::SetOpacity(float alpha) {
     m_opacity = alpha;
-    // Update vertex alpha in-place
+    // Update vertex alpha in-place (apply brush 0 opacity offset for unselected points)
+    float brush0Opacity = m_opacity;
+    if (!m_brushColors.empty())
+        brush0Opacity = std::max(0.0f, std::min(1.0f, m_opacity + m_brushColors[0].opacityOffset / 100.0f));
     for (size_t i = 0; i < m_points.size(); i++) {
         if (!m_showUnselected && (i >= m_selection.size() || m_selection[i] == 0))
             m_points[i].a = 0.0f;
         else
-            m_points[i].a = m_opacity;
+            m_points[i].a = brush0Opacity;
     }
     if (m_initialized) {
         // Re-upload brush colors since brush alpha depends on m_opacity,
@@ -214,11 +217,15 @@ void WebGPUCanvas::SetBrushColors(const std::vector<BrushColor>& colors) {
         wgpuQueueWriteBuffer(queue, m_brushColorGpuBuffer, 0, colorData, sizeof(colorData));
         wgpuQueueWriteBuffer(queue, m_brushParamsGpuBuffer, 0, paramData, sizeof(paramData));
 
-        // Clear overlay buffers to avoid stale colors
-        if (m_selVertexBuffer) { wgpuBufferRelease(m_selVertexBuffer); m_selVertexBuffer = nullptr; }
-        if (m_overlaySelBuffer) { wgpuBufferRelease(m_overlaySelBuffer); m_overlaySelBuffer = nullptr; }
-        if (m_overlayBindGroup) { wgpuBindGroupRelease(m_overlayBindGroup); m_overlayBindGroup = nullptr; }
-        m_selVertexCount = 0;
+        // Update vertex alpha for brush 0 opacity offset
+        float brush0Opacity = std::max(0.0f, std::min(1.0f, m_opacity + colors[0].opacityOffset / 100.0f));
+        for (size_t i = 0; i < m_points.size(); i++) {
+            if (!m_showUnselected && (i >= m_selection.size() || m_selection[i] == 0))
+                m_points[i].a = 0.0f;
+            else
+                m_points[i].a = brush0Opacity;
+        }
+        UpdateVertexBuffer();
 
         Refresh();
     }
@@ -347,6 +354,9 @@ void WebGPUCanvas::UpdatePointColors() {
     // for selected points using the selection storage buffer + brush uniforms.
     // Symbol and sizeScale are always base values here — brush-specific
     // values come from the GPU uniform lookup only.
+    float brush0Opacity = m_opacity;
+    if (!m_brushColors.empty())
+        brush0Opacity = std::max(0.0f, std::min(1.0f, m_opacity + m_brushColors[0].opacityOffset / 100.0f));
     for (size_t i = 0; i < m_points.size(); i++) {
         if (!m_showUnselected && (i >= m_selection.size() || m_selection[i] == 0)) {
             m_points[i].r = 0.0f;
@@ -357,7 +367,7 @@ void WebGPUCanvas::UpdatePointColors() {
             m_points[i].r = (i * 3 < m_baseColors.size()) ? m_baseColors[i * 3] : 0.15f;
             m_points[i].g = (i * 3 + 1 < m_baseColors.size()) ? m_baseColors[i * 3 + 1] : 0.4f;
             m_points[i].b = (i * 3 + 2 < m_baseColors.size()) ? m_baseColors[i * 3 + 2] : 1.0f;
-            m_points[i].a = m_opacity;
+            m_points[i].a = brush0Opacity;
         }
         m_points[i].symbol = 0.0f;
         m_points[i].sizeScale = 1.0f;
@@ -847,9 +857,6 @@ void WebGPUCanvas::UpdateVertexBuffer() {
     auto queue = m_ctx->GetQueue();
 
     size_t dataSize = m_points.size() * sizeof(PointVertex);
-    fprintf(stderr, "    VB: %zu points, %zu bytes (%.1f MB)\n",
-            m_points.size(), dataSize, dataSize / 1048576.0);
-    fflush(stderr);
 
     if (m_vertexBuffer) {
         wgpuBufferRelease(m_vertexBuffer);

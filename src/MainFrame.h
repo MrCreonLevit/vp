@@ -94,6 +94,7 @@ private:
     int m_activeBrush = 1;
     std::vector<BrushColor> m_brushColors;
     size_t m_maxRows = 0;  // 0 = no limit
+    wxString m_dataStatusText;  // persistent "N rows x M columns" for status bar
     ColorMapType m_colorMap = ColorMapType::Default;
     int m_colorVariable = 0;  // 0 = position, 1+ = column index
     float m_bgBrightness = 0.0f;
