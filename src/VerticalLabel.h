@@ -29,7 +29,7 @@ private:
         font.SetPointSize(font.GetPointSize() - 1);
         dc.SetFont(font);
         dc.SetTextForeground(wxColour(160, 170, 200));
-        dc.SetBackground(wxBrush(wxColour(30, 30, 40)));
+        dc.SetBackground(wxBrush(GetBackgroundColour()));
         dc.Clear();
 
         wxSize sz = GetClientSize();

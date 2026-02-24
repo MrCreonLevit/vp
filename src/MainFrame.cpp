@@ -109,6 +109,11 @@ void MainFrame::CreateLayout() {
     mainSizer->Add(m_controlPanel, 0, wxEXPAND);
 
     m_gridPanel = new wxPanel(this);
+    m_gridPanel->SetBackgroundColour(wxColour(120, 120, 130));
+    m_gridPanel->Bind(wxEVT_SIZE, &MainFrame::OnGridSize, this);
+    m_gridPanel->Bind(wxEVT_LEFT_DOWN, &MainFrame::OnGridMouse, this);
+    m_gridPanel->Bind(wxEVT_LEFT_UP, &MainFrame::OnGridMouse, this);
+    m_gridPanel->Bind(wxEVT_MOTION, &MainFrame::OnGridMouse, this);
     mainSizer->Add(m_gridPanel, 1, wxEXPAND);
 
     SetSizer(mainSizer);
@@ -350,6 +355,12 @@ void MainFrame::RebuildGrid() {
     m_canvases.clear();
     m_plotWidgets.clear();
 
+    // Initialize proportions (reset to uniform if dimensions changed)
+    if ((int)m_colWidths.size() != m_gridCols)
+        m_colWidths.assign(m_gridCols, 1.0 / m_gridCols);
+    if ((int)m_rowHeights.size() != m_gridRows)
+        m_rowHeights.assign(m_gridRows, 1.0 / m_gridRows);
+
     int numPlots = m_gridRows * m_gridCols;
     m_plotConfigs.resize(numPlots);
     m_canvases.resize(numPlots);
@@ -358,8 +369,6 @@ void MainFrame::RebuildGrid() {
     wxFont tickFont(7, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
     wxColour tickTextColor(130, 140, 160);
     wxColour bgColor(30, 30, 40);
-
-    auto* gridSizer = new wxGridSizer(m_gridRows, m_gridCols, 2, 2);
 
     for (int i = 0; i < numPlots; i++) {
         auto& pw = m_plotWidgets[i];
@@ -375,8 +384,8 @@ void MainFrame::RebuildGrid() {
         leftSizer->Add(pw.yLabel, 0, wxEXPAND);
 
         // Y tick panel: manually positioned labels
-        pw.yTickPanel = new wxPanel(cellPanel, wxID_ANY, wxDefaultPosition, wxSize(46, -1));
-        pw.yTickPanel->SetMinSize(wxSize(46, -1));
+        pw.yTickPanel = new wxPanel(cellPanel, wxID_ANY, wxDefaultPosition, wxSize(20, -1));
+        pw.yTickPanel->SetMinSize(wxSize(20, -1));
         pw.yTickPanel->SetBackgroundColour(bgColor);
         for (int t = 0; t < MAX_NICE_TICKS; t++) {
             auto* tickLabel = new wxStaticText(pw.yTickPanel, wxID_ANY, "",
@@ -426,7 +435,6 @@ void MainFrame::RebuildGrid() {
 
         cellSizer->Add(rightSizer, 1, wxEXPAND);
         cellPanel->SetSizer(cellSizer);
-        gridSizer->Add(cellPanel, 1, wxEXPAND);
 
         // Wire callbacks
         canvas->onBrushRect = [this](int pi, float x0, float y0, float x1, float y1, bool ext) {
@@ -680,7 +688,7 @@ void MainFrame::RebuildGrid() {
                         pw2.yTicks[t]->SetLabel(yTickLabels[t]);
                         pw2.yTicks[t]->SetSize(pw2.yTicks[t]->GetBestSize());
                         wxSize tsz = pw2.yTicks[t]->GetSize();
-                        pw2.yTicks[t]->SetPosition(wxPoint(46 - tsz.GetWidth() - 2, py - tsz.GetHeight() / 2));
+                        pw2.yTicks[t]->SetPosition(wxPoint(20 - tsz.GetWidth() - 2, py - tsz.GetHeight() / 2));
                         pw2.yTicks[t]->Show();
                     } else {
                         pw2.yTicks[t]->Hide();
@@ -697,8 +705,7 @@ void MainFrame::RebuildGrid() {
         });
     }
 
-    m_gridPanel->SetSizer(gridSizer);
-    m_gridPanel->Layout();
+    LayoutGrid();
 
     // Rebuild control panel tabs to match grid
     m_controlPanel->RebuildTabs(m_gridRows, m_gridCols);
@@ -1036,15 +1043,6 @@ void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, flo
             matchCount++;
         }
     }
-    fprintf(stderr, "HandleBrushRect: rect=[%.3f,%.3f]x[%.3f,%.3f] matched=%d/%zu brush=%d\n",
-            rectMinX, rectMaxX, rectMinY, rectMaxY, matchCount, ds.numRows, m_activeBrush);
-    fprintf(stderr, "  xVals range: [%.3f, %.3f], yVals range: [%.3f, %.3f]\n",
-            *std::min_element(xVals.begin(), xVals.end()),
-            *std::max_element(xVals.begin(), xVals.end()),
-            *std::min_element(yVals.begin(), yVals.end()),
-            *std::max_element(yVals.begin(), yVals.end()));
-    fflush(stderr);
-
     PropagateSelection(m_selection);
 }
 
@@ -1285,5 +1283,179 @@ void MainFrame::OnRemoveCol(wxCommandEvent& event) {
     if (m_gridCols > 1) {
         m_gridCols--;
         RebuildGrid();
+    }
+}
+
+void MainFrame::LayoutGrid() {
+    wxSize sz = m_gridPanel->GetClientSize();
+    int totalW = sz.GetWidth();
+    int totalH = sz.GetHeight();
+    if (totalW < 1 || totalH < 1) return;
+
+    int numPlots = m_gridRows * m_gridCols;
+    if (numPlots == 0 || (int)m_plotWidgets.size() != numPlots) return;
+
+    int gapW = GRID_GAP * (m_gridCols - 1);
+    int gapH = GRID_GAP * (m_gridRows - 1);
+    int availW = totalW - gapW;
+    int availH = totalH - gapH;
+    if (availW < m_gridCols || availH < m_gridRows) return;
+
+    // Convert proportions to pixel widths
+    std::vector<int> colPx(m_gridCols);
+    int usedW = 0;
+    for (int c = 0; c < m_gridCols; c++) {
+        colPx[c] = static_cast<int>(m_colWidths[c] * availW);
+        usedW += colPx[c];
+    }
+    colPx[m_gridCols - 1] += (availW - usedW); // distribute rounding remainder
+
+    // Convert proportions to pixel heights
+    std::vector<int> rowPx(m_gridRows);
+    int usedH = 0;
+    for (int r = 0; r < m_gridRows; r++) {
+        rowPx[r] = static_cast<int>(m_rowHeights[r] * availH);
+        usedH += rowPx[r];
+    }
+    rowPx[m_gridRows - 1] += (availH - usedH);
+
+    // Position each cell panel
+    int y = 0;
+    for (int r = 0; r < m_gridRows; r++) {
+        int x = 0;
+        for (int c = 0; c < m_gridCols; c++) {
+            int idx = r * m_gridCols + c;
+            auto* cell = m_plotWidgets[idx].cellPanel;
+            if (cell) {
+                cell->SetSize(x, y, colPx[c], rowPx[r]);
+                cell->Layout();
+            }
+            x += colPx[c] + GRID_GAP;
+        }
+        y += rowPx[r] + GRID_GAP;
+    }
+}
+
+MainFrame::DividerHit MainFrame::HitTestDivider(int mx, int my, int& hitCol, int& hitRow) {
+    wxSize sz = m_gridPanel->GetClientSize();
+    int totalW = sz.GetWidth();
+    int totalH = sz.GetHeight();
+    int availW = totalW - GRID_GAP * (m_gridCols - 1);
+    int availH = totalH - GRID_GAP * (m_gridRows - 1);
+
+    hitCol = -1;
+    hitRow = -1;
+
+    // Check column boundaries
+    int x = 0;
+    for (int c = 0; c < m_gridCols - 1; c++) {
+        int colPx = static_cast<int>(m_colWidths[c] * availW);
+        x += colPx;
+        if (mx >= x && mx < x + GRID_GAP) {
+            hitCol = c;
+            break;
+        }
+        x += GRID_GAP;
+    }
+
+    // Check row boundaries
+    int y = 0;
+    for (int r = 0; r < m_gridRows - 1; r++) {
+        int rowPx = static_cast<int>(m_rowHeights[r] * availH);
+        y += rowPx;
+        if (my >= y && my < y + GRID_GAP) {
+            hitRow = r;
+            break;
+        }
+        y += GRID_GAP;
+    }
+
+    if (hitCol >= 0 && hitRow >= 0) return DividerHit::Intersection;
+    if (hitCol >= 0) return DividerHit::Vertical;
+    if (hitRow >= 0) return DividerHit::Horizontal;
+    return DividerHit::None;
+}
+
+void MainFrame::OnGridSize(wxSizeEvent& event) {
+    LayoutGrid();
+    event.Skip();
+}
+
+void MainFrame::OnGridMouse(wxMouseEvent& event) {
+    int mx = event.GetX();
+    int my = event.GetY();
+
+    if (event.LeftDown()) {
+        int col, row;
+        DividerHit hit = HitTestDivider(mx, my, col, row);
+        if (hit != DividerHit::None) {
+            m_dividerHit = hit;
+            m_dragCol = col;
+            m_dragRow = row;
+            m_draggingDivider = true;
+            m_dragStart = wxPoint(mx, my);
+            if (col >= 0) {
+                m_dragStartColWidth0 = m_colWidths[col];
+                m_dragStartColWidth1 = m_colWidths[col + 1];
+            }
+            if (row >= 0) {
+                m_dragStartRowHeight0 = m_rowHeights[row];
+                m_dragStartRowHeight1 = m_rowHeights[row + 1];
+            }
+            m_gridPanel->CaptureMouse();
+        }
+    } else if (event.Dragging() && m_draggingDivider) {
+        wxSize sz = m_gridPanel->GetClientSize();
+        int availW = sz.GetWidth() - GRID_GAP * (m_gridCols - 1);
+        int availH = sz.GetHeight() - GRID_GAP * (m_gridRows - 1);
+
+        if (m_dragCol >= 0 && availW > 0) {
+            double dx = static_cast<double>(mx - m_dragStart.x) / availW;
+            double newW0 = m_dragStartColWidth0 + dx;
+            double newW1 = m_dragStartColWidth1 - dx;
+            double minFrac = static_cast<double>(MIN_CELL_W) / availW;
+            if (newW0 < minFrac) { newW0 = minFrac; newW1 = m_dragStartColWidth0 + m_dragStartColWidth1 - minFrac; }
+            if (newW1 < minFrac) { newW1 = minFrac; newW0 = m_dragStartColWidth0 + m_dragStartColWidth1 - minFrac; }
+            m_colWidths[m_dragCol] = newW0;
+            m_colWidths[m_dragCol + 1] = newW1;
+        }
+
+        if (m_dragRow >= 0 && availH > 0) {
+            double dy = static_cast<double>(my - m_dragStart.y) / availH;
+            double newH0 = m_dragStartRowHeight0 + dy;
+            double newH1 = m_dragStartRowHeight1 - dy;
+            double minFrac = static_cast<double>(MIN_CELL_H) / availH;
+            if (newH0 < minFrac) { newH0 = minFrac; newH1 = m_dragStartRowHeight0 + m_dragStartRowHeight1 - minFrac; }
+            if (newH1 < minFrac) { newH1 = minFrac; newH0 = m_dragStartRowHeight0 + m_dragStartRowHeight1 - minFrac; }
+            m_rowHeights[m_dragRow] = newH0;
+            m_rowHeights[m_dragRow + 1] = newH1;
+        }
+
+        LayoutGrid();
+    } else if (event.LeftUp()) {
+        if (m_draggingDivider) {
+            m_gridPanel->ReleaseMouse();
+            m_draggingDivider = false;
+            m_dividerHit = DividerHit::None;
+            m_dragCol = -1;
+            m_dragRow = -1;
+        }
+    } else if (event.Moving()) {
+        int col, row;
+        DividerHit hit = HitTestDivider(mx, my, col, row);
+        switch (hit) {
+            case DividerHit::Vertical:
+                m_gridPanel->SetCursor(wxCursor(wxCURSOR_SIZEWE));
+                break;
+            case DividerHit::Horizontal:
+                m_gridPanel->SetCursor(wxCursor(wxCURSOR_SIZENS));
+                break;
+            case DividerHit::Intersection:
+                m_gridPanel->SetCursor(wxCursor(wxCURSOR_SIZING));
+                break;
+            case DividerHit::None:
+                m_gridPanel->SetCursor(wxNullCursor);
+                break;
+        }
     }
 }

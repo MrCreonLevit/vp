@@ -88,6 +88,29 @@ private:
     int m_activePlot = 0;
     wxPanel* m_gridPanel = nullptr;
 
+    // Grid proportions (fractions summing to 1.0)
+    std::vector<double> m_colWidths;
+    std::vector<double> m_rowHeights;
+
+    // Divider drag state
+    static constexpr int GRID_GAP = 4;
+    static constexpr int MIN_CELL_W = 80;
+    static constexpr int MIN_CELL_H = 60;
+
+    enum class DividerHit { None, Vertical, Horizontal, Intersection };
+    DividerHit m_dividerHit = DividerHit::None;
+    int m_dragCol = -1;
+    int m_dragRow = -1;
+    bool m_draggingDivider = false;
+    wxPoint m_dragStart;
+    double m_dragStartColWidth0 = 0, m_dragStartColWidth1 = 0;
+    double m_dragStartRowHeight0 = 0, m_dragStartRowHeight1 = 0;
+
+    void LayoutGrid();
+    void OnGridSize(wxSizeEvent& event);
+    void OnGridMouse(wxMouseEvent& event);
+    DividerHit HitTestDivider(int x, int y, int& col, int& row);
+
     ControlPanel* m_controlPanel = nullptr;
     DataManager m_dataManager;
     std::vector<int> m_selection;
