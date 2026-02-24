@@ -183,7 +183,8 @@ void WebGPUCanvas::SetOpacity(float alpha) {
                 colorData[i * 4 + 0] = m_brushColors[i].r;
                 colorData[i * 4 + 1] = m_brushColors[i].g;
                 colorData[i * 4 + 2] = m_brushColors[i].b;
-                colorData[i * 4 + 3] = (i == 0) ? m_brushColors[i].a : m_opacity * m_brushColors[i].a * 2.0f;
+                float brushOpacity = std::max(0.0f, std::min(1.0f, m_opacity + m_brushColors[i].opacityOffset / 100.0f));
+                colorData[i * 4 + 3] = (i == 0) ? m_brushColors[i].a : brushOpacity * m_brushColors[i].a;
             }
             wgpuQueueWriteBuffer(m_ctx->GetQueue(), m_brushColorGpuBuffer, 0, colorData, sizeof(colorData));
         }
@@ -202,7 +203,8 @@ void WebGPUCanvas::SetBrushColors(const std::vector<BrushColor>& colors) {
             colorData[i * 4 + 0] = colors[i].r;
             colorData[i * 4 + 1] = colors[i].g;
             colorData[i * 4 + 2] = colors[i].b;
-            colorData[i * 4 + 3] = (i == 0) ? colors[i].a : m_opacity * colors[i].a * 2.0f;
+            float brushOpacity = std::max(0.0f, std::min(1.0f, m_opacity + colors[i].opacityOffset / 100.0f));
+            colorData[i * 4 + 3] = (i == 0) ? colors[i].a : brushOpacity * colors[i].a;
             paramData[i * 4 + 0] = static_cast<float>(colors[i].symbol);
             paramData[i * 4 + 1] = std::max(0.1f, 1.0f + colors[i].sizeOffset / m_pointSize);
             paramData[i * 4 + 2] = colors[i].useVertexColor ? 1.0f : 0.0f;
@@ -212,8 +214,10 @@ void WebGPUCanvas::SetBrushColors(const std::vector<BrushColor>& colors) {
         wgpuQueueWriteBuffer(queue, m_brushColorGpuBuffer, 0, colorData, sizeof(colorData));
         wgpuQueueWriteBuffer(queue, m_brushParamsGpuBuffer, 0, paramData, sizeof(paramData));
 
-        // Clear overlay buffer to avoid stale colors
+        // Clear overlay buffers to avoid stale colors
         if (m_selVertexBuffer) { wgpuBufferRelease(m_selVertexBuffer); m_selVertexBuffer = nullptr; }
+        if (m_overlaySelBuffer) { wgpuBufferRelease(m_overlaySelBuffer); m_overlaySelBuffer = nullptr; }
+        if (m_overlayBindGroup) { wgpuBindGroupRelease(m_overlayBindGroup); m_overlayBindGroup = nullptr; }
         m_selVertexCount = 0;
 
         Refresh();
@@ -359,22 +363,17 @@ void WebGPUCanvas::UpdatePointColors() {
         m_points[i].sizeScale = 1.0f;
     }
 
-    // Build overlay buffer for high-alpha brushes (so selected points
-    // remain visible even in dense white additive regions)
+    // Build overlay buffer for all selected points (brushes 1-7).
+    // The main pass skips these; they are drawn only here with alpha blending.
+    // Vertex positions come from the point data; the shader reads brush color,
+    // symbol, and size from uniforms via the overlay selection buffer.
     std::vector<PointVertex> selPoints;
+    std::vector<uint32_t> selBrushIds;
     for (size_t i = 0; i < m_points.size(); i++) {
         int brushIdx = (i < m_selection.size()) ? m_selection[i] : 0;
-        if (brushIdx > 0 && brushIdx <= (int)m_brushColors.size()) {
-            const auto& bc = m_brushColors[brushIdx - 1];
-            // Only use overlay for high-alpha brushes (default behavior)
-            if (bc.a > 0.5f) {
-                PointVertex v = m_points[i];
-                v.r = bc.r;
-                v.g = bc.g;
-                v.b = bc.b;
-                v.a = bc.a * 0.85f;
-                selPoints.push_back(v);
-            }
+        if (brushIdx > 0 && brushIdx < (int)m_brushColors.size()) {
+            selPoints.push_back(m_points[i]);
+            selBrushIds.push_back(static_cast<uint32_t>(brushIdx));
         }
     }
     m_selVertexCount = selPoints.size();
@@ -389,6 +388,8 @@ void WebGPUCanvas::UpdatePointColors() {
             wgpuBufferRelease(m_selVertexBuffer);
             m_selVertexBuffer = nullptr;
         }
+        if (m_overlaySelBuffer) { wgpuBufferRelease(m_overlaySelBuffer); m_overlaySelBuffer = nullptr; }
+        if (m_overlayBindGroup) { wgpuBindGroupRelease(m_overlayBindGroup); m_overlayBindGroup = nullptr; }
         if (!selPoints.empty()) {
             size_t dataSize = selPoints.size() * sizeof(PointVertex);
             WGPUBufferDescriptor sbDesc = {};
@@ -397,6 +398,28 @@ void WebGPUCanvas::UpdatePointColors() {
             sbDesc.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
             m_selVertexBuffer = wgpuDeviceCreateBuffer(device, &sbDesc);
             wgpuQueueWriteBuffer(queue, m_selVertexBuffer, 0, selPoints.data(), dataSize);
+
+            // Selection buffer with correct brush indices for overlay points
+            size_t selSize = selBrushIds.size() * sizeof(uint32_t);
+            WGPUBufferDescriptor zDesc = {};
+            zDesc.label = {"overlay_sel", WGPU_STRLEN};
+            zDesc.size = selSize;
+            zDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
+            m_overlaySelBuffer = wgpuDeviceCreateBuffer(device, &zDesc);
+            wgpuQueueWriteBuffer(queue, m_overlaySelBuffer, 0, selBrushIds.data(), selSize);
+
+            WGPUBindGroupEntry entries[3] = {};
+            entries[0].binding = 0; entries[0].buffer = m_overlaySelBuffer;
+            entries[0].offset = 0; entries[0].size = selSize;
+            entries[1].binding = 1; entries[1].buffer = m_brushColorGpuBuffer;
+            entries[1].offset = 0; entries[1].size = 8 * 16;
+            entries[2].binding = 2; entries[2].buffer = m_brushParamsGpuBuffer;
+            entries[2].offset = 0; entries[2].size = 8 * 16;
+            WGPUBindGroupDescriptor bgDesc = {};
+            bgDesc.layout = m_ctx->GetSelectionBindGroupLayout();
+            bgDesc.entryCount = 3;
+            bgDesc.entries = entries;
+            m_overlayBindGroup = wgpuDeviceCreateBindGroup(device, &bgDesc);
         }
 
         UpdateHistograms();
@@ -1310,12 +1333,14 @@ void WebGPUCanvas::Render() {
         wgpuRenderPassEncoderDraw(rp, 6, static_cast<uint32_t>(m_points.size()), 0, 0);
     }
 
-    // Draw selected points on top with alpha blending (not additive)
+    // Draw selected points on top with alpha blending (not additive).
+    // Uses a zero-filled selection buffer so shader takes the brush-0
+    // vertex-color path, reading baked color/symbol/size from vertices.
     if (m_selPipeline && m_selVertexBuffer && m_selVertexCount > 0) {
         wgpuRenderPassEncoderSetPipeline(rp, m_selPipeline);
         wgpuRenderPassEncoderSetBindGroup(rp, 0, m_bindGroup, 0, nullptr);
-        if (m_selectionBindGroup)
-            wgpuRenderPassEncoderSetBindGroup(rp, 1, m_selectionBindGroup, 0, nullptr);
+        if (m_overlayBindGroup)
+            wgpuRenderPassEncoderSetBindGroup(rp, 1, m_overlayBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(rp, 0, quadBuf, 0, 6 * 2 * sizeof(float));
         wgpuRenderPassEncoderSetVertexBuffer(rp, 1, m_selVertexBuffer, 0,
                                               m_selVertexCount * sizeof(PointVertex));
@@ -1502,25 +1527,16 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             }
         }
     } else if (event.GetWheelRotation() != 0) {
-        float factor = event.GetWheelRotation() > 0 ? 1.1f : 1.0f / 1.1f;
-
-        // Zoom centered on mouse position
-        wxPoint mousePos = event.GetPosition();
-        float wx, wy;
-        ScreenToWorld(mousePos.x, mousePos.y, wx, wy);
-
-        float newZoomX = m_zoomX * factor;
-        float newZoomY = m_zoomY * factor;
-        newZoomX = std::max(0.1f, std::min(newZoomX, 100.0f));
-        newZoomY = std::max(0.1f, std::min(newZoomY, 100.0f));
-
+        // Two-finger scroll: pan the view
         wxSize sz = GetClientSize();
-        float ndcX = (static_cast<float>(mousePos.x) / sz.GetWidth()) * 2.0f - 1.0f;
-        float ndcY = 1.0f - (static_cast<float>(mousePos.y) / sz.GetHeight()) * 2.0f;
-        m_panX = wx - ndcX / newZoomX;
-        m_panY = wy - ndcY / newZoomY;
-        m_zoomX = newZoomX;
-        m_zoomY = newZoomY;
+        float dx = 0.0f, dy = 0.0f;
+        if (event.GetWheelAxis() == wxMOUSE_WHEEL_VERTICAL) {
+            dy = (event.GetWheelRotation() / 120.0f) * 0.3f / m_zoomY;
+        } else {
+            dx = (event.GetWheelRotation() / 120.0f) * 0.3f / m_zoomX;
+        }
+        m_panX += dx;
+        m_panY += dy;
 
         if (onViewChanged) onViewChanged(m_plotIndex, m_panX, m_panY, m_zoomX, m_zoomY);
         if (m_colorMap != 0) RecomputeDensityColors();
@@ -1663,6 +1679,8 @@ void WebGPUCanvas::Cleanup() {
     if (m_histUniformBuffer) { wgpuBufferRelease(m_histUniformBuffer); m_histUniformBuffer = nullptr; }
     if (m_selRectBuffer) { wgpuBufferRelease(m_selRectBuffer); m_selRectBuffer = nullptr; }
     if (m_selVertexBuffer) { wgpuBufferRelease(m_selVertexBuffer); m_selVertexBuffer = nullptr; }
+    if (m_overlaySelBuffer) { wgpuBufferRelease(m_overlaySelBuffer); m_overlaySelBuffer = nullptr; }
+    if (m_overlayBindGroup) { wgpuBindGroupRelease(m_overlayBindGroup); m_overlayBindGroup = nullptr; }
     if (m_selPipeline) { wgpuRenderPipelineRelease(m_selPipeline); m_selPipeline = nullptr; }
     if (m_bindGroup) { wgpuBindGroupRelease(m_bindGroup); m_bindGroup = nullptr; }
     if (m_pipeline) { wgpuRenderPipelineRelease(m_pipeline); m_pipeline = nullptr; }

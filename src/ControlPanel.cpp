@@ -381,6 +381,7 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
     m_selectionLabel = nullptr;
     m_brushSymbolChoice = nullptr;
     m_brushSizeSlider = nullptr;
+    m_brushOpacitySlider = nullptr;
     m_allBrushButton = nullptr;
 
     int numPlots = rows * cols;
@@ -701,9 +702,11 @@ void ControlPanel::CreateAllPage() {
         btn->Bind(wxEVT_RIGHT_DOWN, [this, i](wxMouseEvent&) {
             m_brushSymbols[i] = (i == 0) ? SYMBOL_CIRCLE : (i - 1) % SYMBOL_COUNT;
             m_brushSizeOffsets[i] = 0.0f;
+            m_brushOpacityOffsets[i] = 0.0f;
             if (i == m_activeBrush) {
                 if (m_brushSymbolChoice) m_brushSymbolChoice->SetSelection(m_brushSymbols[i]);
                 if (m_brushSizeSlider) m_brushSizeSlider->SetValue(0);
+                if (m_brushOpacitySlider) m_brushOpacitySlider->SetValue(0);
             }
             if (onBrushReset) onBrushReset(i);
         });
@@ -759,6 +762,23 @@ void ControlPanel::CreateAllPage() {
         } else {
             m_brushSizeOffsets[m_activeBrush] = offset;
             if (onBrushSizeOffsetChanged) onBrushSizeOffsetChanged(m_activeBrush, offset);
+        }
+    });
+
+    // Per-brush opacity offset slider
+    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Brush Opacity +/-"), 0, wxLEFT | wxTOP, 8);
+    m_brushOpacitySlider = new wxSlider(m_allPage, wxID_ANY, 0, -100, 100);
+    sizer->Add(m_brushOpacitySlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+    m_brushOpacitySlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
+        float offset = static_cast<float>(m_brushOpacitySlider->GetValue());
+        if (m_activeBrush == -1) {
+            for (int i = 0; i < CP_NUM_BRUSHES; i++) {
+                m_brushOpacityOffsets[i] = offset;
+                if (onBrushOpacityOffsetChanged) onBrushOpacityOffsetChanged(i, offset);
+            }
+        } else {
+            m_brushOpacityOffsets[m_activeBrush] = offset;
+            if (onBrushOpacityOffsetChanged) onBrushOpacityOffsetChanged(m_activeBrush, offset);
         }
     });
 
@@ -841,6 +861,8 @@ void ControlPanel::SelectBrush(int index) {
         m_brushSymbolChoice->SetSelection(m_brushSymbols[displayBrush]);
     if (m_brushSizeSlider)
         m_brushSizeSlider->SetValue(static_cast<int>(m_brushSizeOffsets[displayBrush]));
+    if (m_brushOpacitySlider)
+        m_brushOpacitySlider->SetValue(static_cast<int>(m_brushOpacityOffsets[displayBrush]));
 
     if (index >= 0 && onBrushChanged) onBrushChanged(index);
 }

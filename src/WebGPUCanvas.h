@@ -47,6 +47,7 @@ struct BrushColor {
     float a = 1.0f;
     int symbol = SYMBOL_CIRCLE;
     float sizeOffset = 0.0f;
+    float opacityOffset = 0.0f;   // per-brush opacity shift in percentage points (-100..+100)
     bool useVertexColor = false;  // true = use vertex/colormap color (brush 0 default)
 };
 
@@ -137,6 +138,8 @@ private:
     WGPUBuffer m_vertexBuffer = nullptr;
     WGPUBuffer m_selVertexBuffer = nullptr;
     size_t m_selVertexCount = 0;
+    WGPUBuffer m_overlaySelBuffer = nullptr;      // zero-filled selection for overlay
+    WGPUBindGroup m_overlayBindGroup = nullptr;    // overlay bind group (brush 0 path)
     WGPUBuffer m_uniformBuffer = nullptr;
     WGPUBindGroup m_bindGroup = nullptr;
     // GPU selection buffer (bind group 1)

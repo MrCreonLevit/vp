@@ -43,7 +43,7 @@ MainFrame::MainFrame()
 
     // Initialize default brush colors
     // Brush 0 = unselected points (uses vertex/colormap color by default)
-    m_brushColors.push_back({0.15f, 0.4f, 1.0f, 1.0f, SYMBOL_CIRCLE, 0.0f, true});
+    m_brushColors.push_back({0.15f, 0.4f, 1.0f, 1.0f, SYMBOL_CIRCLE, 0.0f, 0.0f, true});
     // Brushes 1-7 = selection brushes
     for (int i = 0; i < NUM_BRUSHES; i++)
         m_brushColors.push_back({kDefaultBrushes[i].r, kDefaultBrushes[i].g, kDefaultBrushes[i].b, 1.0f, i % SYMBOL_COUNT});
@@ -299,13 +299,13 @@ void MainFrame::CreateLayout() {
         if (brushIndex >= 0 && brushIndex < (int)m_brushColors.size()) {
             if (brushIndex == 0) {
                 // Reset brush 0 to vertex/colormap mode
-                m_brushColors[0] = {0.15f, 0.4f, 1.0f, 1.0f, SYMBOL_CIRCLE, 0.0f, true};
+                m_brushColors[0] = {0.15f, 0.4f, 1.0f, 1.0f, SYMBOL_CIRCLE, 0.0f, 0.0f, true};
             } else {
                 // Reset selection brush to default
                 int di = brushIndex - 1;
                 m_brushColors[brushIndex] = {
                     kDefaultBrushes[di].r, kDefaultBrushes[di].g, kDefaultBrushes[di].b,
-                    1.0f, di % SYMBOL_COUNT, 0.0f, false};
+                    1.0f, di % SYMBOL_COUNT, 0.0f, 0.0f, false};
             }
             for (auto* c : m_canvases)
                 c->SetBrushColors(m_brushColors);
@@ -316,8 +316,9 @@ void MainFrame::CreateLayout() {
         if (brushIndex >= 0 && brushIndex < (int)m_brushColors.size()) {
             int sym = m_brushColors[brushIndex].symbol;
             float sizeOff = m_brushColors[brushIndex].sizeOffset;
+            float opOff = m_brushColors[brushIndex].opacityOffset;
             // When user explicitly picks a color, disable vertex color mode
-            m_brushColors[brushIndex] = {r, g, b, a, sym, sizeOff, false};
+            m_brushColors[brushIndex] = {r, g, b, a, sym, sizeOff, opOff, false};
             for (auto* c : m_canvases)
                 c->SetBrushColors(m_brushColors);
         }
@@ -334,6 +335,14 @@ void MainFrame::CreateLayout() {
     m_controlPanel->onBrushSizeOffsetChanged = [this](int brushIndex, float offset) {
         if (brushIndex >= 0 && brushIndex < (int)m_brushColors.size()) {
             m_brushColors[brushIndex].sizeOffset = offset;
+            for (auto* c : m_canvases)
+                c->SetBrushColors(m_brushColors);
+        }
+    };
+
+    m_controlPanel->onBrushOpacityOffsetChanged = [this](int brushIndex, float offset) {
+        if (brushIndex >= 0 && brushIndex < (int)m_brushColors.size()) {
+            m_brushColors[brushIndex].opacityOffset = offset;
             for (auto* c : m_canvases)
                 c->SetBrushColors(m_brushColors);
         }

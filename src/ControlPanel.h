@@ -112,6 +112,7 @@ public:
     std::function<void(int brushIndex)> onBrushReset;  // reset brush to default
     std::function<void(int brushIndex, int symbol)> onBrushSymbolChanged;
     std::function<void(int brushIndex, float offset)> onBrushSizeOffsetChanged;
+    std::function<void(int brushIndex, float offset)> onBrushOpacityOffsetChanged;
     std::function<void(bool selectedOnly)> onSaveData;
 
     float GetPointSize() const;
@@ -161,6 +162,8 @@ private:
     int m_lastIndividualBrush = 0; // last individually selected brush (for display when "all")
     wxChoice* m_brushSymbolChoice = nullptr;
     wxSlider* m_brushSizeSlider = nullptr;
+    wxSlider* m_brushOpacitySlider = nullptr;
     std::array<int, CP_NUM_BRUSHES> m_brushSymbols = {};
     std::array<float, CP_NUM_BRUSHES> m_brushSizeOffsets = {};
+    std::array<float, CP_NUM_BRUSHES> m_brushOpacityOffsets = {};
 };

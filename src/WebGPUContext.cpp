@@ -57,12 +57,8 @@ fn vs_main(
             color = vec4f(brush_colors[0].rgb, point_color.a);  // custom brush 0
         }
     } else {
-        // Selected points (brushes 1-7)
-        // Modulate brush color by vertex colormap brightness
-        // so density/variable structure shows through the selection color
-        let vertex_lum = dot(point_color.rgb, vec3f(0.299, 0.587, 0.114));
-        let base_lum = max(vertex_lum, 0.15);  // floor to avoid fully black
-        color = vec4f(brush_colors[brush_idx].rgb * base_lum * 3.0,
+        // Selected points (brushes 1-7): use brush color directly
+        color = vec4f(brush_colors[brush_idx].rgb,
                       brush_colors[brush_idx].a);
     }
     var sym = brush_params[brush_idx].x;
