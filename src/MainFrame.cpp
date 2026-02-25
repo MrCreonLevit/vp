@@ -1490,41 +1490,61 @@ void MainFrame::LayoutGrid() {
 
 MainFrame::DividerHit MainFrame::HitTestDivider(int mx, int my, int& hitCol, int& hitRow) {
     wxSize sz = m_gridPanel->GetClientSize();
-    int totalW = sz.GetWidth();
-    int totalH = sz.GetHeight();
-    int availW = totalW - GRID_GAP * (m_gridCols - 1);
-    int availH = totalH - GRID_GAP * (m_gridRows - 1);
+    int availW = sz.GetWidth() - GRID_GAP * (m_gridCols - 1);
+    int availH = sz.GetHeight() - GRID_GAP * (m_gridRows - 1);
 
     hitCol = -1;
     hitRow = -1;
 
-    // Check column boundaries
+    // Compute the center of each column boundary gap
+    std::vector<int> colCenters(m_gridCols - 1);
     int x = 0;
     for (int c = 0; c < m_gridCols - 1; c++) {
-        int colPx = static_cast<int>(m_colWidths[c] * availW);
-        x += colPx;
-        if (mx >= x && mx < x + GRID_GAP) {
-            hitCol = c;
-            break;
-        }
+        x += static_cast<int>(m_colWidths[c] * availW);
+        colCenters[c] = x + GRID_GAP / 2;
         x += GRID_GAP;
     }
 
-    // Check row boundaries
+    // Compute the center of each row boundary gap
+    std::vector<int> rowCenters(m_gridRows - 1);
     int y = 0;
     for (int r = 0; r < m_gridRows - 1; r++) {
-        int rowPx = static_cast<int>(m_rowHeights[r] * availH);
-        y += rowPx;
-        if (my >= y && my < y + GRID_GAP) {
-            hitRow = r;
-            break;
-        }
+        y += static_cast<int>(m_rowHeights[r] * availH);
+        rowCenters[r] = y + GRID_GAP / 2;
         y += GRID_GAP;
     }
 
-    if (hitCol >= 0 && hitRow >= 0) return DividerHit::Intersection;
-    if (hitCol >= 0) return DividerHit::Vertical;
-    if (hitRow >= 0) return DividerHit::Horizontal;
+    // First pass: check for intersection hits with large grab radius
+    int half = CORNER_GRAB / 2;
+    for (int c = 0; c < (int)colCenters.size(); c++) {
+        if (std::abs(mx - colCenters[c]) <= half) {
+            for (int r = 0; r < (int)rowCenters.size(); r++) {
+                if (std::abs(my - rowCenters[r]) <= half) {
+                    hitCol = c;
+                    hitRow = r;
+                    return DividerHit::Intersection;
+                }
+            }
+        }
+    }
+
+    // Second pass: narrow edge detection using GRID_GAP
+    for (int c = 0; c < (int)colCenters.size(); c++) {
+        int gapLeft = colCenters[c] - GRID_GAP / 2;
+        if (mx >= gapLeft && mx < gapLeft + GRID_GAP) {
+            hitCol = c;
+            return DividerHit::Vertical;
+        }
+    }
+
+    for (int r = 0; r < (int)rowCenters.size(); r++) {
+        int gapTop = rowCenters[r] - GRID_GAP / 2;
+        if (my >= gapTop && my < gapTop + GRID_GAP) {
+            hitRow = r;
+            return DividerHit::Horizontal;
+        }
+    }
+
     return DividerHit::None;
 }
 

@@ -95,6 +95,7 @@ private:
 
     // Divider drag state
     static constexpr int GRID_GAP = 4;
+    static constexpr int CORNER_GRAB = 14;    // larger hit radius for intersection grabs
     static constexpr int MIN_CELL_W = 80;
     static constexpr int MIN_CELL_H = 60;
 
