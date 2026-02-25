@@ -670,10 +670,10 @@ void ControlPanel::CreateAllPage() {
 
     // Per-brush size offset slider
     sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Brush Size +/-"), 0, wxLEFT | wxTOP, 8);
-    m_brushSizeSlider = new wxSlider(m_allPage, wxID_ANY, 0, -10, 20);
+    m_brushSizeSlider = new wxSlider(m_allPage, wxID_ANY, 0, -1000, 2000);
     sizer->Add(m_brushSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
     m_brushSizeSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
-        float offset = static_cast<float>(m_brushSizeSlider->GetValue());
+        float offset = m_brushSizeSlider->GetValue() / 100.0f;
         if (m_activeBrush == -1) {
             for (int i = 0; i < CP_NUM_BRUSHES; i++) {
                 m_brushSizeOffsets[i] = offset;
@@ -877,7 +877,7 @@ void ControlPanel::SelectBrush(int index) {
     if (m_brushSymbolChoice)
         m_brushSymbolChoice->SetSelection(m_brushSymbols[displayBrush]);
     if (m_brushSizeSlider)
-        m_brushSizeSlider->SetValue(static_cast<int>(m_brushSizeOffsets[displayBrush]));
+        m_brushSizeSlider->SetValue(static_cast<int>(m_brushSizeOffsets[displayBrush] * 100));
     if (m_brushOpacitySlider)
         m_brushOpacitySlider->SetValue(static_cast<int>(m_brushOpacityOffsets[displayBrush]));
 

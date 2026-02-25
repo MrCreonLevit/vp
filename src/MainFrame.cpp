@@ -479,6 +479,38 @@ void MainFrame::RebuildGrid() {
         pw.xLabel->SetBackgroundColour(bgColor);
         rightSizer->Add(pw.xLabel, 0, wxEXPAND | wxBOTTOM, 4);
 
+        // Click on axis labels to change variable
+        pw.xLabel->SetCursor(wxCursor(wxCURSOR_HAND));
+        pw.xLabel->Bind(wxEVT_LEFT_DOWN, [this, i](wxMouseEvent&) {
+            const auto& ds = m_dataManager.dataset();
+            if (ds.numCols == 0) return;
+            wxMenu menu;
+            for (size_t c = 0; c < ds.numCols; c++)
+                menu.Append(static_cast<int>(c), wxString::FromUTF8(ds.columnLabels[c]));
+            menu.Bind(wxEVT_MENU, [this, i](wxCommandEvent& evt) {
+                int col = evt.GetId();
+                m_plotConfigs[i].xCol = static_cast<size_t>(col);
+                UpdatePlot(i);
+                m_controlPanel->SetPlotConfig(i, m_plotConfigs[i]);
+            });
+            m_plotWidgets[i].xLabel->PopupMenu(&menu);
+        });
+        pw.yLabel->SetCursor(wxCursor(wxCURSOR_HAND));
+        pw.yLabel->Bind(wxEVT_LEFT_DOWN, [this, i](wxMouseEvent&) {
+            const auto& ds = m_dataManager.dataset();
+            if (ds.numCols == 0) return;
+            wxMenu menu;
+            for (size_t c = 0; c < ds.numCols; c++)
+                menu.Append(static_cast<int>(c), wxString::FromUTF8(ds.columnLabels[c]));
+            menu.Bind(wxEVT_MENU, [this, i](wxCommandEvent& evt) {
+                int col = evt.GetId();
+                m_plotConfigs[i].yCol = static_cast<size_t>(col);
+                UpdatePlot(i);
+                m_controlPanel->SetPlotConfig(i, m_plotConfigs[i]);
+            });
+            m_plotWidgets[i].yLabel->PopupMenu(&menu);
+        });
+
         cellSizer->Add(rightSizer, 1, wxEXPAND);
         cellPanel->SetSizer(cellSizer);
 

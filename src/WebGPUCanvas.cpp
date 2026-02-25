@@ -1293,7 +1293,9 @@ void WebGPUCanvas::UpdateUniforms() {
 
     wxSize size = GetClientSize();
     double scale = GetContentScaleFactor();
-    m_uniforms.pointSize = m_pointSize * static_cast<float>(scale);
+    float zoomMean = std::sqrt(m_zoomX * m_zoomY);
+    float zoomScale = 1.0f + std::log2(std::max(1.0f, zoomMean));  // logarithmic scaling
+    m_uniforms.pointSize = m_pointSize * static_cast<float>(scale) * zoomScale;
     m_uniforms.viewportW = static_cast<float>(size.GetWidth() * scale);
     m_uniforms.viewportH = static_cast<float>(size.GetHeight() * scale);
     m_uniforms.rotationY = m_rotationY * 3.14159265f / 180.0f;  // degrees to radians
