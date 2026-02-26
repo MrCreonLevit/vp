@@ -5,8 +5,7 @@
 #include <string>
 
 enum class NormMode {
-    None = 0,       // Raw data, min-max mapped to fill view
-    MinMax,         // Normalize to [0, 1]
+    MinMax = 0,     // Normalize to [0, 1]
     ZeroMax,        // Normalize to [0, max]
     MaxAbs,         // Normalize by max absolute value to [-1, 1]
     Trim1e2,        // Trim to 1st-99th percentile, then min-max

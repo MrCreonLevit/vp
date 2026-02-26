@@ -387,6 +387,7 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
     m_selectionLabel = nullptr;
     m_brushSymbolChoice = nullptr;
     m_brushSizeSlider = nullptr;
+    m_brushSizeLabel = nullptr;
     m_brushOpacitySlider = nullptr;
     m_allBrushButton = nullptr;
 
@@ -669,11 +670,13 @@ void ControlPanel::CreateAllPage() {
     });
 
     // Per-brush size offset slider
-    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Brush Size +/-"), 0, wxLEFT | wxTOP, 8);
+    m_brushSizeLabel = new wxStaticText(m_allPage, wxID_ANY, "Brush Size +/-: 0.00");
+    sizer->Add(m_brushSizeLabel, 0, wxLEFT | wxTOP, 8);
     m_brushSizeSlider = new wxSlider(m_allPage, wxID_ANY, 0, -1000, 2000);
     sizer->Add(m_brushSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
     m_brushSizeSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         float offset = m_brushSizeSlider->GetValue() / 100.0f;
+        m_brushSizeLabel->SetLabel(wxString::Format("Brush Size +/-: %.2f", offset));
         if (m_activeBrush == -1) {
             for (int i = 0; i < CP_NUM_BRUSHES; i++) {
                 m_brushSizeOffsets[i] = offset;
@@ -876,8 +879,11 @@ void ControlPanel::SelectBrush(int index) {
     int displayBrush = (index >= 0) ? index : m_lastIndividualBrush;
     if (m_brushSymbolChoice)
         m_brushSymbolChoice->SetSelection(m_brushSymbols[displayBrush]);
-    if (m_brushSizeSlider)
+    if (m_brushSizeSlider) {
         m_brushSizeSlider->SetValue(static_cast<int>(m_brushSizeOffsets[displayBrush] * 100));
+        if (m_brushSizeLabel)
+            m_brushSizeLabel->SetLabel(wxString::Format("Brush Size +/-: %.2f", m_brushSizeOffsets[displayBrush]));
+    }
     if (m_brushOpacitySlider)
         m_brushOpacitySlider->SetValue(static_cast<int>(m_brushOpacityOffsets[displayBrush]));
 

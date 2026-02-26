@@ -161,6 +161,7 @@ private:
     int m_lastIndividualBrush = 0; // last individually selected brush (for display when "all")
     wxChoice* m_brushSymbolChoice = nullptr;
     wxSlider* m_brushSizeSlider = nullptr;
+    wxStaticText* m_brushSizeLabel = nullptr;
     wxSlider* m_brushOpacitySlider = nullptr;
     std::array<int, CP_NUM_BRUSHES> m_brushSymbols = {};
     std::array<float, CP_NUM_BRUSHES> m_brushSizeOffsets = {};

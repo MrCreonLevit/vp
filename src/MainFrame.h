@@ -23,9 +23,9 @@ struct PlotConfig {
     int zCol = -1;  // -1 = "None" (2D mode), 0+ = column index
     bool xLocked = false;
     bool yLocked = false;
-    NormMode xNorm = NormMode::None;
-    NormMode yNorm = NormMode::None;
-    NormMode zNorm = NormMode::None;
+    NormMode xNorm = NormMode::MinMax;
+    NormMode yNorm = NormMode::MinMax;
+    NormMode zNorm = NormMode::MinMax;
     float rotationY = 0.0f;  // degrees, 0-360
     bool showUnselected = true;
     bool showGridLines = false;
@@ -55,6 +55,7 @@ private:
     void ClearAllSelections();
     void KillSelectedPoints();
     void InvertAllSelections();
+    NormMode DefaultNormForColumn(size_t col) const;
 
     void OnOpen(wxCommandEvent& event);
     void OnSave(bool selectedOnly);
@@ -126,7 +127,7 @@ private:
 
     // Tooltip state
     std::vector<PointTooltip*> m_tooltips;
-    bool m_globalTooltip = true;
+    bool m_globalTooltip = false;
     int m_hoveredDataRow = -1;
     wxString BuildTooltipText(int dataRow);
     void HideAllTooltips();

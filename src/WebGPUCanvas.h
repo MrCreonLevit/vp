@@ -211,6 +211,7 @@ private:
     WGPUBuffer m_selRectBuffer = nullptr;
     size_t m_selRectVertexCount = 0;
     void UpdateSelectionRect();
+    void BuildSelRectFromWorld();   // build rect vertices from m_lastRect* coords
     void ShowSelectionOverlay(int x0, int y0, int x1, int y1);
     void HideSelectionOverlay();
 
@@ -222,10 +223,11 @@ private:
     wxPoint m_selectStart;
     wxPoint m_selectEnd;
 
-    // Last selection rect in world space (for translating)
+    // Last selection rect in world space (for translating / arrow stepping)
     float m_lastRectX0 = 0, m_lastRectY0 = 0;
     float m_lastRectX1 = 0, m_lastRectY1 = 0;
     bool m_hasLastRect = false;
+    bool m_showLastRect = false;  // render the saved rect (arrow-key stepping)
 
     // Platform-specific
     void* m_metalLayer = nullptr;

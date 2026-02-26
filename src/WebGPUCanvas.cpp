@@ -382,6 +382,9 @@ void WebGPUCanvas::SetSelection(const std::vector<int>& sel) {
 
 void WebGPUCanvas::ClearSelection() {
     std::fill(m_selection.begin(), m_selection.end(), 0);
+    m_showLastRect = false;
+    m_hasLastRect = false;
+    m_selRectVertexCount = 0;
     UpdatePointColors();
 }
 
@@ -1213,6 +1216,49 @@ void WebGPUCanvas::UpdateSelectionRect() {
     wgpuQueueWriteBuffer(queue, m_selRectBuffer, 0, verts.data(), dataSize);
 }
 
+void WebGPUCanvas::BuildSelRectFromWorld() {
+    if (!m_ctx || !m_hasLastRect) {
+        m_selRectVertexCount = 0;
+        return;
+    }
+
+    float t = 0.003f / m_zoomX;
+    float tY = 0.003f / m_zoomY;
+    float left = m_lastRectX0, right = m_lastRectX1;
+    float bottom = m_lastRectY0, top = m_lastRectY1;
+
+    std::vector<PointVertex> verts;
+    float r = 1.0f, g = 1.0f, b = 1.0f, a = 0.8f;
+    auto addBar = [&](float x0, float y0, float x1, float y1) {
+        PointVertex tl = {x0, y1, 0, r, g, b, a, 1.0f, 1.0f};
+        PointVertex tr = {x1, y1, 0, r, g, b, a, 1.0f, 1.0f};
+        PointVertex bl = {x0, y0, 0, r, g, b, a, 1.0f, 1.0f};
+        PointVertex br = {x1, y0, 0, r, g, b, a, 1.0f, 1.0f};
+        verts.push_back(bl); verts.push_back(br); verts.push_back(tr);
+        verts.push_back(bl); verts.push_back(tr); verts.push_back(tl);
+    };
+
+    addBar(left, bottom - tY, right, bottom + tY);
+    addBar(left, top - tY, right, top + tY);
+    addBar(left - t, bottom, left + t, top);
+    addBar(right - t, bottom, right + t, top);
+
+    m_selRectVertexCount = verts.size();
+
+    auto device = m_ctx->GetDevice();
+    auto queue = m_ctx->GetQueue();
+
+    if (m_selRectBuffer) { wgpuBufferRelease(m_selRectBuffer); m_selRectBuffer = nullptr; }
+
+    size_t dataSize = m_selRectVertexCount * sizeof(PointVertex);
+    WGPUBufferDescriptor desc = {};
+    desc.label = {"sel_rect", WGPU_STRLEN};
+    desc.size = dataSize;
+    desc.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+    m_selRectBuffer = wgpuDeviceCreateBuffer(device, &desc);
+    wgpuQueueWriteBuffer(queue, m_selRectBuffer, 0, verts.data(), dataSize);
+}
+
 void WebGPUCanvas::RecomputeDensityColors() {
     if (m_colorMap == 0 || m_basePositions.empty()) return;
     // Variable-based coloring is set by UpdatePlot and doesn't change with zoom
@@ -1294,7 +1340,7 @@ void WebGPUCanvas::UpdateUniforms() {
     wxSize size = GetClientSize();
     double scale = GetContentScaleFactor();
     float zoomMean = std::sqrt(m_zoomX * m_zoomY);
-    float zoomScale = 1.0f + std::log2(std::max(1.0f, zoomMean));  // logarithmic scaling
+    float zoomScale = 1.0f + 0.5f * std::log2(std::max(1.0f, zoomMean));
     m_uniforms.pointSize = m_pointSize * static_cast<float>(scale) * zoomScale;
     m_uniforms.viewportW = static_cast<float>(size.GetWidth() * scale);
     m_uniforms.viewportH = static_cast<float>(size.GetHeight() * scale);
@@ -1423,7 +1469,7 @@ void WebGPUCanvas::Render() {
     }
 
     // Draw selection rectangle outline (world space, main projection)
-    if (m_selecting && m_histPipeline && m_selRectBuffer && m_selRectVertexCount > 0) {
+    if ((m_selecting || m_showLastRect) && m_histPipeline && m_selRectBuffer && m_selRectVertexCount > 0) {
         wgpuRenderPassEncoderSetPipeline(rp, m_histPipeline);
         wgpuRenderPassEncoderSetBindGroup(rp, 0, m_bindGroup, 0, nullptr);  // main projection
         wgpuRenderPassEncoderSetVertexBuffer(rp, 0, m_selRectBuffer, 0,
@@ -1501,6 +1547,7 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             m_translating = true;
         } else {
             m_selecting = true;
+            m_showLastRect = false;
             m_selectStart = event.GetPosition();
             m_selectEnd = m_selectStart;
         }
@@ -1523,14 +1570,20 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
                 m_lastRectX1 = std::max(wx0, wx1);
                 m_lastRectY1 = std::max(wy0, wy1);
                 m_hasLastRect = true;
+                m_showLastRect = true;
+                BuildSelRectFromWorld();
             }
             m_selecting = false;
         }
-        if (m_translating && m_deferRedraws && m_hasLastRect) {
-            // Deferred translate: apply the final rect position on mouse-up
-            bool extend = event.CmdDown() || event.ControlDown();
-            if (onBrushRect)
-                onBrushRect(m_plotIndex, m_lastRectX0, m_lastRectY0, m_lastRectX1, m_lastRectY1, extend);
+        if (m_translating && m_hasLastRect) {
+            if (m_deferRedraws) {
+                // Deferred translate: apply the final rect position on mouse-up
+                bool extend = event.CmdDown() || event.ControlDown();
+                if (onBrushRect)
+                    onBrushRect(m_plotIndex, m_lastRectX0, m_lastRectY0, m_lastRectX1, m_lastRectY1, extend);
+            }
+            m_showLastRect = true;
+            BuildSelRectFromWorld();
         }
         m_translating = false;
         m_panning = false;
@@ -1709,6 +1762,34 @@ void WebGPUCanvas::OnKeyDown(wxKeyEvent& event) {
         case 'Q':
             if (auto* frame = wxDynamicCast(wxGetTopLevelParent(this), wxFrame))
                 frame->Close(true);
+            break;
+        case WXK_LEFT:
+        case WXK_RIGHT:
+        case WXK_UP:
+        case WXK_DOWN:
+            if (m_hasLastRect) {
+                float w = m_lastRectX1 - m_lastRectX0;
+                float h = m_lastRectY1 - m_lastRectY0;
+                float dx = 0, dy = 0;
+                if (key == WXK_LEFT)  dx = -w;
+                if (key == WXK_RIGHT) dx =  w;
+                if (key == WXK_UP)    dy =  h;
+                if (key == WXK_DOWN)  dy = -h;
+                m_lastRectX0 += dx;
+                m_lastRectX1 += dx;
+                m_lastRectY0 += dy;
+                m_lastRectY1 += dy;
+
+                // Update selection
+                if (onBrushRect)
+                    onBrushRect(m_plotIndex, m_lastRectX0, m_lastRectY0,
+                                m_lastRectX1, m_lastRectY1, false);
+
+                // Show the rect and refresh
+                m_showLastRect = true;
+                BuildSelRectFromWorld();
+                Refresh();
+            }
             break;
         default:
             event.Skip();

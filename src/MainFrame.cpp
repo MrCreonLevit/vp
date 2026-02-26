@@ -163,11 +163,13 @@ void MainFrame::CreateLayout() {
         // Only randomize unlocked axes
         if (!cfg.xLocked) {
             cfg.xCol = dist(rng);
+            cfg.xNorm = DefaultNormForColumn(cfg.xCol);
         }
         if (!cfg.yLocked) {
             cfg.yCol = dist(rng);
             while (cfg.yCol == cfg.xCol && ds.numCols > 1)
                 cfg.yCol = dist(rng);
+            cfg.yNorm = DefaultNormForColumn(cfg.yCol);
         }
         m_controlPanel->SetPlotConfig(plotIndex, cfg);
         UpdatePlot(plotIndex);
@@ -175,8 +177,12 @@ void MainFrame::CreateLayout() {
 
     m_controlPanel->onAxisChanged = [this](int plotIndex, int xCol, int yCol) {
         if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            m_plotConfigs[plotIndex].xCol = static_cast<size_t>(xCol);
-            m_plotConfigs[plotIndex].yCol = static_cast<size_t>(yCol);
+            auto& cfg = m_plotConfigs[plotIndex];
+            cfg.xCol = static_cast<size_t>(xCol);
+            cfg.yCol = static_cast<size_t>(yCol);
+            cfg.xNorm = DefaultNormForColumn(cfg.xCol);
+            cfg.yNorm = DefaultNormForColumn(cfg.yCol);
+            m_controlPanel->SetPlotConfig(plotIndex, cfg);
             UpdatePlot(plotIndex);
         }
     };
@@ -490,6 +496,7 @@ void MainFrame::RebuildGrid() {
             menu.Bind(wxEVT_MENU, [this, i](wxCommandEvent& evt) {
                 int col = evt.GetId();
                 m_plotConfigs[i].xCol = static_cast<size_t>(col);
+                m_plotConfigs[i].xNorm = DefaultNormForColumn(col);
                 UpdatePlot(i);
                 m_controlPanel->SetPlotConfig(i, m_plotConfigs[i]);
             });
@@ -505,6 +512,7 @@ void MainFrame::RebuildGrid() {
             menu.Bind(wxEVT_MENU, [this, i](wxCommandEvent& evt) {
                 int col = evt.GetId();
                 m_plotConfigs[i].yCol = static_cast<size_t>(col);
+                m_plotConfigs[i].yNorm = DefaultNormForColumn(col);
                 UpdatePlot(i);
                 m_controlPanel->SetPlotConfig(i, m_plotConfigs[i]);
             });
@@ -829,13 +837,15 @@ void MainFrame::RebuildGrid() {
     // Rebuild control panel tabs to match grid
     m_controlPanel->RebuildTabs(m_gridRows, m_gridCols);
 
-    // Auto-assign columns
+    // Auto-assign columns and choose normalization per axis
     const auto& ds = m_dataManager.dataset();
     if (ds.numCols > 0) {
         for (int i = 0; i < numPlots; i++) {
             size_t col1 = (i * 2) % ds.numCols;
             size_t col2 = (i * 2 + 1) % ds.numCols;
             m_plotConfigs[i] = {col1, col2};
+            m_plotConfigs[i].xNorm = DefaultNormForColumn(col1);
+            m_plotConfigs[i].yNorm = DefaultNormForColumn(col2);
         }
     }
 
@@ -1195,6 +1205,19 @@ void MainFrame::InvertAllSelections() {
     for (auto& s : m_selection)
         s = (s == 0) ? m_activeBrush : 0;
     PropagateSelection(m_selection);
+}
+
+NormMode MainFrame::DefaultNormForColumn(size_t col) const {
+    const auto& ds = m_dataManager.dataset();
+    if (col >= ds.numCols) return NormMode::MinMax;
+    bool hasPos = false, hasNeg = false;
+    for (size_t r = 0; r < ds.numRows; r++) {
+        float v = ds.value(r, col);
+        if (v > 0) hasPos = true;
+        if (v < 0) hasNeg = true;
+        if (hasPos && hasNeg) return NormMode::MaxAbs;
+    }
+    return NormMode::MinMax;
 }
 
 void MainFrame::KillSelectedPoints() {

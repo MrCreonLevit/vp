@@ -7,7 +7,6 @@
 
 const char* NormModeName(NormMode mode) {
     switch (mode) {
-        case NormMode::None:       return "None";
         case NormMode::MinMax:     return "Min-Max";
         case NormMode::ZeroMax:    return "+ only";
         case NormMode::MaxAbs:     return "Max |val|";
@@ -76,21 +75,6 @@ static float erfinv(float x) {
 std::vector<float> NormalizeColumn(const float* rawData, size_t numRows,
                                    size_t stride, NormMode mode) {
     if (numRows == 0) return {};
-
-    // Fast path for None: single pass over strided data to extract + find min/max + map,
-    // avoiding 4 separate passes over the data.
-    if (mode == NormMode::None) {
-        std::vector<float> values(numRows);
-        float mn = rawData[0], mx = rawData[0];
-        for (size_t i = 0; i < numRows; i++) {
-            float v = rawData[i * stride];
-            values[i] = v;
-            if (v < mn) mn = v;
-            if (v > mx) mx = v;
-        }
-        mapToDisplay(values, mn, mx);
-        return values;
-    }
 
     auto values = extractColumn(rawData, numRows, stride);
 
