@@ -1672,7 +1672,7 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             // Option+scroll: zoom a single axis (vertical scroll → Y, horizontal → X)
             // centered on the mouse cursor
             float delta = -event.GetWheelRotation() / 120.0f;
-            float factor = 1.0f + delta * 0.08f;
+            float factor = 1.0f + delta * 0.16f;
             factor = std::max(0.5f, std::min(factor, 2.0f));
 
             wxPoint mousePos = event.GetPosition();
