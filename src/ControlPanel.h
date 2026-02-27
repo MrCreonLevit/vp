@@ -34,6 +34,8 @@ public:
     std::function<void(int plotIndex, bool xLock, bool yLock)> onAxisLockChanged;
     std::function<void(int plotIndex, int zCol, int zNorm)> onZAxisChanged;
     std::function<void(int plotIndex, float angle)> onRotationChanged;
+    std::function<void(int plotIndex, float angle)> onRotationXChanged;
+    std::function<void(int plotIndex, bool zeroY, bool zeroX)> onRotationZeroed;
 
 private:
     friend class ControlPanel;
@@ -52,13 +54,22 @@ private:
     wxChoice* m_zNorm = nullptr;
     wxSlider* m_rotationSlider = nullptr;
     wxStaticText* m_rotationLabel = nullptr;
+    wxSlider* m_rotationXSlider = nullptr;
+    wxStaticText* m_rotationXLabel = nullptr;
     wxToggleButton* m_spinButton = nullptr;
     wxToggleButton* m_rockButton = nullptr;
+    wxToggleButton* m_spinXButton = nullptr;
+    wxToggleButton* m_rockXButton = nullptr;
     float m_spinAngle = 0.0f;
     bool m_spinning = false;
     bool m_rocking = false;
     float m_rockCenter = 0.0f;
     float m_rockPhase = 0.0f;
+    float m_spinXAngle = 0.0f;
+    bool m_spinningX = false;
+    bool m_rockingX = false;
+    float m_rockXCenter = 0.0f;
+    float m_rockXPhase = 0.0f;
     wxCheckBox* m_showUnselected = nullptr;
     wxCheckBox* m_showGridLines = nullptr;
     wxCheckBox* m_showHistograms = nullptr;
@@ -89,6 +100,8 @@ public:
     std::function<void(int plotIndex, int xNorm, int yNorm)> onNormChanged;
     std::function<void(int plotIndex, int zCol, int zNorm)> onZAxisChanged;
     std::function<void(int plotIndex, float angle)> onRotationChanged;
+    std::function<void(int plotIndex, float angle)> onRotationXChanged;
+    std::function<void(int plotIndex, bool zeroY, bool zeroX)> onRotationZeroed;
     std::function<void(int plotIndex, bool show)> onShowUnselectedChanged;
     std::function<void(int plotIndex, bool show)> onGridLinesChanged;
     std::function<void(int plotIndex, bool show)> onShowHistogramsChanged;

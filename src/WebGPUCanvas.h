@@ -22,7 +22,9 @@ struct Uniforms {
     float pointSize;
     float viewportW;
     float viewportH;
-    float rotationY;  // radians, rotation around screen Y axis
+    float _pad0;
+    float rotRow0[4];  // rotation matrix row 0 (xyz, w=0)
+    float rotRow1[4];  // rotation matrix row 1 (xyz, w=0)
 };
 
 // Symbol types
@@ -71,7 +73,7 @@ public:
     void SetAdditiveSelected(bool additive);
     void SetColorMap(int colorMap, int colorVariable = 0);  // colorVariable: 0=density, 1+=column
     void SetDeferRedraws(bool defer) { m_deferRedraws = defer; }
-    void SetRotation(float degrees);
+    void SetRotationMatrix(const float* mat);
     void SetPanZoom(float panX, float panY, float zoomX, float zoomY);
     float GetPanX() const { return m_panX; }
     float GetPanY() const { return m_panY; }
@@ -209,7 +211,7 @@ private:
     // View state (independent X and Y zoom for axis lock)
     float m_panX = 0.0f, m_panY = 0.0f;
     float m_zoomX = 1.0f, m_zoomY = 1.0f;
-    float m_rotationY = 0.0f;  // degrees
+    float m_rotMatrix[9] = {1,0,0, 0,1,0, 0,0,1};  // row-major 3x3 rotation
 
     // Selection rectangle rendering
     WGPUBuffer m_selRectBuffer = nullptr;

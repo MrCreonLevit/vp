@@ -11,6 +11,36 @@
 #include <chrono>
 #include <queue>
 #include <unordered_set>
+#include <cstring>
+
+// Pre-multiply a row-major 3x3 rotation matrix by Ry(deg) or Rx(deg).
+// R_new = R_delta * R_old — rotates around screen axis.
+static void mat3PreRotateY(float* m, float deg) {
+    float rad = deg * 3.14159265f / 180.0f;
+    float c = std::cos(rad), s = std::sin(rad);
+    // Ry = [ c 0 s; 0 1 0; -s 0 c ]  (row-major)
+    // new_row0 = c*row0 + s*row2, new_row2 = -s*row0 + c*row2
+    float r0[3] = {m[0], m[1], m[2]};
+    float r2[3] = {m[6], m[7], m[8]};
+    m[0] =  c*r0[0] + s*r2[0]; m[1] =  c*r0[1] + s*r2[1]; m[2] =  c*r0[2] + s*r2[2];
+    m[6] = -s*r0[0] + c*r2[0]; m[7] = -s*r0[1] + c*r2[1]; m[8] = -s*r0[2] + c*r2[2];
+}
+
+static void mat3PreRotateX(float* m, float deg) {
+    float rad = deg * 3.14159265f / 180.0f;
+    float c = std::cos(rad), s = std::sin(rad);
+    // Rx = [ 1 0 0; 0 c -s; 0 s c ]  (row-major)
+    // new_row1 = c*row1 - s*row2, new_row2 = s*row1 + c*row2
+    float r1[3] = {m[3], m[4], m[5]};
+    float r2[3] = {m[6], m[7], m[8]};
+    m[3] = c*r1[0] - s*r2[0]; m[4] = c*r1[1] - s*r2[1]; m[5] = c*r1[2] - s*r2[2];
+    m[6] = s*r1[0] + c*r2[0]; m[7] = s*r1[1] + c*r2[1]; m[8] = s*r1[2] + c*r2[2];
+}
+
+static void mat3Identity(float* m) {
+    const float id[9] = {1,0,0, 0,1,0, 0,0,1};
+    std::memcpy(m, id, sizeof(id));
+}
 
 // Lightweight tooltip popup for displaying point values
 class PointTooltip : public wxPopupWindow {
@@ -158,7 +188,10 @@ void MainFrame::CreateMenuBar() {
         if (m_activePlot >= 0 && m_activePlot < (int)m_canvases.size()) {
             m_canvases[m_activePlot]->ResetView();
             m_plotConfigs[m_activePlot].rotationY = 0.0f;
+            m_plotConfigs[m_activePlot].rotationX = 0.0f;
+            mat3Identity(m_plotConfigs[m_activePlot].rotMatrix);
             m_controlPanel->StopSpinRock(m_activePlot);
+            m_controlPanel->SetPlotConfig(m_activePlot, m_plotConfigs[m_activePlot]);
         }
     }, ID_ResetViews);
 }
@@ -263,8 +296,39 @@ void MainFrame::CreateLayout() {
 
     m_controlPanel->onRotationChanged = [this](int plotIndex, float angle) {
         if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            m_plotConfigs[plotIndex].rotationY = angle;
-            m_canvases[plotIndex]->SetRotation(angle);
+            auto& cfg = m_plotConfigs[plotIndex];
+            float delta = angle - cfg.rotationY;
+            while (delta > 180.0f) delta -= 360.0f;
+            while (delta < -180.0f) delta += 360.0f;
+            cfg.rotationY = angle;
+            mat3PreRotateY(cfg.rotMatrix, delta);
+            m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
+        }
+    };
+
+    m_controlPanel->onRotationXChanged = [this](int plotIndex, float angle) {
+        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
+            auto& cfg = m_plotConfigs[plotIndex];
+            float delta = angle - cfg.rotationX;
+            while (delta > 180.0f) delta -= 360.0f;
+            while (delta < -180.0f) delta += 360.0f;
+            cfg.rotationX = angle;
+            mat3PreRotateX(cfg.rotMatrix, delta);
+            m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
+        }
+    };
+
+    m_controlPanel->onRotationZeroed = [this](int plotIndex, bool zeroY, bool zeroX) {
+        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
+            auto& cfg = m_plotConfigs[plotIndex];
+            if (zeroY) cfg.rotationY = 0.0f;
+            if (zeroX) cfg.rotationX = 0.0f;
+            // Rebuild matrix from remaining axis value(s)
+            mat3Identity(cfg.rotMatrix);
+            if (cfg.rotationX != 0.0f) mat3PreRotateX(cfg.rotMatrix, cfg.rotationX);
+            if (cfg.rotationY != 0.0f) mat3PreRotateY(cfg.rotMatrix, cfg.rotationY);
+            m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
+            m_controlPanel->SetPlotConfig(plotIndex, cfg);
         }
     };
 
@@ -678,13 +742,19 @@ void MainFrame::RebuildGrid() {
         canvas->onResetViewRequested = [this, i]() {
             m_canvases[i]->ResetView();
             m_plotConfigs[i].rotationY = 0.0f;
+            m_plotConfigs[i].rotationX = 0.0f;
+            mat3Identity(m_plotConfigs[i].rotMatrix);
             m_controlPanel->StopSpinRock(i);
+            m_controlPanel->SetPlotConfig(i, m_plotConfigs[i]);
         };
         canvas->onResetAllViewsRequested = [this]() {
             for (int j = 0; j < (int)m_canvases.size(); j++) {
                 m_canvases[j]->ResetView();
                 m_plotConfigs[j].rotationY = 0.0f;
+                m_plotConfigs[j].rotationX = 0.0f;
+                mat3Identity(m_plotConfigs[j].rotMatrix);
                 m_controlPanel->StopSpinRock(j);
+                m_controlPanel->SetPlotConfig(j, m_plotConfigs[j]);
             }
         };
 
@@ -1213,9 +1283,7 @@ void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, flo
     if (hasZ)
         zVals = &GetNormalized((size_t)cfg.zCol, cfg.zNorm);
 
-    float theta = cfg.rotationY * 3.14159265f / 180.0f;
-    float cosR = std::cos(theta);
-    float sinR = std::sin(theta);
+    const float* m = cfg.rotMatrix;
 
     float rectMinX = std::min(x0, x1);
     float rectMaxX = std::max(x0, x1);
@@ -1233,13 +1301,11 @@ void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, flo
 
     int matchCount = 0;
     for (size_t r = 0; r < ds.numRows; r++) {
-        float px = xVals[r];
-        float py = yVals[r];
-        if (zVals) {
-            // Apply same Y-axis rotation as vertex shader:
-            //   x' = x*cos + z*sin,  y' = y
-            px = xVals[r] * cosR + (*zVals)[r] * sinR;
-        }
+        float ox = xVals[r];
+        float oy = yVals[r];
+        float oz = zVals ? (*zVals)[r] : 0.0f;
+        float px = m[0]*ox + m[1]*oy + m[2]*oz;
+        float py = m[3]*ox + m[4]*oy + m[5]*oz;
         if (px >= rectMinX && px <= rectMaxX &&
             py >= rectMinY && py <= rectMaxY) {
             m_selection[r] = m_activeBrush;

@@ -11,7 +11,9 @@ struct Uniforms {
     point_size: f32,
     viewport_w: f32,
     viewport_h: f32,
-    rotation_y: f32,
+    _pad0: f32,
+    rot_row0: vec4f,
+    rot_row1: vec4f,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -64,16 +66,12 @@ fn vs_main(
     var sym = brush_params[brush_idx].x;
     var size_scale = brush_params[brush_idx].y;
 
-    // Apply Y-axis rotation for 3D isometric view
-    let cos_r = cos(uniforms.rotation_y);
-    let sin_r = sin(uniforms.rotation_y);
-    let rotated = vec3f(
-        point_pos.x * cos_r + point_pos.z * sin_r,
-        point_pos.y,
-        -point_pos.x * sin_r + point_pos.z * cos_r
+    // Apply accumulated rotation matrix, then orthographic project (drop Z)
+    let screen = vec2f(
+        dot(uniforms.rot_row0.xyz, point_pos),
+        dot(uniforms.rot_row1.xyz, point_pos)
     );
-    // Orthographic projection of rotated XY (drop Z after rotation)
-    let clip = uniforms.projection * vec4f(rotated.xy, 0.0, 1.0);
+    let clip = uniforms.projection * vec4f(screen, 0.0, 1.0);
     let effective_size = uniforms.point_size * size_scale;
     let pixel_offset = quad_pos * effective_size;
     let ndc_offset = vec2f(

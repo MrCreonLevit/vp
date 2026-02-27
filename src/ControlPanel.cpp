@@ -82,11 +82,15 @@ void PlotTab::CreateControls(int row, int col) {
     m_zAxis->SetSelection(0);
     sizer->Add(m_zAxis, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
 
-    // Rotation slider (for 3D) with spin button
-    m_rotationLabel = new wxStaticText(this, wxID_ANY, "Rotation: 0");
+    // Rotation sliders (for 3D) with zero/spin/rock buttons
+    const wxSize zeroBtnSize(20, 20);
+    m_rotationLabel = new wxStaticText(this, wxID_ANY, "screen y: 0\u00B0");
     sizer->Add(m_rotationLabel, 0, wxLEFT, 8);
     auto* rotRow = new wxBoxSizer(wxHORIZONTAL);
-    m_rotationSlider = new wxSlider(this, wxID_ANY, 0, 0, 360);
+    auto* zeroYBtn = new wxButton(this, wxID_ANY, "0",
+                                   wxDefaultPosition, zeroBtnSize, wxBU_EXACTFIT);
+    rotRow->Add(zeroYBtn, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 2);
+    m_rotationSlider = new wxSlider(this, wxID_ANY, 0, -360, 360);
     rotRow->Add(m_rotationSlider, 1, wxALIGN_CENTER_VERTICAL);
     m_spinButton = new wxToggleButton(this, wxID_ANY, "Spin",
                                        wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
@@ -94,7 +98,23 @@ void PlotTab::CreateControls(int row, int col) {
     m_rockButton = new wxToggleButton(this, wxID_ANY, "Rock",
                                        wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
     rotRow->Add(m_rockButton, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 2);
-    sizer->Add(rotRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    sizer->Add(rotRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
+
+    m_rotationXLabel = new wxStaticText(this, wxID_ANY, "screen x: 0\u00B0");
+    sizer->Add(m_rotationXLabel, 0, wxLEFT, 8);
+    auto* rotXRow = new wxBoxSizer(wxHORIZONTAL);
+    auto* zeroXBtn = new wxButton(this, wxID_ANY, "0",
+                                   wxDefaultPosition, zeroBtnSize, wxBU_EXACTFIT);
+    rotXRow->Add(zeroXBtn, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 2);
+    m_rotationXSlider = new wxSlider(this, wxID_ANY, 0, -360, 360);
+    rotXRow->Add(m_rotationXSlider, 1, wxALIGN_CENTER_VERTICAL);
+    m_spinXButton = new wxToggleButton(this, wxID_ANY, "Spin",
+                                        wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    rotXRow->Add(m_spinXButton, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 2);
+    m_rockXButton = new wxToggleButton(this, wxID_ANY, "Rock",
+                                        wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    rotXRow->Add(m_rockXButton, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 2);
+    sizer->Add(rotXRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
 
     sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
@@ -180,8 +200,15 @@ void PlotTab::CreateControls(int row, int col) {
         if (m_suppress) return;
         float angle = static_cast<float>(m_rotationSlider->GetValue());
         m_spinAngle = angle;
-        m_rotationLabel->SetLabel(wxString::Format("Rotation: %d\u00B0", (int)angle));
+        m_rotationLabel->SetLabel(wxString::Format("screen y: %d\u00B0", (int)angle));
         if (onRotationChanged) onRotationChanged(m_plotIndex, angle);
+    });
+    m_rotationXSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
+        if (m_suppress) return;
+        float angle = static_cast<float>(m_rotationXSlider->GetValue());
+        m_spinXAngle = angle;
+        m_rotationXLabel->SetLabel(wxString::Format("screen x: %d\u00B0", (int)angle));
+        if (onRotationXChanged) onRotationXChanged(m_plotIndex, angle);
     });
     m_spinButton->Bind(wxEVT_TOGGLEBUTTON, [this](wxCommandEvent&) {
         m_spinning = m_spinButton->GetValue();
@@ -200,6 +227,40 @@ void PlotTab::CreateControls(int row, int col) {
             m_spinning = false;
             m_spinButton->SetValue(false);
         }
+    });
+    zeroYBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        m_spinning = false; m_rocking = false;
+        m_spinButton->SetValue(false); m_rockButton->SetValue(false);
+        m_spinAngle = 0.0f;
+        m_rotationSlider->SetValue(0);
+        m_rotationLabel->SetLabel("screen y: 0\u00B0");
+        if (onRotationZeroed) onRotationZeroed(m_plotIndex, true, false);
+    });
+    m_spinXButton->Bind(wxEVT_TOGGLEBUTTON, [this](wxCommandEvent&) {
+        m_spinningX = m_spinXButton->GetValue();
+        if (m_spinningX) {
+            m_spinXAngle = static_cast<float>(m_rotationXSlider->GetValue());
+            m_rockingX = false;
+            m_rockXButton->SetValue(false);
+        }
+    });
+    m_rockXButton->Bind(wxEVT_TOGGLEBUTTON, [this](wxCommandEvent&) {
+        m_rockingX = m_rockXButton->GetValue();
+        if (m_rockingX) {
+            m_spinXAngle = static_cast<float>(m_rotationXSlider->GetValue());
+            m_rockXCenter = m_spinXAngle;
+            m_rockXPhase = 0.0f;
+            m_spinningX = false;
+            m_spinXButton->SetValue(false);
+        }
+    });
+    zeroXBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        m_spinningX = false; m_rockingX = false;
+        m_spinXButton->SetValue(false); m_rockXButton->SetValue(false);
+        m_spinXAngle = 0.0f;
+        m_rotationXSlider->SetValue(0);
+        m_rotationXLabel->SetLabel("screen x: 0\u00B0");
+        if (onRotationZeroed) onRotationZeroed(m_plotIndex, false, true);
     });
     m_showHistograms->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
         if (onShowHistogramsChanged)
@@ -258,10 +319,17 @@ void PlotTab::SyncFromConfig(const PlotConfig& cfg) {
     if (!m_spinning && !m_rocking) {
         m_spinAngle = cfg.rotationY;
         m_rotationSlider->SetValue(static_cast<int>(cfg.rotationY));
-        m_rotationLabel->SetLabel(wxString::Format("Rotation: %d\u00B0", (int)cfg.rotationY));
+        m_rotationLabel->SetLabel(wxString::Format("screen y: %d\u00B0", (int)cfg.rotationY));
+    }
+    if (!m_spinningX && !m_rockingX) {
+        m_spinXAngle = cfg.rotationX;
+        m_rotationXSlider->SetValue(static_cast<int>(cfg.rotationX));
+        m_rotationXLabel->SetLabel(wxString::Format("screen x: %d\u00B0", (int)cfg.rotationX));
     }
     m_spinButton->SetValue(m_spinning);
     m_rockButton->SetValue(m_rocking);
+    m_spinXButton->SetValue(m_spinningX);
+    m_rockXButton->SetValue(m_rockingX);
     m_showUnselected->SetValue(cfg.showUnselected);
     m_showGridLines->SetValue(cfg.showGridLines);
     m_showHistograms->SetValue(cfg.showHistograms);
@@ -319,21 +387,36 @@ void ControlPanel::OnSpinTimer(wxTimerEvent&) {
     m_lastSpinTime = now;
     if (dt <= 0.0f || dt > 1.0f) dt = SPIN_INTERVAL_MS / 1000.0f; // sanity clamp
     for (auto* tab : m_plotTabs) {
+        // Screen Y spin/rock
         if (tab->m_spinning) {
             tab->m_spinAngle += SPIN_SPEED * dt;
-            if (tab->m_spinAngle >= 360.0f) tab->m_spinAngle -= 360.0f;
+            if (tab->m_spinAngle > 360.0f) tab->m_spinAngle -= 720.0f;
         } else if (tab->m_rocking) {
-            // Sinusoidal: match ~1s full cycle (2π radians/s phase rate)
             tab->m_rockPhase += 2.0f * 3.14159265f * dt;
             if (tab->m_rockPhase >= 2.0f * 3.14159265f)
                 tab->m_rockPhase -= 2.0f * 3.14159265f;
             tab->m_spinAngle = tab->m_rockCenter + ROCK_AMPLITUDE * std::sin(tab->m_rockPhase);
-        } else {
-            continue;
         }
-        tab->m_rotationSlider->SetValue(static_cast<int>(tab->m_spinAngle));
-        tab->m_rotationLabel->SetLabel(wxString::Format("Rotation: %d\u00B0", (int)tab->m_spinAngle));
-        if (onRotationChanged) onRotationChanged(tab->m_plotIndex, tab->m_spinAngle);
+        if (tab->m_spinning || tab->m_rocking) {
+            tab->m_rotationSlider->SetValue(static_cast<int>(tab->m_spinAngle));
+            tab->m_rotationLabel->SetLabel(wxString::Format("screen y: %d\u00B0", (int)tab->m_spinAngle));
+            if (onRotationChanged) onRotationChanged(tab->m_plotIndex, tab->m_spinAngle);
+        }
+        // Screen X spin/rock
+        if (tab->m_spinningX) {
+            tab->m_spinXAngle += SPIN_SPEED * dt;
+            if (tab->m_spinXAngle > 360.0f) tab->m_spinXAngle -= 720.0f;
+        } else if (tab->m_rockingX) {
+            tab->m_rockXPhase += 2.0f * 3.14159265f * dt;
+            if (tab->m_rockXPhase >= 2.0f * 3.14159265f)
+                tab->m_rockXPhase -= 2.0f * 3.14159265f;
+            tab->m_spinXAngle = tab->m_rockXCenter + ROCK_AMPLITUDE * std::sin(tab->m_rockXPhase);
+        }
+        if (tab->m_spinningX || tab->m_rockingX) {
+            tab->m_rotationXSlider->SetValue(static_cast<int>(tab->m_spinXAngle));
+            tab->m_rotationXLabel->SetLabel(wxString::Format("screen x: %d\u00B0", (int)tab->m_spinXAngle));
+            if (onRotationXChanged) onRotationXChanged(tab->m_plotIndex, tab->m_spinXAngle);
+        }
     }
 }
 
@@ -388,6 +471,12 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
         };
         tab->onRotationChanged = [this](int pi, float angle) {
             if (onRotationChanged) onRotationChanged(pi, angle);
+        };
+        tab->onRotationXChanged = [this](int pi, float angle) {
+            if (onRotationXChanged) onRotationXChanged(pi, angle);
+        };
+        tab->onRotationZeroed = [this](int pi, bool zeroY, bool zeroX) {
+            if (onRotationZeroed) onRotationZeroed(pi, zeroY, zeroX);
         };
         tab->onShowUnselectedChanged = [this](int pi, bool show) {
             if (onShowUnselectedChanged) onShowUnselectedChanged(pi, show);
@@ -502,7 +591,14 @@ void ControlPanel::StopSpinRock(int plotIndex) {
         tab->m_spinButton->SetValue(false);
         tab->m_rockButton->SetValue(false);
         tab->m_rotationSlider->SetValue(0);
-        tab->m_rotationLabel->SetLabel(wxString::Format("Rotation: 0\u00B0"));
+        tab->m_rotationLabel->SetLabel("screen y: 0\u00B0");
+        tab->m_spinningX = false;
+        tab->m_rockingX = false;
+        tab->m_spinXAngle = 0.0f;
+        tab->m_spinXButton->SetValue(false);
+        tab->m_rockXButton->SetValue(false);
+        tab->m_rotationXSlider->SetValue(0);
+        tab->m_rotationXLabel->SetLabel("screen x: 0\u00B0");
     }
 }
 

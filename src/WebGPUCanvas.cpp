@@ -150,20 +150,18 @@ int WebGPUCanvas::FindNearestPoint(int sx, int sy) {
     int bestIdx = -1;
     float bestDistSq = threshSq;
 
-    bool hasRotation = (std::abs(m_rotationY) > 0.01f);
-    float cosA = 1.0f, sinA = 0.0f;
-    if (hasRotation) {
-        cosA = std::cos(m_rotationY * 3.14159265f / 180.0f);
-        sinA = std::sin(m_rotationY * 3.14159265f / 180.0f);
-    }
+    const float* m = m_rotMatrix;
+    bool isIdentity = (m[0]==1 && m[1]==0 && m[2]==0 &&
+                        m[3]==0 && m[4]==1 && m[5]==0);
 
     for (size_t i = 0; i < numPoints; i++) {
         float px = m_basePositions[i * 2];
         float py = m_basePositions[i * 2 + 1];
 
-        if (hasRotation && i < m_points.size()) {
-            float pz = m_points[i].z;
-            px = px * cosA + pz * sinA;
+        if (!isIdentity && i < m_points.size()) {
+            float ox = px, oy = py, oz = m_points[i].z;
+            px = m[0]*ox + m[1]*oy + m[2]*oz;
+            py = m[3]*ox + m[4]*oy + m[5]*oz;
         }
 
         float dx = px - wx;
@@ -204,8 +202,8 @@ void WebGPUCanvas::SetShowHistograms(bool show) {
     Refresh();
 }
 
-void WebGPUCanvas::SetRotation(float degrees) {
-    m_rotationY = degrees;
+void WebGPUCanvas::SetRotationMatrix(const float* mat) {
+    std::memcpy(m_rotMatrix, mat, 9 * sizeof(float));
     Refresh();
 }
 
@@ -408,7 +406,8 @@ void WebGPUCanvas::ResetView() {
     m_panY = 0.0f;
     m_zoomX = 1.0f;
     m_zoomY = 1.0f;
-    m_rotationY = 0.0f;
+    const float identity[9] = {1,0,0, 0,1,0, 0,0,1};
+    std::memcpy(m_rotMatrix, identity, sizeof(m_rotMatrix));
     if (m_initialized) {
         Refresh();
         Update();  // force immediate repaint
@@ -1341,7 +1340,11 @@ void WebGPUCanvas::UpdateUniforms() {
     m_uniforms.pointSize = m_pointSize * static_cast<float>(scale) * zoomScale;
     m_uniforms.viewportW = static_cast<float>(size.GetWidth() * scale);
     m_uniforms.viewportH = static_cast<float>(size.GetHeight() * scale);
-    m_uniforms.rotationY = m_rotationY * 3.14159265f / 180.0f;  // degrees to radians
+    // Copy rotation matrix rows 0 and 1 to uniform buffer
+    m_uniforms.rotRow0[0] = m_rotMatrix[0]; m_uniforms.rotRow0[1] = m_rotMatrix[1];
+    m_uniforms.rotRow0[2] = m_rotMatrix[2]; m_uniforms.rotRow0[3] = 0.0f;
+    m_uniforms.rotRow1[0] = m_rotMatrix[3]; m_uniforms.rotRow1[1] = m_rotMatrix[4];
+    m_uniforms.rotRow1[2] = m_rotMatrix[5]; m_uniforms.rotRow1[3] = 0.0f;
 
     wgpuQueueWriteBuffer(m_ctx->GetQueue(), m_uniformBuffer, 0, &m_uniforms, sizeof(Uniforms));
 }
