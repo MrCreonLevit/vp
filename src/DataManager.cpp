@@ -9,7 +9,6 @@
 #include <set>
 #include <map>
 #include <unordered_map>
-#include <chrono>
 
 void DataSet::columnRange(size_t col, float& minVal, float& maxVal) const {
     minVal = std::numeric_limits<float>::max();
@@ -71,12 +70,6 @@ bool DataManager::loadFile(const std::string& path, ProgressCallback progress, s
 }
 
 bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progress, size_t maxRows) {
-    using Clock = std::chrono::steady_clock;
-    auto tStart = Clock::now();
-    auto elapsed = [](Clock::time_point since) {
-        return std::chrono::duration<double>(Clock::now() - since).count();
-    };
-
     m_filePath = path;
     m_error.clear();
     m_data = DataSet{};
@@ -279,10 +272,7 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
 
     fprintf(stderr, "Loaded %s: %zu rows x %zu columns\n",
             path.c_str(), m_data.numRows, m_data.numCols);
-    fprintf(stderr, "TIMING:   read+parse        %.3f s\n", elapsed(tStart));
-
     // Encode confirmed categorical columns
-    auto tCat = Clock::now();
     m_data.columnMeta.resize(m_data.numCols);
     for (size_t col = 0; col < m_data.numCols; col++) {
         if (candidateCategorical[col] && !rawStrings[col].empty()) {
@@ -315,10 +305,7 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
         rawStrings[col].shrink_to_fit();
     }
 
-    fprintf(stderr, "TIMING:   categorical encode %.3f s\n", elapsed(tCat));
-
     // Remove constant columns (all values identical)
-    auto tConst = Clock::now();
     {
         std::vector<bool> keep(m_data.numCols, true);
         int removed = 0;
@@ -370,8 +357,6 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
     }
 
     m_data.data.shrink_to_fit();
-    fprintf(stderr, "TIMING:   const col removal  %.3f s\n", elapsed(tConst));
-    fprintf(stderr, "TIMING:   ASCII loader total %.3f s\n", elapsed(tStart));
 
     return true;
 }
@@ -556,18 +541,11 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
     m_error = "Parquet support not available (install apache-arrow and rebuild)";
     return false;
 #else
-    using Clock = std::chrono::steady_clock;
-    auto tStart = Clock::now();
-    auto elapsed = [](Clock::time_point since) {
-        return std::chrono::duration<double>(Clock::now() - since).count();
-    };
-
     m_filePath = path;
     m_error.clear();
     m_data = DataSet{};
 
     // Open file
-    auto tRead = Clock::now();
     auto result = arrow::io::ReadableFile::Open(path);
     if (!result.ok()) {
         m_error = "Cannot open parquet file: " + result.status().ToString();
@@ -592,9 +570,6 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
         return false;
     }
 
-    fprintf(stderr, "TIMING:   parquet read       %.3f s\n", elapsed(tRead));
-
-    auto tExtract = Clock::now();
     int numCols = table->num_columns();
     int64_t numRows = table->num_rows();
 
@@ -807,10 +782,7 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
 
     fprintf(stderr, "Loaded parquet %s: %zu rows x %zu columns\n",
             path.c_str(), m_data.numRows, m_data.numCols);
-    fprintf(stderr, "TIMING:   col extraction     %.3f s\n", elapsed(tExtract));
-
     // Remove constant columns (same logic as ASCII loader)
-    auto tConst = Clock::now();
     {
         std::vector<bool> keep(m_data.numCols, true);
         int removed = 0;
@@ -854,8 +826,6 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
     }
 
     m_data.data.shrink_to_fit();
-    fprintf(stderr, "TIMING:   const col removal  %.3f s\n", elapsed(tConst));
-    fprintf(stderr, "TIMING:   parquet total      %.3f s\n", elapsed(tStart));
     return true;
 #endif // HAS_PARQUET
 }

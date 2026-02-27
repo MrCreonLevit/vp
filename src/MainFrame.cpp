@@ -8,7 +8,6 @@
 #include <numeric>
 #include <cmath>
 #include <random>
-#include <chrono>
 #include <queue>
 #include <unordered_set>
 #include <cstring>
@@ -664,6 +663,7 @@ void MainFrame::RebuildGrid() {
         // Linked axis view: propagate pan/zoom to plots sharing locked variables
         canvas->onViewChanged = [this](int pi, float panX, float panY, float zoomX, float zoomY) {
             if (pi < 0 || pi >= (int)m_plotConfigs.size()) return;
+            SetActivePlot(pi);
             auto& srcCfg = m_plotConfigs[pi];
 
             for (int j = 0; j < (int)m_canvases.size(); j++) {
@@ -1049,25 +1049,15 @@ void MainFrame::InvalidateNormCache() {
 }
 
 void MainFrame::UpdatePlot(int plotIndex) {
-    using Clock = std::chrono::steady_clock;
-    auto tPlotStart = Clock::now();
-    auto elapsed = [](Clock::time_point since) {
-        return std::chrono::duration<double>(Clock::now() - since).count();
-    };
-
     const auto& ds = m_dataManager.dataset();
     if (ds.numRows == 0 || plotIndex < 0 || plotIndex >= (int)m_canvases.size())
         return;
-    fprintf(stderr, "  UpdatePlot(%d): %zu rows, cols %zu,%zu\n",
-            plotIndex, ds.numRows, m_plotConfigs[plotIndex].xCol, m_plotConfigs[plotIndex].yCol);
-    fflush(stderr);
 
     auto& cfg = m_plotConfigs[plotIndex];
     if (cfg.xCol >= ds.numCols) cfg.xCol = 0;
     if (cfg.yCol >= ds.numCols) cfg.yCol = 0;
 
     // Normalize each axis using cache
-    auto tNorm = Clock::now();
     const auto& xVals = GetNormalized(cfg.xCol, cfg.xNorm);
     const auto& yVals = GetNormalized(cfg.yCol, cfg.yNorm);
 
@@ -1077,7 +1067,6 @@ void MainFrame::UpdatePlot(int plotIndex) {
     if (hasZ) {
         zValsPtr = &GetNormalized(static_cast<size_t>(cfg.zCol), cfg.zNorm);
     }
-    fprintf(stderr, "    normalize: %.3f s\n", elapsed(tNorm));
 
     float opacity = m_plotConfigs[plotIndex].opacity;
 
@@ -1139,8 +1128,6 @@ void MainFrame::UpdatePlot(int plotIndex) {
         displayIndices = std::move(mustInclude);
         displayIndices.insert(displayIndices.end(), reservoir.begin(), reservoir.end());
         std::sort(displayIndices.begin(), displayIndices.end());
-        fprintf(stderr, "  Subsampled %zu -> %zu points (%zu extremes preserved)\n",
-                ds.numRows, displayIndices.size(), mustSet.size());
     }
 
     size_t numDisplay = subsampled ? displayIndices.size() : ds.numRows;
@@ -1194,7 +1181,6 @@ void MainFrame::UpdatePlot(int plotIndex) {
         }
     }
 
-    auto tVerts = Clock::now();
     for (size_t di = 0; di < numDisplay; di++) {
         size_t r = subsampled ? displayIndices[di] : di;
         PointVertex v{};
@@ -1212,10 +1198,7 @@ void MainFrame::UpdatePlot(int plotIndex) {
         points.push_back(v);
     }
 
-    fprintf(stderr, "    build verts: %.3f s\n", elapsed(tVerts));
-
     // Pass display indices for subsampled datasets
-    auto tGpu = Clock::now();
     if (subsampled) {
         m_canvases[plotIndex]->SetDisplayIndices(displayIndices);
     } else {
@@ -1229,23 +1212,15 @@ void MainFrame::UpdatePlot(int plotIndex) {
         m_plotWidgets[plotIndex].yLabel->SetLabel(ds.columnLabels[cfg.yCol]);
     }
 
-    fprintf(stderr, "    GPU upload: %.3f s\n", elapsed(tGpu));
-
     // Re-apply current selection
     if (!m_selection.empty())
         m_canvases[plotIndex]->SetSelection(m_selection);
-
-    fprintf(stderr, "  UpdatePlot(%d) total       %.3f s\n", plotIndex, elapsed(tPlotStart));
 }
 
 void MainFrame::UpdateAllPlots() {
-    using Clock = std::chrono::steady_clock;
-    auto tAll = Clock::now();
-
     // Pre-normalize all needed columns before building plots.
     // This populates the cache so UpdatePlot doesn't do strided reads
     // interleaved with vertex construction.
-    auto tPreNorm = Clock::now();
     for (int i = 0; i < (int)m_canvases.size(); i++) {
         auto& cfg = m_plotConfigs[i];
         const auto& ds = m_dataManager.dataset();
@@ -1257,13 +1232,9 @@ void MainFrame::UpdateAllPlots() {
         if (cfg.zCol >= 0 && static_cast<size_t>(cfg.zCol) < ds.numCols)
             GetNormalized(static_cast<size_t>(cfg.zCol), cfg.zNorm);
     }
-    fprintf(stderr, "  pre-normalize all: %.3f s\n",
-            std::chrono::duration<double>(Clock::now() - tPreNorm).count());
 
     for (int i = 0; i < (int)m_canvases.size(); i++)
         UpdatePlot(i);
-    fprintf(stderr, "TIMING: UpdateAllPlots total %.3f s\n",
-            std::chrono::duration<double>(Clock::now() - tAll).count());
 }
 
 void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, float y1, bool extend) {
@@ -1381,12 +1352,6 @@ void MainFrame::KillSelectedPoints() {
 }
 
 void MainFrame::LoadFile(const std::string& path) {
-    using Clock = std::chrono::steady_clock;
-    auto t0 = Clock::now();
-    auto elapsed = [&](Clock::time_point since) {
-        return std::chrono::duration<double>(Clock::now() - since).count();
-    };
-
     wxProgressDialog progressDlg("Loading Data", "Loading " + wxString(path).AfterLast('/'),
                                   100, this,
                                   wxPD_APP_MODAL | wxPD_AUTO_HIDE | wxPD_SMOOTH | wxPD_CAN_ABORT);
@@ -1406,7 +1371,6 @@ void MainFrame::LoadFile(const std::string& path) {
         return !cancelled;
     };
 
-    auto tLoad = Clock::now();
     if (!m_dataManager.loadFile(path, progressCb, m_maxRows)) {
         if (!cancelled) {
             wxMessageBox("Failed to load file:\n" + m_dataManager.errorMessage(),
@@ -1414,12 +1378,7 @@ void MainFrame::LoadFile(const std::string& path) {
         }
         return;
     }
-    fprintf(stderr, "TIMING: loadFile            %.3f s\n", elapsed(tLoad));
-
-    auto tProcess = Clock::now();
-
     const auto& ds = m_dataManager.dataset();
-    fprintf(stderr, "Processing %zu rows x %zu cols\n", ds.numRows, ds.numCols);
 
     InvalidateNormCache();
     m_controlPanel->SetColumns(ds.columnLabels);
@@ -1451,19 +1410,12 @@ void MainFrame::LoadFile(const std::string& path) {
         c->SetOpacity(defaultOpacity);
     }
     m_controlPanel->SetGlobalPointSize(defaultSize);
-    fprintf(stderr, "Default point size: %.1f, opacity: %.0f%% (for %zu rows)\n",
-            defaultSize, defaultOpacity * 100.0f, ds.numRows);
-    fprintf(stderr, "TIMING: processing          %.3f s\n", elapsed(tProcess));
 
     SetTitle("Viewpoints — " + wxString(path).AfterLast('/'));
 
-    auto tPlots = Clock::now();
     UpdateAllPlots();
-    fprintf(stderr, "TIMING: UpdateAllPlots      %.3f s\n", elapsed(tPlots));
 
     SetActivePlot(0);
-    fprintf(stderr, "TIMING: total load-to-ready %.3f s\n", elapsed(t0));
-    fflush(stderr);
 }
 
 void MainFrame::OnOpen(wxCommandEvent& event) {
