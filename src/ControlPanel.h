@@ -135,10 +135,10 @@ public:
     void SetGlobalTooltip(bool on);
     void ApplyBrushColor(int brushIndex, float r, float g, float b, float a);
     void ShowBrushControls(int brushIndex = -1);
+    void SelectBrush(int index);
 
 private:
     void CreateAllPage();
-    void SelectBrush(int index);
     void SelectPage(int pageIndex);  // 0..N-1 = plot, N = "All"
     void RebuildSelectorGrid();
 

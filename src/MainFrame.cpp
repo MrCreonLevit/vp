@@ -643,8 +643,36 @@ void MainFrame::RebuildGrid() {
         canvas->onBrushRect = [this](int pi, float x0, float y0, float x1, float y1, bool ext) {
             HandleBrushRect(pi, x0, y0, x1, y1, ext);
         };
-        canvas->onSelectionDoubleClick = [this](int) {
-            m_controlPanel->ShowBrushControls(m_activeBrush);
+        canvas->onSelectionDoubleClick = [this, i](int) {
+            wxMenu menu;
+            auto makeSwatch = [](float r, float g, float b, int sz = 16) {
+                wxBitmap bmp(sz, sz);
+                wxMemoryDC dc(bmp);
+                dc.SetBrush(wxBrush(wxColour(
+                    static_cast<unsigned char>(r * 255),
+                    static_cast<unsigned char>(g * 255),
+                    static_cast<unsigned char>(b * 255))));
+                dc.SetPen(wxPen(wxColour(80, 80, 80)));
+                dc.DrawRectangle(0, 0, sz, sz);
+                dc.SelectObject(wxNullBitmap);
+                return bmp;
+            };
+            for (int b = 0; b < (int)m_brushColors.size() && b < 8; b++) {
+                wxString label;
+                if (b == 0)
+                    label = "0  Unselected";
+                else
+                    label = wxString::Format("%d  %s", b, kDefaultBrushes[b - 1].name);
+                auto* item = new wxMenuItem(&menu, b, label);
+                item->SetBitmap(makeSwatch(m_brushColors[b].r, m_brushColors[b].g, m_brushColors[b].b));
+                menu.Append(item);
+            }
+            menu.Bind(wxEVT_MENU, [this](wxCommandEvent& evt) {
+                int brush = evt.GetId();
+                m_controlPanel->SelectBrush(brush);
+                m_activeBrush = (brush == 0) ? 1 : brush;
+            });
+            m_canvases[i]->PopupMenu(&menu);
         };
         canvas->onClearRequested = [this]() { ClearAllSelections(); };
         canvas->onInvertRequested = [this]() { InvertAllSelections(); };

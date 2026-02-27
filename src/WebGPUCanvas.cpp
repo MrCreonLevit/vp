@@ -1536,16 +1536,10 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
     bool isPan = event.ShiftDown() || event.MiddleIsDown() || event.RightIsDown();
     bool isTranslate = event.AltDown() && m_hasLastRect;
 
-    if (event.LeftDClick() && m_hasLastRect) {
-        // Double-click: check if inside the existing selection rectangle
-        float wx, wy;
-        ScreenToWorld(event.GetPosition().x, event.GetPosition().y, wx, wy);
-        if (wx >= m_lastRectX0 && wx <= m_lastRectX1 &&
-            wy >= m_lastRectY0 && wy <= m_lastRectY1) {
-            if (onSelectionDoubleClick)
-                onSelectionDoubleClick(m_plotIndex);
-            return;
-        }
+    if (event.LeftDClick()) {
+        if (onSelectionDoubleClick)
+            onSelectionDoubleClick(m_plotIndex);
+        return;
     }
 
     if (event.LeftDown() || event.MiddleDown() || event.RightDown()) {
