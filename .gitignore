@@ -56,7 +56,16 @@ pytest.log
 *.new
 *.experimental
 
-# Large data files
+# Large data files in data/ subdirectories (keep scripts and READMEs)
+data/*/*.parquet
+data/*/*.dat
+data/*/*.csv
+data/*/*.txt
+data/*/*.h5ad
+data/*/*.h5
+data/*/cache/
+
+# Entire directories with no scripts to share
 data/tycho2/
 data/nyc_311/
 data/nyc_taxi/
