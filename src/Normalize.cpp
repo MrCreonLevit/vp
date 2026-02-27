@@ -9,7 +9,7 @@ const char* NormModeName(NormMode mode) {
     switch (mode) {
         case NormMode::MinMax:     return "Min-Max";
         case NormMode::ZeroMax:    return "+ only";
-        case NormMode::MaxAbs:     return "Max |val|";
+        case NormMode::MaxAbs:    return "Max |val|";
         case NormMode::Trim1e2:    return "Trim 1%";
         case NormMode::Trim1e3:    return "Trim 0.1%";
         case NormMode::ThreeSigma: return "3 Sigma";
@@ -36,21 +36,46 @@ static std::vector<float> extractColumn(const float* data, size_t numRows, size_
     return col;
 }
 
-// Helper: map values from [inMin, inMax] to [-0.9, 0.9]
+// Helper: collect only finite values (filtering NaN/Inf)
+static std::vector<float> finiteValues(const std::vector<float>& values) {
+    std::vector<float> out;
+    out.reserve(values.size());
+    for (float v : values)
+        if (std::isfinite(v)) out.push_back(v);
+    return out;
+}
+
+// Helper: NaN-safe min and max over a vector
+static void finiteMinMax(const std::vector<float>& values, float& mn, float& mx) {
+    mn = std::numeric_limits<float>::max();
+    mx = std::numeric_limits<float>::lowest();
+    for (float v : values) {
+        if (!std::isfinite(v)) continue;
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+    }
+    if (mn > mx) { mn = 0.0f; mx = 1.0f; }  // all NaN fallback
+}
+
+// Helper: map finite values from [inMin, inMax] to [-0.9, 0.9]; NaN passes through
 static void mapToDisplay(std::vector<float>& values, float inMin, float inMax) {
     float range = inMax - inMin;
     if (range == 0.0f) range = 1.0f;
-    for (auto& v : values)
+    for (auto& v : values) {
+        if (!std::isfinite(v)) continue;
         v = ((v - inMin) / range) * 1.8f - 0.9f;
+    }
 }
 
-// Helper: clamp values to [lo, hi]
+// Helper: clamp finite values to [lo, hi]; NaN passes through
 static void clampValues(std::vector<float>& values, float lo, float hi) {
-    for (auto& v : values)
+    for (auto& v : values) {
+        if (!std::isfinite(v)) continue;
         v = std::max(lo, std::min(hi, v));
+    }
 }
 
-// Helper: percentile (linear interpolation)
+// Helper: percentile (linear interpolation) on pre-sorted finite values
 static float percentile(std::vector<float>& sorted, float p) {
     if (sorted.empty()) return 0.0f;
     float idx = p * (sorted.size() - 1);
@@ -81,21 +106,26 @@ std::vector<float> NormalizeColumn(const float* rawData, size_t numRows,
     switch (mode) {
 
         case NormMode::MinMax: {
-            float mn = *std::min_element(values.begin(), values.end());
-            float mx = *std::max_element(values.begin(), values.end());
+            float mn, mx;
+            finiteMinMax(values, mn, mx);
             float range = mx - mn;
             if (range == 0.0f) range = 1.0f;
-            for (auto& v : values)
+            for (auto& v : values) {
+                if (!std::isfinite(v)) continue;
                 v = (v - mn) / range;
+            }
             mapToDisplay(values, 0.0f, 1.0f);
             break;
         }
 
         case NormMode::ZeroMax: {
-            float mx = *std::max_element(values.begin(), values.end());
+            float mn, mx;
+            finiteMinMax(values, mn, mx);
             if (mx == 0.0f) mx = 1.0f;
-            for (auto& v : values)
+            for (auto& v : values) {
+                if (!std::isfinite(v)) continue;
                 v = v / mx;
+            }
             mapToDisplay(values, 0.0f, 1.0f);
             break;
         }
@@ -103,10 +133,13 @@ std::vector<float> NormalizeColumn(const float* rawData, size_t numRows,
         case NormMode::MaxAbs: {
             float maxAbs = 0.0f;
             for (auto v : values)
-                maxAbs = std::max(maxAbs, std::abs(v));
+                if (std::isfinite(v))
+                    maxAbs = std::max(maxAbs, std::abs(v));
             if (maxAbs == 0.0f) maxAbs = 1.0f;
-            for (auto& v : values)
+            for (auto& v : values) {
+                if (!std::isfinite(v)) continue;
                 v = v / maxAbs;
+            }
             mapToDisplay(values, -1.0f, 1.0f);
             break;
         }
@@ -115,7 +148,7 @@ std::vector<float> NormalizeColumn(const float* rawData, size_t numRows,
         case NormMode::Trim1e3: {
             float pLo = (mode == NormMode::Trim1e2) ? 0.01f : 0.001f;
             float pHi = 1.0f - pLo;
-            auto sorted = values;
+            auto sorted = finiteValues(values);
             std::sort(sorted.begin(), sorted.end());
             float lo = percentile(sorted, pLo);
             float hi = percentile(sorted, pHi);
@@ -126,9 +159,16 @@ std::vector<float> NormalizeColumn(const float* rawData, size_t numRows,
 
         case NormMode::ThreeSigma: {
             double sum = 0.0, sum2 = 0.0;
-            for (auto v : values) { sum += v; sum2 += (double)v * v; }
-            float mean = static_cast<float>(sum / values.size());
-            float var = static_cast<float>(sum2 / values.size() - (double)mean * mean);
+            size_t count = 0;
+            for (auto v : values) {
+                if (!std::isfinite(v)) continue;
+                sum += v;
+                sum2 += (double)v * v;
+                count++;
+            }
+            if (count == 0) break;
+            float mean = static_cast<float>(sum / count);
+            float var = static_cast<float>(sum2 / count - (double)mean * mean);
             float sigma = std::sqrt(std::max(var, 0.0f));
             if (sigma == 0.0f) sigma = 1.0f;
             float lo = mean - 3.0f * sigma;
@@ -139,78 +179,90 @@ std::vector<float> NormalizeColumn(const float* rawData, size_t numRows,
         }
 
         case NormMode::Log10: {
-            // Shift so minimum is 1.0, then log10
-            float mn = *std::min_element(values.begin(), values.end());
+            float mn, mx;
+            finiteMinMax(values, mn, mx);
             float shift = (mn <= 0.0f) ? (1.0f - mn) : 0.0f;
-            for (auto& v : values)
+            for (auto& v : values) {
+                if (!std::isfinite(v)) continue;
                 v = std::log10(v + shift);
-            float logMin = *std::min_element(values.begin(), values.end());
-            float logMax = *std::max_element(values.begin(), values.end());
+            }
+            float logMin, logMax;
+            finiteMinMax(values, logMin, logMax);
             mapToDisplay(values, logMin, logMax);
             break;
         }
 
         case NormMode::Arctan: {
-            // Center on median, scale by IQR
-            auto sorted = values;
+            auto sorted = finiteValues(values);
             std::sort(sorted.begin(), sorted.end());
             float median = percentile(sorted, 0.5f);
             float q1 = percentile(sorted, 0.25f);
             float q3 = percentile(sorted, 0.75f);
             float iqr = q3 - q1;
             if (iqr == 0.0f) iqr = 1.0f;
-            for (auto& v : values)
+            for (auto& v : values) {
+                if (!std::isfinite(v)) continue;
                 v = std::atan((v - median) / iqr) * (2.0f / 3.14159265f);
+            }
             mapToDisplay(values, -1.0f, 1.0f);
             break;
         }
 
         case NormMode::Rank: {
-            // Rank with average rank for ties
+            // Rank only finite values; NaN keeps NaN
             size_t n = values.size();
-            std::vector<size_t> idx(n);
-            std::iota(idx.begin(), idx.end(), 0);
-            std::sort(idx.begin(), idx.end(),
+            // Collect indices of finite values
+            std::vector<size_t> finiteIdx;
+            finiteIdx.reserve(n);
+            for (size_t i = 0; i < n; i++)
+                if (std::isfinite(values[i])) finiteIdx.push_back(i);
+
+            size_t nf = finiteIdx.size();
+            if (nf == 0) break;
+
+            std::sort(finiteIdx.begin(), finiteIdx.end(),
                       [&](size_t a, size_t b) { return values[a] < values[b]; });
 
-            std::vector<float> ranks(n);
+            std::vector<float> ranks(n, std::numeric_limits<float>::quiet_NaN());
             size_t i = 0;
-            while (i < n) {
+            while (i < nf) {
                 size_t j = i;
-                while (j < n && values[idx[j]] == values[idx[i]]) j++;
+                while (j < nf && values[finiteIdx[j]] == values[finiteIdx[i]]) j++;
                 float avgRank = static_cast<float>(i + j - 1) / 2.0f;
                 for (size_t k = i; k < j; k++)
-                    ranks[idx[k]] = avgRank;
+                    ranks[finiteIdx[k]] = avgRank;
                 i = j;
             }
-            // Map ranks to [0, 1]
-            float maxRank = static_cast<float>(n - 1);
+            float maxRank = static_cast<float>(nf - 1);
             if (maxRank == 0.0f) maxRank = 1.0f;
-            for (auto& r : ranks)
-                r = r / maxRank;
+            for (size_t i = 0; i < n; i++)
+                if (std::isfinite(ranks[i]))
+                    ranks[i] = ranks[i] / maxRank;
             values = ranks;
             mapToDisplay(values, 0.0f, 1.0f);
             break;
         }
 
         case NormMode::Gaussianize: {
-            // Rank then inverse normal CDF (via erfinv)
             size_t n = values.size();
-            std::vector<size_t> idx(n);
-            std::iota(idx.begin(), idx.end(), 0);
-            std::sort(idx.begin(), idx.end(),
+            std::vector<size_t> finiteIdx;
+            finiteIdx.reserve(n);
+            for (size_t i = 0; i < n; i++)
+                if (std::isfinite(values[i])) finiteIdx.push_back(i);
+
+            size_t nf = finiteIdx.size();
+            if (nf == 0) break;
+
+            std::sort(finiteIdx.begin(), finiteIdx.end(),
                       [&](size_t a, size_t b) { return values[a] < values[b]; });
 
-            std::vector<float> result(n);
-            for (size_t i = 0; i < n; i++) {
-                // Map rank to (0, 1) avoiding exact 0 and 1
-                float p = (static_cast<float>(i) + 0.5f) / static_cast<float>(n);
-                // Inverse normal CDF: sqrt(2) * erfinv(2p - 1)
-                result[idx[i]] = 1.4142135f * erfinv(2.0f * p - 1.0f);
+            std::vector<float> result(n, std::numeric_limits<float>::quiet_NaN());
+            for (size_t i = 0; i < nf; i++) {
+                float p = (static_cast<float>(i) + 0.5f) / static_cast<float>(nf);
+                result[finiteIdx[i]] = 1.4142135f * erfinv(2.0f * p - 1.0f);
             }
-            // Clamp and map
-            float mn = *std::min_element(result.begin(), result.end());
-            float mx = *std::max_element(result.begin(), result.end());
+            float mn, mx;
+            finiteMinMax(result, mn, mx);
             values = result;
             mapToDisplay(values, mn, mx);
             break;

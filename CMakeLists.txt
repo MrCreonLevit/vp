@@ -5,7 +5,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
 endif()
 
-project(viewpoints LANGUAGES CXX)
+project(viewpoints LANGUAGES CXX OBJC OBJCXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -45,6 +45,7 @@ set(VIEWPOINTS_SOURCES
     src/WebGPUContext.cpp
     src/Normalize.cpp
     src/ColorMap.cpp
+    $<$<PLATFORM_ID:Darwin>:src/ColorPanelHelper.mm>
 )
 
 # --- Executable ---

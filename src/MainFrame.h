@@ -124,6 +124,7 @@ private:
     ColorMapType m_colorMap = ColorMapType::Default;
     int m_colorVariable = 0;  // 0 = position, 1+ = column index
     float m_bgBrightness = 0.0f;
+    bool m_additiveSelected = false;
 
     // Tooltip state
     std::vector<PointTooltip*> m_tooltips;

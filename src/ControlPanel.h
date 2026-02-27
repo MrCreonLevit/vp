@@ -115,10 +115,13 @@ public:
     std::function<void(int brushIndex, float offset)> onBrushSizeOffsetChanged;
     std::function<void(int brushIndex, float offset)> onBrushOpacityOffsetChanged;
     std::function<void(bool selectedOnly)> onSaveData;
+    std::function<void(bool)> onAdditiveSelectedChanged;
 
     float GetPointSize() const;
     void SetGlobalPointSize(float size);
     void SetGlobalTooltip(bool on);
+    void ApplyBrushColor(int brushIndex, float r, float g, float b, float a);
+    void ShowBrushControls(int brushIndex = -1);
 
 private:
     void CreateAllPage();
@@ -167,4 +170,5 @@ private:
     std::array<float, CP_NUM_BRUSHES> m_brushSizeOffsets = {};
     std::array<float, CP_NUM_BRUSHES> m_brushOpacityOffsets = {};
     wxCheckBox* m_globalTooltipCheck = nullptr;
+    wxCheckBox* m_additiveSelectedCheck = nullptr;
 };

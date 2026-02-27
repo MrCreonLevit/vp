@@ -7,6 +7,9 @@
 #include "ColorMap.h"
 #include <wx/statline.h>
 #include <wx/colordlg.h>
+#ifdef __WXMAC__
+#include "ColorPanelHelper.h"
+#endif
 #include <cmath>
 
 // ============================================================
@@ -600,6 +603,16 @@ void ControlPanel::CreateAllPage() {
             SelectBrush(i);
         });
         // Double-click: open color picker
+#ifdef __WXMAC__
+        btn->Bind(wxEVT_LEFT_DCLICK, [this, i](wxMouseEvent&) {
+            wxColour bg = m_brushButtons[i]->GetBackgroundColour();
+            ShowColorPanel(i, bg.Red() / 255.0f, bg.Green() / 255.0f,
+                           bg.Blue() / 255.0f, bg.Alpha() / 255.0f,
+                           [](int brushIndex, float r, float g, float b, float a, void* ud) {
+                               static_cast<ControlPanel*>(ud)->ApplyBrushColor(brushIndex, r, g, b, a);
+                           }, this);
+        });
+#else
         btn->Bind(wxEVT_LEFT_DCLICK, [this, i](wxMouseEvent&) {
             wxColourData colData;
             colData.SetChooseFull(true);
@@ -619,6 +632,7 @@ void ControlPanel::CreateAllPage() {
                     onBrushColorEdited(i, r, g, b, a);
             }
         });
+#endif
         // Right-click: reset brush to default (especially useful for brush 0)
         btn->Bind(wxEVT_RIGHT_DOWN, [this, i](wxMouseEvent&) {
             m_brushSymbols[i] = (i == 0) ? SYMBOL_CIRCLE : (i - 1) % SYMBOL_COUNT;
@@ -703,6 +717,13 @@ void ControlPanel::CreateAllPage() {
             m_brushOpacityOffsets[m_activeBrush] = offset;
             if (onBrushOpacityOffsetChanged) onBrushOpacityOffsetChanged(m_activeBrush, offset);
         }
+    });
+
+    m_additiveSelectedCheck = new wxCheckBox(m_allPage, wxID_ANY, "Blend Selected");
+    m_additiveSelectedCheck->SetValue(false);
+    sizer->Add(m_additiveSelectedCheck, 0, wxLEFT | wxTOP, 8);
+    m_additiveSelectedCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+        if (onAdditiveSelectedChanged) onAdditiveSelectedChanged(m_additiveSelectedCheck->GetValue());
     });
 
     sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
@@ -901,4 +922,27 @@ void ControlPanel::SetGlobalPointSize(float size) {
 
 void ControlPanel::SetGlobalTooltip(bool on) {
     if (m_globalTooltipCheck) m_globalTooltipCheck->SetValue(on);
+}
+
+void ControlPanel::ShowBrushControls(int brushIndex) {
+    int allIdx = static_cast<int>(m_plotTabs.size());
+    SelectPage(allIdx);
+    if (brushIndex >= 0 && brushIndex < CP_NUM_BRUSHES)
+        SelectBrush(brushIndex);
+    // Scroll the All page to the top so brush buttons are visible
+    if (m_allPage) {
+        auto* sw = static_cast<wxScrolledWindow*>(m_allPage);
+        sw->Scroll(0, 0);
+    }
+}
+
+void ControlPanel::ApplyBrushColor(int brushIndex, float r, float g, float b, float a) {
+    if (brushIndex < 0 || brushIndex >= CP_NUM_BRUSHES) return;
+    m_brushButtons[brushIndex]->SetBackgroundColour(
+        wxColour(static_cast<unsigned char>(r * 255),
+                 static_cast<unsigned char>(g * 255),
+                 static_cast<unsigned char>(b * 255)));
+    m_brushButtons[brushIndex]->Refresh();
+    if (onBrushColorEdited)
+        onBrushColorEdited(brushIndex, r, g, b, a);
 }

@@ -68,6 +68,7 @@ public:
     void SetShowHistograms(bool show);
     void SetBackground(float brightness);
     void SetUseAdditiveBlending(bool additive);
+    void SetAdditiveSelected(bool additive);
     void SetColorMap(int colorMap, int colorVariable = 0);  // colorVariable: 0=density, 1+=column
     void SetDeferRedraws(bool defer) { m_deferRedraws = defer; }
     void SetRotation(float degrees);
@@ -109,6 +110,8 @@ public:
     // Called when mouse hovers near a point (tooltip mode); dataRow=-1 means no point
     std::function<void(int plotIndex, int dataRow, int screenX, int screenY)> onPointHover;
     std::function<void(int plotIndex, bool show)> onTooltipToggled;
+    // Called when user double-clicks inside the existing selection rectangle
+    std::function<void(int plotIndex)> onSelectionDoubleClick;
     // Called on each render with current visible range in normalized coords
     std::function<void(int plotIndex, float xMin, float xMax, float yMin, float yMax)> onViewportChanged;
 
@@ -197,6 +200,7 @@ private:
     bool m_showUnselected = true;
     float m_bgBrightness = 0.0f;
     bool m_useAdditive = true;
+    bool m_additiveSelected = false;
     int m_colorMap = 0;
     int m_colorVariable = 0;  // 0=density, 1+=column index
     float m_pointSize = 6.0f;

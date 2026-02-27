@@ -309,6 +309,11 @@ void MainFrame::CreateLayout() {
         UpdateAllPlots();
     };
 
+    m_controlPanel->onAdditiveSelectedChanged = [this](bool additive) {
+        m_additiveSelected = additive;
+        for (auto* c : m_canvases) c->SetAdditiveSelected(additive);
+    };
+
     m_controlPanel->onBackgroundChanged = [this](float brightness) {
         m_bgBrightness = brightness;
         for (auto* c : m_canvases) c->SetBackground(brightness);
@@ -526,6 +531,9 @@ void MainFrame::RebuildGrid() {
         canvas->onBrushRect = [this](int pi, float x0, float y0, float x1, float y1, bool ext) {
             HandleBrushRect(pi, x0, y0, x1, y1, ext);
         };
+        canvas->onSelectionDoubleClick = [this](int) {
+            m_controlPanel->ShowBrushControls(m_activeBrush);
+        };
         canvas->onClearRequested = [this]() { ClearAllSelections(); };
         canvas->onInvertRequested = [this]() { InvertAllSelections(); };
         canvas->onKillRequested = [this]() { KillSelectedPoints(); };
@@ -617,6 +625,7 @@ void MainFrame::RebuildGrid() {
         };
 
         canvas->SetBrushColors(m_brushColors);
+        canvas->SetAdditiveSelected(m_additiveSelected);
         canvas->onResetViewRequested = [this, i]() {
             m_canvases[i]->ResetView();
             m_plotConfigs[i].rotationY = 0.0f;

@@ -47,6 +47,7 @@ WebGPUCanvas::WebGPUCanvas(wxWindow* parent, WebGPUContext* ctx, int plotIndex)
 
     Bind(wxEVT_PAINT, &WebGPUCanvas::OnPaint, this);
     Bind(wxEVT_SIZE, &WebGPUCanvas::OnSize, this);
+    Bind(wxEVT_LEFT_DCLICK, &WebGPUCanvas::OnMouse, this);
     Bind(wxEVT_LEFT_DOWN, &WebGPUCanvas::OnMouse, this);
     Bind(wxEVT_LEFT_UP, &WebGPUCanvas::OnMouse, this);
     Bind(wxEVT_MIDDLE_DOWN, &WebGPUCanvas::OnMouse, this);
@@ -218,6 +219,11 @@ void WebGPUCanvas::SetUseAdditiveBlending(bool additive) {
     Refresh();
 }
 
+void WebGPUCanvas::SetAdditiveSelected(bool additive) {
+    m_additiveSelected = additive;
+    Refresh();
+}
+
 void WebGPUCanvas::SetColorMap(int colorMap, int colorVariable) {
     m_colorMap = colorMap;
     m_colorVariable = colorVariable;
@@ -365,18 +371,9 @@ void WebGPUCanvas::SetSelection(const std::vector<int>& sel) {
                              selU32.data(), numPoints * sizeof(uint32_t));
     }
 
-    // When unselected points are hidden, we must rebuild the vertex buffer
-    // so newly-unselected points get alpha=0 and newly-selected points become visible.
-    if (!m_showUnselected) {
-        UpdatePointColors();
-    }
-
-    // Clear the overlay buffer so old selections don't persist on screen.
-    if (m_selVertexBuffer) {
-        wgpuBufferRelease(m_selVertexBuffer);
-        m_selVertexBuffer = nullptr;
-    }
-    m_selVertexCount = 0;
+    // Rebuild base colors (hides unselected when needed) and the overlay
+    // buffer so selected points are always drawn on top in all plots.
+    UpdatePointColors();
     Refresh();
 }
 
@@ -1458,7 +1455,7 @@ void WebGPUCanvas::Render() {
     // Uses a zero-filled selection buffer so shader takes the brush-0
     // vertex-color path, reading baked color/symbol/size from vertices.
     if (m_selPipeline && m_selVertexBuffer && m_selVertexCount > 0) {
-        wgpuRenderPassEncoderSetPipeline(rp, m_selPipeline);
+        wgpuRenderPassEncoderSetPipeline(rp, m_additiveSelected ? m_pipeline : m_selPipeline);
         wgpuRenderPassEncoderSetBindGroup(rp, 0, m_bindGroup, 0, nullptr);
         if (m_overlayBindGroup)
             wgpuRenderPassEncoderSetBindGroup(rp, 1, m_overlayBindGroup, 0, nullptr);
@@ -1535,6 +1532,18 @@ void WebGPUCanvas::OnSize(wxSizeEvent& event) {
 void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
     bool isPan = event.ShiftDown() || event.MiddleIsDown() || event.RightIsDown();
     bool isTranslate = event.AltDown() && m_hasLastRect;
+
+    if (event.LeftDClick() && m_hasLastRect) {
+        // Double-click: check if inside the existing selection rectangle
+        float wx, wy;
+        ScreenToWorld(event.GetPosition().x, event.GetPosition().y, wx, wy);
+        if (wx >= m_lastRectX0 && wx <= m_lastRectX1 &&
+            wy >= m_lastRectY0 && wy <= m_lastRectY1) {
+            if (onSelectionDoubleClick)
+                onSelectionDoubleClick(m_plotIndex);
+            return;
+        }
+    }
 
     if (event.LeftDown() || event.MiddleDown() || event.RightDown()) {
         SetFocus();
