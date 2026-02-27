@@ -156,5 +156,6 @@ private:
         ID_ResetViews,
         ID_SaveAll,
         ID_SaveSelected,
+        ID_Shortcuts,
     };
 };

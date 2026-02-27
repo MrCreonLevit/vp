@@ -112,6 +112,8 @@ void MainFrame::CreateMenuBar() {
     menuBar->Append(viewMenu, "&View");
 
     auto* helpMenu = new wxMenu();
+    helpMenu->Append(ID_Shortcuts, "&Keyboard Shortcuts", "Show keyboard and mouse shortcuts");
+    helpMenu->AppendSeparator();
     helpMenu->Append(wxID_ABOUT, "&About...", "About Viewpoints");
     menuBar->Append(helpMenu, "&Help");
 
@@ -122,6 +124,30 @@ void MainFrame::CreateMenuBar() {
     Bind(wxEVT_MENU, [this](wxCommandEvent&) { OnSave(true); }, ID_SaveSelected);
     Bind(wxEVT_MENU, &MainFrame::OnQuit, this, wxID_EXIT);
     Bind(wxEVT_MENU, &MainFrame::OnAbout, this, wxID_ABOUT);
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) {
+        wxMessageBox(
+            "Mouse\n"
+            "  Click plot: activate\n"
+            "  Drag: select (brush) points\n"
+            "  Opt+drag: move selection\n"
+            "  Cmd+drag: extend selection\n"
+            "  Shift+drag: pan\n"
+            "  Scroll: pan\n"
+            "  Pinch: zoom\n"
+            "\n"
+            "Keyboard\n"
+            "  C: clear selection\n"
+            "  D: toggle deselected points\n"
+            "  I: invert selection\n"
+            "  K: kill selected points\n"
+            "  T: toggle hover details\n"
+            "  R: reset active view\n"
+            "  Shift+R: reset all views\n"
+            "  Cmd+S: save all data\n"
+            "  Cmd+Shift+S: save selected\n"
+            "  Q: quit",
+            "Keyboard Shortcuts", wxOK | wxICON_INFORMATION, this);
+    }, ID_Shortcuts);
     Bind(wxEVT_MENU, &MainFrame::OnAddRow, this, ID_AddRow);
     Bind(wxEVT_MENU, &MainFrame::OnAddCol, this, ID_AddCol);
     Bind(wxEVT_MENU, &MainFrame::OnRemoveRow, this, ID_RemoveRow);

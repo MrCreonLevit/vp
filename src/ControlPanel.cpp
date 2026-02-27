@@ -302,40 +302,6 @@ ControlPanel::ControlPanel(wxWindow* parent)
     m_book = new wxSimplebook(this);
     sizer->Add(m_book, 1, wxEXPAND | wxLEFT | wxRIGHT, 4);
 
-    sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxALL, 4);
-
-    auto* helpText = new wxStaticText(this, wxID_ANY,
-        "Click plot: activate\n"
-        "Drag: select (brush) points\n"
-        "Opt+drag: move selection\n"
-        "Cmd+drag: extend selection\n"
-        "Shift+drag: pan\n"
-        "Scroll: pan\n"
-        "Pinch: zoom\n"
-        "C: clear selection\n"
-        "D: toggle deselected points\n"
-        "I: invert selection\n"
-        "K: kill selected points\n"
-        "T: toggle hover details\n"
-        "R: reset active view\n"
-        "Shift+R: reset all views\n"
-        "Cmd+S: save all data\n"
-        "Cmd+Shift+S: save selected\n"
-        "Q: quit");
-    helpText->SetForegroundColour(wxColour(120, 120, 120));
-    auto hFont = helpText->GetFont();
-    hFont.SetPointSize(hFont.GetPointSize() - 1);
-    helpText->SetFont(hFont);
-    sizer->Add(helpText, 0, wxALL, 8);
-    // Cap help text to at most 30% of panel height
-    Bind(wxEVT_SIZE, [this, helpText](wxSizeEvent& evt) {
-        int panelH = evt.GetSize().GetHeight();
-        int contentH = helpText->GetBestSize().GetHeight() + 16;
-        int maxH = panelH * 3 / 10;
-        helpText->SetMaxSize(wxSize(-1, std::min(contentH, maxH)));
-        evt.Skip();
-    });
-
     SetSizer(sizer);
     RebuildTabs(2, 2);
     m_ready = true;
