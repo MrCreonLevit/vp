@@ -22,6 +22,21 @@ void DataSet::columnRange(size_t col, float& minVal, float& maxVal) const {
     }
 }
 
+void DataManager::appendRowIndexColumn() {
+    size_t oldCols = m_data.numCols;
+    size_t newCols = oldCols + 1;
+    std::vector<float> newData(m_data.numRows * newCols);
+    for (size_t r = 0; r < m_data.numRows; r++) {
+        for (size_t c = 0; c < oldCols; c++)
+            newData[r * newCols + c] = m_data.data[r * oldCols + c];
+        newData[r * newCols + oldCols] = static_cast<float>(r);
+    }
+    m_data.data = std::move(newData);
+    m_data.numCols = newCols;
+    m_data.columnLabels.push_back("Index");
+    m_data.columnMeta.resize(newCols);
+}
+
 bool DataManager::isCommentLine(const std::string& line) const {
     if (line.empty()) return true;
     char first = line[0];
@@ -357,6 +372,7 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
     }
 
     m_data.data.shrink_to_fit();
+    appendRowIndexColumn();
 
     return true;
 }
@@ -826,6 +842,7 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
     }
 
     m_data.data.shrink_to_fit();
+    appendRowIndexColumn();
     return true;
 #endif // HAS_PARQUET
 }

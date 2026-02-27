@@ -49,6 +49,7 @@ public:
     bool saveAsParquet(const std::string& path, const std::vector<int>& selection = {}) const;
 
 private:
+    void appendRowIndexColumn();
     bool isCommentLine(const std::string& line) const;
     std::vector<std::string> splitTokens(const std::string& line, char delimiter) const;
 
