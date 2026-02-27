@@ -28,7 +28,7 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 - **Command-line loading** — `vp -i data.csv` or `vp data.parquet`
 - **Constant-column removal** — columns with a single value are automatically dropped on load
 - **Save All / Save Selected** — export data or just brushed points as Parquet or CSV
-- **11 normalization modes** — None, Min-Max, +only, Max |val|, Trim percentile, 3 Sigma, Log10, Arctan, Rank, Gaussianize (per-plot, per-axis)
+- **10 normalization modes** — Min-Max, +only, Max |val|, Trim percentile, 3 Sigma, Log10, Arctan, Rank, Gaussianize (per-plot, per-axis, smart defaults)
 - **Large dataset subsampling** — datasets over 4M points are automatically subsampled per plot for GPU memory management
 - Tested with datasets up to **12.6 million rows** (NYC taxi data)
 
@@ -40,16 +40,19 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 - **Scroll** (two-finger) to pan
 - **Scroll wheel** to zoom centered on cursor position
 - **Trackpad pinch** to zoom centered on pinch point
-- **Axis lock** — lock a variable so panning/zooming propagates to all plots showing it (independent X/Y zoom)
+- **Axis linking** — link a variable so panning/zooming propagates to all plots sharing it; **Opt+scroll** to independently scale axes
+- **Double-click** any plot to quickly select a brush from a colored popup menu
+- **Click axis labels** to change the variable via a popup menu
 - **Defer Redraws** toggle for smooth interaction with very large datasets
 - **Randomize Axes** button per plot
 - **Kill Selected** — permanently remove selected points from dataset
-- **3D rotation** — optional Z-axis with rotation slider, spin (continuous 10°/s), and rock (sinusoidal ±3°)
+- **3D rotation** — optional Z-axis with screen-space rotation sliders for both Y and X axes, spin/rock animation for each, and per-axis reset buttons; rotations always follow screen axes regardless of prior rotations (accumulated rotation matrix)
+- **Arrow-key selection stepping** — step through individual points with arrow keys
 - Keyboard shortcuts: **C** clear selection, **I** invert selection, **D** toggle deselected points, **K** kill selected, **T** toggle hover details, **R** reset active view, **Shift+R** reset all views, **Cmd+S** save all, **Cmd+Shift+S** save selected, **Q** quit
 
 ### Control Panel
-- **Grid-based plot selector** matching the plot layout, plus an "All" tab for global settings
-- **Per-plot controls** — axis selectors, normalization, lock, point size, opacity, histogram bins, show/hide unselected, grid lines, histograms
+- **Grid-based plot selector** matching the plot layout, plus a "Brushes + Global Controls" tab
+- **Per-plot controls** — axis selectors, normalization, link, point size, opacity, histogram bins, show/hide unselected, grid lines, histograms, 3D rotation
 - **Per-brush controls** — color picker with alpha (double-click), symbol selector, size offset, opacity offset; right-click to reset
 - **Color map controls** — density-based colormaps with background brightness adjustment
 - **Scrollable panels** for small windows
