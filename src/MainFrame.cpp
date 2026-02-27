@@ -288,9 +288,13 @@ void MainFrame::CreateLayout() {
 
     m_controlPanel->onZAxisChanged = [this](int plotIndex, int zCol, int zNorm) {
         if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            m_plotConfigs[plotIndex].zCol = zCol;
-            m_plotConfigs[plotIndex].zNorm = static_cast<NormMode>(zNorm);
+            auto& cfg = m_plotConfigs[plotIndex];
+            bool newColumn = (zCol != cfg.zCol && zCol >= 0);
+            cfg.zCol = zCol;
+            cfg.zNorm = newColumn ? DefaultNormForColumn(static_cast<size_t>(zCol))
+                                  : static_cast<NormMode>(zNorm);
             UpdatePlot(plotIndex);
+            m_controlPanel->SetPlotConfig(plotIndex, cfg);
         }
     };
 
@@ -1421,6 +1425,8 @@ void MainFrame::LoadFile(const std::string& path) {
         size_t col1 = (i * 2) % ds.numCols;
         size_t col2 = (i * 2 + 1) % ds.numCols;
         m_plotConfigs[i] = {col1, col2};
+        m_plotConfigs[i].xNorm = DefaultNormForColumn(col1);
+        m_plotConfigs[i].yNorm = DefaultNormForColumn(col2);
     }
 
     // Set default point size and opacity based on dataset size
