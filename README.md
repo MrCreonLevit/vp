@@ -26,6 +26,8 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 - **ASCII/CSV/TSV** file loading with progress bar
 - **Apache Parquet** file loading via Arrow C++ (optional dependency)
 - **Command-line loading** — `vp -i data.csv` or `vp data.parquet`
+- **Categorical/string columns** — columns containing non-numeric strings are automatically detected and encoded as integers (alphabetically sorted). Category names appear in axis tick labels, selection coordinates, and hover details. Saved files restore the original strings.
+- **Row index column** — a synthetic "Index" column (0, 1, 2, ...) is appended on load, useful for single-column datasets or as a time proxy
 - **Constant-column removal** — columns with a single value are automatically dropped on load
 - **Save All / Save Selected** — export data or just brushed points as Parquet or CSV
 - **10 normalization modes** — Min-Max, +only, Max |val|, Trim percentile, 3 Sigma, Log10, Arctan, Rank, Gaussianize (per-plot, per-axis, smart defaults)
