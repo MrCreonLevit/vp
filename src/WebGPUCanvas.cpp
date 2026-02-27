@@ -1670,16 +1670,41 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
         // Hide tooltip during scroll
         if (m_showTooltip && onPointHover)
             onPointHover(m_plotIndex, -1, 0, 0);
-        // Two-finger scroll: pan the view
-        wxSize sz = GetClientSize();
-        float dx = 0.0f, dy = 0.0f;
-        if (event.GetWheelAxis() == wxMOUSE_WHEEL_VERTICAL) {
-            dy = (event.GetWheelRotation() / 120.0f) * 0.3f / m_zoomY;
+
+        if (event.AltDown()) {
+            // Option+scroll: zoom a single axis (vertical scroll → Y, horizontal → X)
+            // centered on the mouse cursor
+            float delta = -event.GetWheelRotation() / 120.0f;
+            float factor = 1.0f + delta * 0.08f;
+            factor = std::max(0.5f, std::min(factor, 2.0f));
+
+            wxPoint mousePos = event.GetPosition();
+            float wx, wy;
+            ScreenToWorld(mousePos.x, mousePos.y, wx, wy);
+            wxSize size = GetClientSize();
+            float ndcX = (static_cast<float>(mousePos.x) / size.GetWidth()) * 2.0f - 1.0f;
+            float ndcY = 1.0f - (static_cast<float>(mousePos.y) / size.GetHeight()) * 2.0f;
+
+            if (event.GetWheelAxis() == wxMOUSE_WHEEL_VERTICAL) {
+                float newZoomY = std::max(0.1f, std::min(m_zoomY * factor, 100.0f));
+                m_panY = wy - ndcY / newZoomY;
+                m_zoomY = newZoomY;
+            } else {
+                float newZoomX = std::max(0.1f, std::min(m_zoomX * factor, 100.0f));
+                m_panX = wx - ndcX / newZoomX;
+                m_zoomX = newZoomX;
+            }
         } else {
-            dx = (event.GetWheelRotation() / 120.0f) * 0.3f / m_zoomX;
+            // Two-finger scroll: pan the view
+            float dx = 0.0f, dy = 0.0f;
+            if (event.GetWheelAxis() == wxMOUSE_WHEEL_VERTICAL) {
+                dy = (event.GetWheelRotation() / 120.0f) * 0.3f / m_zoomY;
+            } else {
+                dx = (event.GetWheelRotation() / 120.0f) * 0.3f / m_zoomX;
+            }
+            m_panX += dx;
+            m_panY += dy;
         }
-        m_panX += dx;
-        m_panY += dy;
 
         if (onViewChanged) onViewChanged(m_plotIndex, m_panX, m_panY, m_zoomX, m_zoomY);
         if (m_colorMap != 0) RecomputeDensityColors();

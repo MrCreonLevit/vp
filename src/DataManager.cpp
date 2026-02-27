@@ -779,6 +779,14 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
                             extractTypedColumn(reinterpret_cast<const uint32_t*>(rawData),
                                 len, rowOffset, m_data.data.data(), m_data.numCols, ci, arr, nullCount);
                             break;
+                        case arrow::Type::UINT16:
+                            extractTypedColumn(reinterpret_cast<const uint16_t*>(rawData),
+                                len, rowOffset, m_data.data.data(), m_data.numCols, ci, arr, nullCount);
+                            break;
+                        case arrow::Type::UINT8:
+                            extractTypedColumn(reinterpret_cast<const uint8_t*>(rawData),
+                                len, rowOffset, m_data.data.data(), m_data.numCols, ci, arr, nullCount);
+                            break;
                         default:
                             for (int64_t r = 0; r < len; r++)
                                 m_data.data[(rowOffset + r) * m_data.numCols + ci] = 0.0f;

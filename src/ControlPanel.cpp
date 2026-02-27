@@ -45,7 +45,7 @@ void PlotTab::CreateControls(int row, int col) {
 
     auto* xRow = new wxBoxSizer(wxHORIZONTAL);
     xRow->Add(new wxStaticText(this, wxID_ANY, "X-axis"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
-    m_xLock = new wxCheckBox(this, wxID_ANY, "Lock");
+    m_xLock = new wxCheckBox(this, wxID_ANY, "Link");
     xRow->Add(m_xLock, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     xRow->Add(new wxStaticText(this, wxID_ANY, "Norm"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     m_xNorm = new wxChoice(this, wxID_ANY);
@@ -58,7 +58,7 @@ void PlotTab::CreateControls(int row, int col) {
 
     auto* yRow = new wxBoxSizer(wxHORIZONTAL);
     yRow->Add(new wxStaticText(this, wxID_ANY, "Y-axis"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
-    m_yLock = new wxCheckBox(this, wxID_ANY, "Lock");
+    m_yLock = new wxCheckBox(this, wxID_ANY, "Link");
     yRow->Add(m_yLock, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     yRow->Add(new wxStaticText(this, wxID_ANY, "Norm"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     m_yNorm = new wxChoice(this, wxID_ANY);

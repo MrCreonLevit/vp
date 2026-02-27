@@ -134,6 +134,7 @@ void MainFrame::CreateMenuBar() {
             "  Shift+drag: pan\n"
             "  Scroll: pan\n"
             "  Pinch: zoom\n"
+            "  Opt+scroll: scale axis\n"
             "\n"
             "Keyboard\n"
             "  C: clear selection\n"
@@ -143,6 +144,7 @@ void MainFrame::CreateMenuBar() {
             "  T: toggle hover details\n"
             "  R: reset active view\n"
             "  Shift+R: reset all views\n"
+            "  Arrow keys: step selection\n"
             "  Cmd+S: save all data\n"
             "  Cmd+Shift+S: save selected\n"
             "  Q: quit",
@@ -214,9 +216,30 @@ void MainFrame::CreateLayout() {
     };
 
     m_controlPanel->onAxisLockChanged = [this](int plotIndex, bool xLock, bool yLock) {
-        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            m_plotConfigs[plotIndex].xLocked = xLock;
-            m_plotConfigs[plotIndex].yLocked = yLock;
+        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
+        auto& cfg = m_plotConfigs[plotIndex];
+        bool xChanged = (xLock != cfg.xLocked);
+        bool yChanged = (yLock != cfg.yLocked);
+        cfg.xLocked = xLock;
+        cfg.yLocked = yLock;
+
+        // Propagate: link/unlink the same variable across all plots
+        for (int j = 0; j < (int)m_plotConfigs.size(); j++) {
+            if (j == plotIndex) continue;
+            auto& other = m_plotConfigs[j];
+            bool changed = false;
+            if (xChanged) {
+                size_t col = cfg.xCol;
+                if (other.xCol == col) { other.xLocked = xLock; changed = true; }
+                if (other.yCol == col) { other.yLocked = xLock; changed = true; }
+            }
+            if (yChanged) {
+                size_t col = cfg.yCol;
+                if (other.xCol == col) { other.xLocked = yLock; changed = true; }
+                if (other.yCol == col) { other.yLocked = yLock; changed = true; }
+            }
+            if (changed)
+                m_controlPanel->SetPlotConfig(j, other);
         }
     };
 
