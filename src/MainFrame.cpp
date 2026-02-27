@@ -1208,6 +1208,15 @@ void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, flo
     const auto& xVals = GetNormalized(cfg.xCol, cfg.xNorm);
     const auto& yVals = GetNormalized(cfg.yCol, cfg.yNorm);
 
+    bool hasZ = (cfg.zCol >= 0 && (size_t)cfg.zCol < ds.numCols);
+    const std::vector<float>* zVals = nullptr;
+    if (hasZ)
+        zVals = &GetNormalized((size_t)cfg.zCol, cfg.zNorm);
+
+    float theta = cfg.rotationY * 3.14159265f / 180.0f;
+    float cosR = std::cos(theta);
+    float sinR = std::sin(theta);
+
     float rectMinX = std::min(x0, x1);
     float rectMaxX = std::max(x0, x1);
     float rectMinY = std::min(y0, y1);
@@ -1224,8 +1233,15 @@ void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, flo
 
     int matchCount = 0;
     for (size_t r = 0; r < ds.numRows; r++) {
-        if (xVals[r] >= rectMinX && xVals[r] <= rectMaxX &&
-            yVals[r] >= rectMinY && yVals[r] <= rectMaxY) {
+        float px = xVals[r];
+        float py = yVals[r];
+        if (zVals) {
+            // Apply same Y-axis rotation as vertex shader:
+            //   x' = x*cos + z*sin,  y' = y
+            px = xVals[r] * cosR + (*zVals)[r] * sinR;
+        }
+        if (px >= rectMinX && px <= rectMaxX &&
+            py >= rectMinY && py <= rectMaxY) {
             m_selection[r] = m_activeBrush;
             matchCount++;
         }
