@@ -5,13 +5,11 @@
 #include <wx/popupwin.h>
 #include <wx/progdlg.h>
 #include <algorithm>
-#include <numeric>
 #include <cmath>
 #include <random>
 #include <queue>
 #include <unordered_set>
 #include <cstring>
-#include <limits>
 
 // Pre-multiply a row-major 3x3 rotation matrix by Ry(deg) or Rx(deg).
 // R_new = R_delta * R_old — rotates around screen axis.
@@ -1244,22 +1242,21 @@ void MainFrame::UpdatePlot(int plotIndex) {
     if (plotIndex < (int)m_plotWidgets.size()) {
         auto formatLabel = [&](size_t col, NormMode norm) -> std::string {
             const std::string& name = ds.columnLabels[col];
-            if (norm == NormMode::Log10) {
-                // Check if the column has non-positive values (shift was applied)
-                float mn = std::numeric_limits<float>::max();
-                for (size_t r = 0; r < ds.numRows; r++) {
-                    float v = ds.data[r * ds.numCols + col];
-                    if (std::isfinite(v) && v < mn) mn = v;
+            switch (norm) {
+                case NormMode::Log10: {
+                    float mn, mx;
+                    ds.columnRange(col, mn, mx);
+                    if (mn <= 0.0f)
+                        return "log10(" + name + " - min(" + name + "))";
+                    return "log10(" + name + ")";
                 }
-                if (mn <= 0.0f)
-                    return "log10(" + name + " - min(" + name + "))";
-                return "log10(" + name + ")";
+                case NormMode::Rank:
+                    return "rank(" + name + ")";
+                case NormMode::Gaussianize:
+                    return "gaussian(" + name + ")";
+                default:
+                    return name;
             }
-            if (norm == NormMode::Rank)
-                return "rank(" + name + ")";
-            if (norm == NormMode::Gaussianize)
-                return "gaussian( " + name + " )";
-            return name;
         };
         m_plotWidgets[plotIndex].xLabel->SetLabel(formatLabel(cfg.xCol, cfg.xNorm));
         m_plotWidgets[plotIndex].yLabel->SetLabel(formatLabel(cfg.yCol, cfg.yNorm));
