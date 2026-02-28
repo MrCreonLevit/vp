@@ -197,6 +197,11 @@ private:
     WGPUBuffer m_gridLineBuffer = nullptr;
     size_t m_gridLineVertexCount = 0;
 
+    // Overflow arrow indicators
+    WGPUBuffer m_arrowBuffer = nullptr;
+    size_t m_arrowVertexCount = 0;
+    void UpdateOverflowArrows();
+
     // Display settings
     bool m_showTooltip = false;
     bool m_showUnselected = true;

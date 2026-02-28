@@ -1159,6 +1159,118 @@ void WebGPUCanvas::UpdateGridLines() {
     wgpuQueueWriteBuffer(queue, m_gridLineBuffer, 0, lineVerts.data(), dataSize);
 }
 
+void WebGPUCanvas::UpdateOverflowArrows() {
+    if (!m_ctx || m_basePositions.empty()) {
+        m_arrowVertexCount = 0;
+        return;
+    }
+
+    float hw = 1.0f / m_zoomX;
+    float hh = 1.0f / m_zoomY;
+    float viewMinX = m_panX - hw;
+    float viewMaxX = m_panX + hw;
+    float viewMinY = m_panY - hh;
+    float viewMaxY = m_panY + hh;
+
+    bool overflowLeft = false, overflowRight = false;
+    bool overflowBottom = false, overflowTop = false;
+
+    size_t numPoints = m_basePositions.size() / 2;
+    const float* m = m_rotMatrix;
+    bool isIdentity = (m[0]==1 && m[1]==0 && m[2]==0 &&
+                       m[3]==0 && m[4]==1 && m[5]==0);
+
+    for (size_t i = 0; i < numPoints; i++) {
+        float px = m_basePositions[i * 2];
+        float py = m_basePositions[i * 2 + 1];
+
+        if (!isIdentity && i < m_points.size()) {
+            float ox = px, oy = py, oz = m_points[i].z;
+            px = m[0]*ox + m[1]*oy + m[2]*oz;
+            py = m[3]*ox + m[4]*oy + m[5]*oz;
+        }
+
+        if (px < viewMinX) overflowLeft = true;
+        if (px > viewMaxX) overflowRight = true;
+        if (py < viewMinY) overflowBottom = true;
+        if (py > viewMaxY) overflowTop = true;
+
+        if (overflowLeft && overflowRight && overflowBottom && overflowTop)
+            break;
+    }
+
+    std::vector<PointVertex> arrowVerts;
+    float r = 1.0f, g = 0.2f, b = 0.2f, a = 0.8f;
+
+    // Build equilateral triangles with a fixed pixel size derived from the
+    // longest viewport dimension.  We define the triangle side length as a
+    // fraction of max(W,H) in pixels, then convert to clip-space offsets
+    // for each axis (clip unit = 2/W px horizontally, 2/H px vertically).
+    wxSize sz = GetClientSize();
+    float W = static_cast<float>(std::max(1, sz.GetWidth()));
+    float H = static_cast<float>(std::max(1, sz.GetHeight()));
+    float sidePx = std::max(W, H) * 0.015f;  // triangle side in pixels
+    float sqrt3 = 1.732050808f;
+    float heightPx = sidePx * sqrt3 * 0.5f;  // equilateral height in pixels
+
+    // Half-base and depth converted to clip-space for each axis
+    float halfBaseX = sidePx / W;   // half-base when base is horizontal (top/bottom)
+    float halfBaseY = sidePx / H;   // half-base when base is vertical (left/right)
+    float depthX    = heightPx / W; // depth in clip-x (left/right arrows)
+    float depthY    = heightPx / H; // depth in clip-y (top/bottom arrows)
+
+    if (overflowRight) {
+        float tipX = 0.99f, baseX = tipX - depthX;
+        PointVertex v0 = {baseX,  halfBaseY, 0, r, g, b, a};
+        PointVertex v1 = {baseX, -halfBaseY, 0, r, g, b, a};
+        PointVertex v2 = {tipX,   0.00f,     0, r, g, b, a};
+        arrowVerts.push_back(v0); arrowVerts.push_back(v1); arrowVerts.push_back(v2);
+    }
+    if (overflowLeft) {
+        float tipX = -0.99f, baseX = tipX + depthX;
+        PointVertex v0 = {baseX,  halfBaseY, 0, r, g, b, a};
+        PointVertex v1 = {baseX, -halfBaseY, 0, r, g, b, a};
+        PointVertex v2 = {tipX,   0.00f,     0, r, g, b, a};
+        arrowVerts.push_back(v0); arrowVerts.push_back(v1); arrowVerts.push_back(v2);
+    }
+    if (overflowTop) {
+        float tipY = 0.99f, baseY = tipY - depthY;
+        PointVertex v0 = {-halfBaseX, baseY, 0, r, g, b, a};
+        PointVertex v1 = { halfBaseX, baseY, 0, r, g, b, a};
+        PointVertex v2 = { 0.00f,     tipY,  0, r, g, b, a};
+        arrowVerts.push_back(v0); arrowVerts.push_back(v1); arrowVerts.push_back(v2);
+    }
+    if (overflowBottom) {
+        float tipY = -0.99f, baseY = tipY + depthY;
+        PointVertex v0 = {-halfBaseX, baseY, 0, r, g, b, a};
+        PointVertex v1 = { halfBaseX, baseY, 0, r, g, b, a};
+        PointVertex v2 = { 0.00f,     tipY,  0, r, g, b, a};
+        arrowVerts.push_back(v0); arrowVerts.push_back(v1); arrowVerts.push_back(v2);
+    }
+
+    m_arrowVertexCount = arrowVerts.size();
+    if (m_arrowVertexCount == 0) {
+        if (m_arrowBuffer) { wgpuBufferRelease(m_arrowBuffer); m_arrowBuffer = nullptr; }
+        return;
+    }
+
+    auto device = m_ctx->GetDevice();
+    auto queue = m_ctx->GetQueue();
+
+    if (m_arrowBuffer) {
+        wgpuBufferRelease(m_arrowBuffer);
+        m_arrowBuffer = nullptr;
+    }
+
+    size_t dataSize = m_arrowVertexCount * sizeof(PointVertex);
+    WGPUBufferDescriptor abDesc = {};
+    abDesc.label = {"overflow_arrows", WGPU_STRLEN};
+    abDesc.size = dataSize;
+    abDesc.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+    m_arrowBuffer = wgpuDeviceCreateBuffer(device, &abDesc);
+    wgpuQueueWriteBuffer(queue, m_arrowBuffer, 0, arrowVerts.data(), dataSize);
+}
+
 void WebGPUCanvas::UpdateSelectionRect() {
     if (!m_ctx || !m_selecting) {
         m_selRectVertexCount = 0;
@@ -1394,6 +1506,7 @@ void WebGPUCanvas::Render() {
     UpdateUniforms();
     UpdateHistograms();
     UpdateGridLines();
+    UpdateOverflowArrows();
     UpdateSelectionRect();
 
     // Notify MainFrame of current viewport for tick value labels
@@ -1493,6 +1606,15 @@ void WebGPUCanvas::Render() {
         wgpuRenderPassEncoderSetVertexBuffer(rp, 0, m_histBuffer, 0,
                                               m_histVertexCount * sizeof(PointVertex));
         wgpuRenderPassEncoderDraw(rp, static_cast<uint32_t>(m_histVertexCount), 1, 0, 0);
+    }
+
+    // Draw overflow arrow indicators (identity projection, fixed to viewport edges)
+    if (m_histPipeline && m_arrowBuffer && m_arrowVertexCount > 0) {
+        wgpuRenderPassEncoderSetPipeline(rp, m_histPipeline);
+        wgpuRenderPassEncoderSetBindGroup(rp, 0, m_histBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetVertexBuffer(rp, 0, m_arrowBuffer, 0,
+                                              m_arrowVertexCount * sizeof(PointVertex));
+        wgpuRenderPassEncoderDraw(rp, static_cast<uint32_t>(m_arrowVertexCount), 1, 0, 0);
     }
 
     wgpuRenderPassEncoderEnd(rp);
@@ -1887,6 +2009,7 @@ void WebGPUCanvas::Cleanup() {
     if (m_selectionGpuBuffer) { wgpuBufferRelease(m_selectionGpuBuffer); m_selectionGpuBuffer = nullptr; }
     if (m_brushColorGpuBuffer) { wgpuBufferRelease(m_brushColorGpuBuffer); m_brushColorGpuBuffer = nullptr; }
     if (m_brushParamsGpuBuffer) { wgpuBufferRelease(m_brushParamsGpuBuffer); m_brushParamsGpuBuffer = nullptr; }
+    if (m_arrowBuffer) { wgpuBufferRelease(m_arrowBuffer); m_arrowBuffer = nullptr; }
     if (m_gridLineBuffer) { wgpuBufferRelease(m_gridLineBuffer); m_gridLineBuffer = nullptr; }
     if (m_histBuffer) { wgpuBufferRelease(m_histBuffer); m_histBuffer = nullptr; }
     if (m_histPipeline) { wgpuRenderPipelineRelease(m_histPipeline); m_histPipeline = nullptr; }
