@@ -1200,7 +1200,6 @@ void WebGPUCanvas::UpdateOverflowArrows() {
     }
 
     std::vector<PointVertex> arrowVerts;
-    float r = 1.0f, g = 0.2f, b = 0.2f, a = 0.8f;
 
     // Build equilateral triangles with a fixed pixel size derived from the
     // longest viewport dimension.  We define the triangle side length as a
@@ -1209,7 +1208,7 @@ void WebGPUCanvas::UpdateOverflowArrows() {
     wxSize sz = GetClientSize();
     float W = static_cast<float>(std::max(1, sz.GetWidth()));
     float H = static_cast<float>(std::max(1, sz.GetHeight()));
-    float sidePx = std::max(W, H) * 0.015f;  // triangle side in pixels
+    float sidePx = std::max(W, H) * 0.02f;  // triangle side in pixels
     float sqrt3 = 1.732050808f;
     float heightPx = sidePx * sqrt3 * 0.5f;  // equilateral height in pixels
 
@@ -1219,33 +1218,61 @@ void WebGPUCanvas::UpdateOverflowArrows() {
     float depthX    = heightPx / W; // depth in clip-x (left/right arrows)
     float depthY    = heightPx / H; // depth in clip-y (top/bottom arrows)
 
+    // Shadow: draw a black triangle offset by 2 pixels, then the red triangle on top.
+    // Black disc behind each arrow: triangle fan approximating a circle.
+    constexpr int DISC_SEGMENTS = 24;
+    float borderPx = 2.0f;  // how much the disc extends beyond the triangle vertices
+
+    auto addArrow = [&](float x0, float y0, float x1, float y1, float x2, float y2) {
+        // Centroid of the triangle
+        float cx = (x0 + x1 + x2) / 3.0f;
+        float cy = (y0 + y1 + y2) / 3.0f;
+
+        // Find max distance from centroid to any vertex in device pixels
+        auto distPx = [&](float vx, float vy) {
+            float dx = (vx - cx) * W * 0.5f;
+            float dy = (vy - cy) * H * 0.5f;
+            return std::sqrt(dx * dx + dy * dy);
+        };
+        float maxDist = std::max({distPx(x0, y0), distPx(x1, y1), distPx(x2, y2)});
+        float radiusPx = maxDist + borderPx;
+
+        // Draw disc as triangle fan (in clip space, correcting for aspect)
+        float rxClip = radiusPx * 2.0f / W;
+        float ryClip = radiusPx * 2.0f / H;
+        for (int i = 0; i < DISC_SEGMENTS; i++) {
+            float a0 = 2.0f * 3.14159265f * i / DISC_SEGMENTS;
+            float a1 = 2.0f * 3.14159265f * (i + 1) / DISC_SEGMENTS;
+            PointVertex vc = {cx, cy, 0, 0.0f, 0.0f, 0.0f, 1.0f};
+            PointVertex v0 = {cx + rxClip * std::cos(a0), cy + ryClip * std::sin(a0), 0,
+                              0.0f, 0.0f, 0.0f, 1.0f};
+            PointVertex v1 = {cx + rxClip * std::cos(a1), cy + ryClip * std::sin(a1), 0,
+                              0.0f, 0.0f, 0.0f, 1.0f};
+            arrowVerts.push_back(vc); arrowVerts.push_back(v0); arrowVerts.push_back(v1);
+        }
+
+        // Red fill triangle on top
+        PointVertex f0 = {x0, y0, 0, 1.0f, 0.2f, 0.2f, 1.0f};
+        PointVertex f1 = {x1, y1, 0, 1.0f, 0.2f, 0.2f, 1.0f};
+        PointVertex f2 = {x2, y2, 0, 1.0f, 0.2f, 0.2f, 1.0f};
+        arrowVerts.push_back(f0); arrowVerts.push_back(f1); arrowVerts.push_back(f2);
+    };
+
     if (overflowRight) {
         float tipX = 0.99f, baseX = tipX - depthX;
-        PointVertex v0 = {baseX,  halfBaseY, 0, r, g, b, a};
-        PointVertex v1 = {baseX, -halfBaseY, 0, r, g, b, a};
-        PointVertex v2 = {tipX,   0.00f,     0, r, g, b, a};
-        arrowVerts.push_back(v0); arrowVerts.push_back(v1); arrowVerts.push_back(v2);
+        addArrow(baseX, halfBaseY, baseX, -halfBaseY, tipX, 0.0f);
     }
     if (overflowLeft) {
         float tipX = -0.99f, baseX = tipX + depthX;
-        PointVertex v0 = {baseX,  halfBaseY, 0, r, g, b, a};
-        PointVertex v1 = {baseX, -halfBaseY, 0, r, g, b, a};
-        PointVertex v2 = {tipX,   0.00f,     0, r, g, b, a};
-        arrowVerts.push_back(v0); arrowVerts.push_back(v1); arrowVerts.push_back(v2);
+        addArrow(baseX, halfBaseY, baseX, -halfBaseY, tipX, 0.0f);
     }
     if (overflowTop) {
         float tipY = 0.99f, baseY = tipY - depthY;
-        PointVertex v0 = {-halfBaseX, baseY, 0, r, g, b, a};
-        PointVertex v1 = { halfBaseX, baseY, 0, r, g, b, a};
-        PointVertex v2 = { 0.00f,     tipY,  0, r, g, b, a};
-        arrowVerts.push_back(v0); arrowVerts.push_back(v1); arrowVerts.push_back(v2);
+        addArrow(-halfBaseX, baseY, halfBaseX, baseY, 0.0f, tipY);
     }
     if (overflowBottom) {
         float tipY = -0.99f, baseY = tipY + depthY;
-        PointVertex v0 = {-halfBaseX, baseY, 0, r, g, b, a};
-        PointVertex v1 = { halfBaseX, baseY, 0, r, g, b, a};
-        PointVertex v2 = { 0.00f,     tipY,  0, r, g, b, a};
-        arrowVerts.push_back(v0); arrowVerts.push_back(v1); arrowVerts.push_back(v2);
+        addArrow(-halfBaseX, baseY, halfBaseX, baseY, 0.0f, tipY);
     }
 
     m_arrowVertexCount = arrowVerts.size();

@@ -11,6 +11,7 @@
 #include <queue>
 #include <unordered_set>
 #include <cstring>
+#include <limits>
 
 // Pre-multiply a row-major 3x3 rotation matrix by Ry(deg) or Rx(deg).
 // R_new = R_delta * R_old — rotates around screen axis.
@@ -1239,10 +1240,23 @@ void MainFrame::UpdatePlot(int plotIndex) {
     }
     m_canvases[plotIndex]->SetPoints(std::move(points));
 
-    // Set axis labels
+    // Set axis labels (annotate with log10 transform when applicable)
     if (plotIndex < (int)m_plotWidgets.size()) {
-        m_plotWidgets[plotIndex].xLabel->SetLabel(ds.columnLabels[cfg.xCol]);
-        m_plotWidgets[plotIndex].yLabel->SetLabel(ds.columnLabels[cfg.yCol]);
+        auto formatLabel = [&](size_t col, NormMode norm) -> std::string {
+            const std::string& name = ds.columnLabels[col];
+            if (norm != NormMode::Log10) return name;
+            // Check if the column has non-positive values (shift was applied)
+            float mn = std::numeric_limits<float>::max();
+            for (size_t r = 0; r < ds.numRows; r++) {
+                float v = ds.data[r * ds.numCols + col];
+                if (std::isfinite(v) && v < mn) mn = v;
+            }
+            if (mn <= 0.0f)
+                return "log10(" + name + " - min(" + name + "))";
+            return "log10(" + name + ")";
+        };
+        m_plotWidgets[plotIndex].xLabel->SetLabel(formatLabel(cfg.xCol, cfg.xNorm));
+        m_plotWidgets[plotIndex].yLabel->SetLabel(formatLabel(cfg.yCol, cfg.yNorm));
     }
 
     // Re-apply current selection
@@ -1353,15 +1367,27 @@ void MainFrame::InvertAllSelections() {
 
 NormMode MainFrame::DefaultNormForColumn(size_t col) const {
     const auto& ds = m_dataManager.dataset();
-    if (col >= ds.numCols) return NormMode::MinMax;
-    bool hasPos = false, hasNeg = false;
+    if (col >= ds.numCols) return NormMode::Trim1e3;
+    float lo = 0, hi = 0;
+    size_t nPos = 0, nNeg = 0, nFinite = 0;
     for (size_t r = 0; r < ds.numRows; r++) {
         float v = ds.value(r, col);
-        if (v > 0) hasPos = true;
-        if (v < 0) hasNeg = true;
-        if (hasPos && hasNeg) return NormMode::MaxAbs;
+        if (!std::isfinite(v)) continue;
+        nFinite++;
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+        if (v > 0) nPos++;
+        if (v < 0) nNeg++;
     }
-    return NormMode::MinMax;
+    // Use MaxAbs only if data is genuinely bipolar:
+    // - range ratio: the smaller side is at least 10% of the larger
+    // - count ratio: at least 5% of values are on the minority side
+    if (lo < 0 && hi > 0 && nFinite > 0) {
+        float rangeRatio = std::min(-lo, hi) / std::max(-lo, hi);
+        float countRatio = static_cast<float>(std::min(nPos, nNeg)) / nFinite;
+        if (rangeRatio > 0.1f && countRatio > 0.05f) return NormMode::MaxAbs;
+    }
+    return NormMode::Trim1e3;
 }
 
 void MainFrame::KillSelectedPoints() {
