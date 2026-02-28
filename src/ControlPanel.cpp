@@ -855,10 +855,10 @@ void ControlPanel::CreateAllPage() {
     sizer->Add(allHistograms, 0, wxLEFT, 8);
 
     m_globalTooltipCheck = new wxCheckBox(m_allPage, wxID_ANY, "Hover shows datapoint details");
-    m_globalTooltipCheck->SetValue(true);
+    m_globalTooltipCheck->SetValue(false);
     sizer->Add(m_globalTooltipCheck, 0, wxLEFT, 8);
 
-    auto* deferRedraws = new wxCheckBox(m_allPage, wxID_ANY, "Defer redraws");
+    auto* deferRedraws = new wxCheckBox(m_allPage, wxID_ANY, "Defer redraws - fast w/big data");
     deferRedraws->SetValue(false);
     sizer->Add(deferRedraws, 0, wxLEFT | wxBOTTOM, 8);
 
