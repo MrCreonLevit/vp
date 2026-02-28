@@ -12,9 +12,7 @@ const char* NormModeName(NormMode mode) {
         case NormMode::MaxAbs:    return "Max |val|";
         case NormMode::Trim1e2:    return "Trim 1%";
         case NormMode::Trim1e3:    return "Trim 0.1%";
-        case NormMode::ThreeSigma: return "3 Sigma";
         case NormMode::Log10:      return "Log10";
-        case NormMode::Arctan:     return "Arctan";
         case NormMode::Rank:       return "Rank";
         case NormMode::Gaussianize:return "Gaussian";
         default:                   return "Unknown";
@@ -157,27 +155,6 @@ std::vector<float> NormalizeColumn(const float* rawData, size_t numRows,
             break;
         }
 
-        case NormMode::ThreeSigma: {
-            double sum = 0.0, sum2 = 0.0;
-            size_t count = 0;
-            for (auto v : values) {
-                if (!std::isfinite(v)) continue;
-                sum += v;
-                sum2 += (double)v * v;
-                count++;
-            }
-            if (count == 0) break;
-            float mean = static_cast<float>(sum / count);
-            float var = static_cast<float>(sum2 / count - (double)mean * mean);
-            float sigma = std::sqrt(std::max(var, 0.0f));
-            if (sigma == 0.0f) sigma = 1.0f;
-            float lo = mean - 3.0f * sigma;
-            float hi = mean + 3.0f * sigma;
-            clampValues(values, lo, hi);
-            mapToDisplay(values, lo, hi);
-            break;
-        }
-
         case NormMode::Log10: {
             float mn, mx;
             finiteMinMax(values, mn, mx);
@@ -189,22 +166,6 @@ std::vector<float> NormalizeColumn(const float* rawData, size_t numRows,
             float logMin, logMax;
             finiteMinMax(values, logMin, logMax);
             mapToDisplay(values, logMin, logMax);
-            break;
-        }
-
-        case NormMode::Arctan: {
-            auto sorted = finiteValues(values);
-            std::sort(sorted.begin(), sorted.end());
-            float median = percentile(sorted, 0.5f);
-            float q1 = percentile(sorted, 0.25f);
-            float q3 = percentile(sorted, 0.75f);
-            float iqr = q3 - q1;
-            if (iqr == 0.0f) iqr = 1.0f;
-            for (auto& v : values) {
-                if (!std::isfinite(v)) continue;
-                v = std::atan((v - median) / iqr) * (2.0f / 3.14159265f);
-            }
-            mapToDisplay(values, -1.0f, 1.0f);
             break;
         }
 

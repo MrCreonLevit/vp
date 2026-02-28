@@ -10,9 +10,7 @@ enum class NormMode {
     MaxAbs,         // Normalize by max absolute value to [-1, 1]
     Trim1e2,        // Trim to 1st-99th percentile, then min-max
     Trim1e3,        // Trim to 0.1st-99.9th percentile, then min-max
-    ThreeSigma,     // Mean +/- 3 standard deviations
     Log10,          // Log base 10 (shifted so min > 0)
-    Arctan,         // Arctangent (sigmoid-like, maps (-inf,inf) to (-1,1))
     Rank,           // Rank ordering (ties get average rank)
     Gaussianize,    // Rank then inverse normal CDF
     COUNT
