@@ -115,7 +115,7 @@ public:
     std::function<void(bool show)> onGlobalTooltipChanged;
     std::function<void(float size)> onPointSizeChanged;
     std::function<void(int bins)> onHistBinsChanged;
-    std::function<void(int colormap, int colorVar)> onColorMapChanged;
+    std::function<void(int colormap, int colorVar, bool reversed)> onColorMapChanged;
     std::function<void(float brightness)> onBackgroundChanged;
     std::function<void(bool defer)> onDeferRedrawsChanged;
     std::function<void()> onClearSelection;

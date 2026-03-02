@@ -52,8 +52,10 @@ static void rampLookup(const ColorStop* stops, int n, float t,
     r = stops[n-1].r; g = stops[n-1].g; b = stops[n-1].b;
 }
 
-void ColorMapLookup(ColorMapType type, float t, float& r, float& g, float& b) {
+void ColorMapLookup(ColorMapType type, float t, float& r, float& g, float& b,
+                    bool reversed) {
     t = std::max(0.0f, std::min(1.0f, t));
+    if (reversed) t = 1.0f - t;
 
     switch (type) {
         case ColorMapType::Default:

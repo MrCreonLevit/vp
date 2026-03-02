@@ -71,7 +71,7 @@ public:
     void SetBackground(float brightness);
     void SetUseAdditiveBlending(bool additive);
     void SetAdditiveSelected(bool additive);
-    void SetColorMap(int colorMap, int colorVariable = 0);  // colorVariable: 0=density, 1+=column
+    void SetColorMap(int colorMap, int colorVariable = 0, bool reversed = false);
     void SetDeferRedraws(bool defer) { m_deferRedraws = defer; }
     void SetRotationMatrix(const float* mat);
     void SetPanZoom(float panX, float panY, float zoomX, float zoomY);
@@ -210,6 +210,7 @@ private:
     bool m_additiveSelected = false;
     int m_colorMap = 0;
     int m_colorVariable = 0;  // 0=density, 1+=column index
+    bool m_colorMapReversed = false;
     float m_pointSize = 6.0f;
     float m_opacity = 0.05f;
 

@@ -409,9 +409,10 @@ void MainFrame::CreateLayout() {
         }
     };
 
-    m_controlPanel->onColorMapChanged = [this](int colormap, int colorVar) {
+    m_controlPanel->onColorMapChanged = [this](int colormap, int colorVar, bool reversed) {
         m_colorMap = static_cast<ColorMapType>(colormap);
         m_colorVariable = colorVar;
+        m_colorMapReversed = reversed;
         bool additive = (m_colorMap == ColorMapType::Default);
         // Reset brush 0 to vertex/colormap mode so the colormap takes effect
         m_brushColors[0].useVertexColor = true;
@@ -419,7 +420,7 @@ void MainFrame::CreateLayout() {
         for (auto* c : m_canvases) {
             c->SetBrushColors(m_brushColors);
             c->SetUseAdditiveBlending(additive);
-            c->SetColorMap(colormap, colorVar);
+            c->SetColorMap(colormap, colorVar, reversed);
         }
         // Then rebuild plots with colormap-colored vertex data
         UpdateAllPlots();
@@ -1220,7 +1221,7 @@ void MainFrame::UpdatePlot(int plotIndex) {
         v.y = yVals[r];
         v.z = hasZ ? (*zValsPtr)[r] : 0.0f;
         if (m_colorMap != ColorMapType::Default && r < colormapValues.size()) {
-            ColorMapLookup(m_colorMap, colormapValues[r], v.r, v.g, v.b);
+            ColorMapLookup(m_colorMap, colormapValues[r], v.r, v.g, v.b, m_colorMapReversed);
         } else {
             v.r = 0.15f; v.g = 0.4f; v.b = 1.0f;
         }
@@ -1456,6 +1457,12 @@ void MainFrame::LoadFile(const std::string& path) {
         m_plotConfigs[i] = {col1, col2};
         m_plotConfigs[i].xNorm = DefaultNormForColumn(col1);
         m_plotConfigs[i].yNorm = DefaultNormForColumn(col2);
+    }
+    // Set each plot's Z-axis to the next plot's X-axis
+    for (int i = 0; i < numPlots; i++) {
+        int next = (i + 1) % numPlots;
+        m_plotConfigs[i].zCol = static_cast<int>(m_plotConfigs[next].xCol);
+        m_plotConfigs[i].zNorm = DefaultNormForColumn(m_plotConfigs[next].xCol);
     }
 
     // Set default point size and opacity based on dataset size

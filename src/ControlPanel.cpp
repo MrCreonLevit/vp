@@ -809,12 +809,16 @@ void ControlPanel::CreateAllPage() {
     colorHeader->SetFont(cFont);
     sizer->Add(colorHeader, 0, wxLEFT, 8);
 
-    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Map"), 0, wxLEFT | wxTOP, 8);
+    auto* mapRow = new wxBoxSizer(wxHORIZONTAL);
+    mapRow->Add(new wxStaticText(m_allPage, wxID_ANY, "Map"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     auto* colorMapChoice = new wxChoice(m_allPage, wxID_ANY);
     for (const auto& name : AllColorMapNames())
         colorMapChoice->Append(name);
     colorMapChoice->SetSelection(0);
-    sizer->Add(colorMapChoice, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+    mapRow->Add(colorMapChoice, 1, wxRIGHT, 8);
+    auto* reversedCheck = new wxCheckBox(m_allPage, wxID_ANY, "-");
+    mapRow->Add(reversedCheck, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(mapRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
     sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Color By"), 0, wxLEFT | wxTOP, 8);
     m_colorVarChoice = new wxChoice(m_allPage, wxID_ANY);
@@ -826,13 +830,20 @@ void ControlPanel::CreateAllPage() {
     auto* bgSlider = new wxSlider(m_allPage, wxID_ANY, 0, 0, 50);
     sizer->Add(bgSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
-    colorMapChoice->Bind(wxEVT_CHOICE, [this, colorMapChoice](wxCommandEvent&) {
+    auto fireColorMapChanged = [this, colorMapChoice, reversedCheck]() {
         if (onColorMapChanged)
-            onColorMapChanged(colorMapChoice->GetSelection(), m_colorVarChoice->GetSelection());
+            onColorMapChanged(colorMapChoice->GetSelection(),
+                              m_colorVarChoice->GetSelection(),
+                              reversedCheck->GetValue());
+    };
+    colorMapChoice->Bind(wxEVT_CHOICE, [fireColorMapChanged](wxCommandEvent&) {
+        fireColorMapChanged();
     });
-    m_colorVarChoice->Bind(wxEVT_CHOICE, [this, colorMapChoice](wxCommandEvent&) {
-        if (onColorMapChanged)
-            onColorMapChanged(colorMapChoice->GetSelection(), m_colorVarChoice->GetSelection());
+    m_colorVarChoice->Bind(wxEVT_CHOICE, [fireColorMapChanged](wxCommandEvent&) {
+        fireColorMapChanged();
+    });
+    reversedCheck->Bind(wxEVT_CHECKBOX, [fireColorMapChanged](wxCommandEvent&) {
+        fireColorMapChanged();
     });
     bgSlider->Bind(wxEVT_SLIDER, [this, bgSlider](wxCommandEvent&) {
         if (onBackgroundChanged)

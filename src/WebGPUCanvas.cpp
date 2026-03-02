@@ -222,9 +222,10 @@ void WebGPUCanvas::SetAdditiveSelected(bool additive) {
     Refresh();
 }
 
-void WebGPUCanvas::SetColorMap(int colorMap, int colorVariable) {
+void WebGPUCanvas::SetColorMap(int colorMap, int colorVariable, bool reversed) {
     m_colorMap = colorMap;
     m_colorVariable = colorVariable;
+    m_colorMapReversed = reversed;
     RecomputeDensityColors();
 }
 
@@ -1452,7 +1453,7 @@ void WebGPUCanvas::RecomputeDensityColors() {
                       std::log(1.0f + maxDensity);
         }
 
-        ColorMapLookup(cmap, density, m_points[i].r, m_points[i].g, m_points[i].b);
+        ColorMapLookup(cmap, density, m_points[i].r, m_points[i].g, m_points[i].b, m_colorMapReversed);
         // Also update base colors so UpdatePointColors preserves them
         if (i * 3 + 2 < m_baseColors.size()) {
             m_baseColors[i * 3] = m_points[i].r;

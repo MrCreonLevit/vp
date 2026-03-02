@@ -125,6 +125,7 @@ private:
     wxString m_dataStatusText;  // persistent "N rows x M columns" for status bar
     ColorMapType m_colorMap = ColorMapType::Default;
     int m_colorVariable = 0;  // 0 = position, 1+ = column index
+    bool m_colorMapReversed = false;
     float m_bgBrightness = 0.0f;
     bool m_additiveSelected = false;
 

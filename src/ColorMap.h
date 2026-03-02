@@ -22,4 +22,5 @@ const char* ColorMapName(ColorMapType type);
 std::vector<std::string> AllColorMapNames();
 
 // Map a value in [0, 1] to RGB through the given colormap
-void ColorMapLookup(ColorMapType type, float t, float& r, float& g, float& b);
+void ColorMapLookup(ColorMapType type, float t, float& r, float& g, float& b,
+                    bool reversed = false);
