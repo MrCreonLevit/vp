@@ -140,6 +140,7 @@ public:
 private:
     void CreateAllPage();
     void SelectPage(int pageIndex);  // 0..N-1 = plot, N = "All"
+    void SelectAllSubPage(int idx);  // 0 = All Plots, 1 = Brushes & Colormaps
     void RebuildSelectorGrid();
 
     wxSimplebook* m_book = nullptr;
@@ -148,7 +149,6 @@ private:
 
     // Plot selector grid
     wxPanel* m_selectorPanel = nullptr;
-    wxButton* m_allButton = nullptr;
     std::vector<wxButton*> m_plotButtons;
     int m_selectedPage = -1;
     int m_gridRows = 2;
@@ -163,6 +163,11 @@ private:
     static constexpr int SPIN_INTERVAL_MS = 33; // ~30 fps
     wxLongLong m_lastSpinTime;
     void OnSpinTimer(wxTimerEvent& event);
+
+    // "All" page sub-panel switching
+    wxSimplebook* m_allSubBook = nullptr;
+    wxButton* m_allPlotsBtn = nullptr;
+    wxButton* m_brushesBtn = nullptr;
 
     // "All" page widgets
     wxChoice* m_colorVarChoice = nullptr;

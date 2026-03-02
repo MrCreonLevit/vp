@@ -434,6 +434,9 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
     m_book->DeleteAllPages();
     m_plotTabs.clear();
     m_allPage = nullptr;
+    m_allSubBook = nullptr;
+    m_allPlotsBtn = nullptr;
+    m_brushesBtn = nullptr;
     m_pointSizeSlider = nullptr;
     m_histBinsSlider = nullptr;
     m_selectionLabel = nullptr;
@@ -536,15 +539,26 @@ void ControlPanel::RebuildSelectorGrid() {
     }
     sizer->Add(gridSizer, 0, wxEXPAND | wxBOTTOM, 2);
 
-    // "Global" button row (below the plot grid)
-    m_allButton = new wxButton(m_selectorPanel, wxID_ANY, "Brushes + Global Controls",
-                                wxDefaultPosition, wxSize(-1, 24), wxBU_EXACTFIT);
-    m_allButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+    // Sub-page buttons (below the plot grid)
+    m_allPlotsBtn = new wxButton(m_selectorPanel, wxID_ANY, "All Plots",
+                                  wxDefaultPosition, wxSize(-1, 24), wxBU_EXACTFIT);
+    m_allPlotsBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         int allIdx = static_cast<int>(m_plotTabs.size());
         SelectPage(allIdx);
+        SelectAllSubPage(0);
         if (onAllSelected) onAllSelected();
     });
-    sizer->Add(m_allButton, 0, wxEXPAND);
+    sizer->Add(m_allPlotsBtn, 0, wxEXPAND | wxBOTTOM, 2);
+
+    m_brushesBtn = new wxButton(m_selectorPanel, wxID_ANY, "Brushes && Colormaps",
+                                 wxDefaultPosition, wxSize(-1, 24), wxBU_EXACTFIT);
+    m_brushesBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        int allIdx = static_cast<int>(m_plotTabs.size());
+        SelectPage(allIdx);
+        SelectAllSubPage(1);
+        if (onAllSelected) onAllSelected();
+    });
+    sizer->Add(m_brushesBtn, 0, wxEXPAND);
 
     m_selectorPanel->SetSizer(sizer);
     m_selectorPanel->Layout();
@@ -567,9 +581,10 @@ void ControlPanel::SelectPage(int pageIndex) {
         m_plotButtons[i]->SetBackgroundColour(i == pageIndex ? activeBg : normalBg);
         m_plotButtons[i]->Refresh();
     }
-    if (m_allButton) {
-        m_allButton->SetBackgroundColour(pageIndex == numPlots ? activeBg : normalBg);
-        m_allButton->Refresh();
+    // When switching away from the All page, reset both sub-page buttons
+    if (pageIndex != numPlots) {
+        if (m_allPlotsBtn) { m_allPlotsBtn->SetBackgroundColour(normalBg); m_allPlotsBtn->Refresh(); }
+        if (m_brushesBtn) { m_brushesBtn->SetBackgroundColour(normalBg); m_brushesBtn->Refresh(); }
     }
 }
 
@@ -623,33 +638,150 @@ void ControlPanel::SetSelectionInfo(int selected, int total) {
 }
 
 void ControlPanel::CreateAllPage() {
-    m_allPage = new wxScrolledWindow(m_book);
-    static_cast<wxScrolledWindow*>(m_allPage)->SetScrollRate(0, 10);
-    auto* sizer = new wxBoxSizer(wxVERTICAL);
+    m_allPage = new wxPanel(m_book);
+    auto* topSizer = new wxBoxSizer(wxVERTICAL);
 
-    auto* header = new wxStaticText(m_allPage, wxID_ANY, "Brushes + Global Controls");
-    auto font = header->GetFont();
-    font.SetWeight(wxFONTWEIGHT_BOLD);
-    header->SetFont(font);
-    sizer->Add(header, 0, wxALL, 8);
+    // Sub-book with two pages (buttons are in the selector grid)
+    m_allSubBook = new wxSimplebook(m_allPage);
+    topSizer->Add(m_allSubBook, 1, wxEXPAND);
 
-    sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+    // ---- Page 0: "All Plots" ----
+    auto* plotsPage = new wxScrolledWindow(m_allSubBook);
+    plotsPage->SetScrollRate(0, 10);
+    auto* pSizer = new wxBoxSizer(wxVERTICAL);
 
-    // Brush controls (at the top for quick access)
-    auto* brushLabel = new wxStaticText(m_allPage, wxID_ANY, "Brush (dbl-click: edit color)");
+    m_pointSizeLabel = new wxStaticText(plotsPage, wxID_ANY, "Point Size: 6.0");
+    pSizer->Add(m_pointSizeLabel, 0, wxLEFT | wxTOP, 8);
+    m_pointSizeSlider = new wxSlider(plotsPage, wxID_ANY, 60, 5, 300);
+    pSizer->Add(m_pointSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    m_histBinsLabel = new wxStaticText(plotsPage, wxID_ANY, "Hist Bins: 64");
+    pSizer->Add(m_histBinsLabel, 0, wxLEFT | wxTOP, 8);
+    m_histBinsSlider = new wxSlider(plotsPage, wxID_ANY, 64, 2, 512);
+    pSizer->Add(m_histBinsSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    pSizer->Add(new wxStaticLine(plotsPage), 0, wxEXPAND | wxALL, 8);
+
+    // Display toggles (apply to all plots)
+    auto* allShowUnselected = new wxCheckBox(plotsPage, wxID_ANY, "Show unselected");
+    allShowUnselected->SetValue(true);
+    pSizer->Add(allShowUnselected, 0, wxLEFT, 8);
+
+    auto* allGridLines = new wxCheckBox(plotsPage, wxID_ANY, "Grid lines");
+    allGridLines->SetValue(false);
+    pSizer->Add(allGridLines, 0, wxLEFT, 8);
+
+    auto* allHistograms = new wxCheckBox(plotsPage, wxID_ANY, "Histograms");
+    allHistograms->SetValue(true);
+    pSizer->Add(allHistograms, 0, wxLEFT, 8);
+
+    m_globalTooltipCheck = new wxCheckBox(plotsPage, wxID_ANY, "Hover shows datapoint details");
+    m_globalTooltipCheck->SetValue(false);
+    pSizer->Add(m_globalTooltipCheck, 0, wxLEFT, 8);
+
+    auto* deferRedraws = new wxCheckBox(plotsPage, wxID_ANY, "Defer redraws - fast w/big data");
+    deferRedraws->SetValue(false);
+    pSizer->Add(deferRedraws, 0, wxLEFT | wxBOTTOM, 8);
+
+    m_globalTooltipCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+        if (onGlobalTooltipChanged) onGlobalTooltipChanged(m_globalTooltipCheck->GetValue());
+    });
+    deferRedraws->Bind(wxEVT_CHECKBOX, [this, deferRedraws](wxCommandEvent&) {
+        if (onDeferRedrawsChanged) onDeferRedrawsChanged(deferRedraws->GetValue());
+    });
+    allShowUnselected->Bind(wxEVT_CHECKBOX, [this, allShowUnselected](wxCommandEvent&) {
+        bool show = allShowUnselected->GetValue();
+        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
+            if (onShowUnselectedChanged) onShowUnselectedChanged(i, show);
+        }
+    });
+    allGridLines->Bind(wxEVT_CHECKBOX, [this, allGridLines](wxCommandEvent&) {
+        bool show = allGridLines->GetValue();
+        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
+            if (onGridLinesChanged) onGridLinesChanged(i, show);
+        }
+    });
+    allHistograms->Bind(wxEVT_CHECKBOX, [this, allHistograms](wxCommandEvent&) {
+        bool show = allHistograms->GetValue();
+        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
+            if (onShowHistogramsChanged) onShowHistogramsChanged(i, show);
+        }
+    });
+
+    pSizer->Add(new wxStaticLine(plotsPage), 0, wxEXPAND | wxALL, 8);
+
+    m_selectionLabel = new wxStaticText(plotsPage, wxID_ANY, "No selection");
+    pSizer->Add(m_selectionLabel, 0, wxLEFT | wxTOP, 8);
+
+    auto* btnSizer = new wxBoxSizer(wxHORIZONTAL);
+    auto* clearBtn = new wxButton(plotsPage, wxID_ANY, "Clear (C)",
+                                   wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    auto* invertBtn = new wxButton(plotsPage, wxID_ANY, "Invert (I)",
+                                    wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    auto* killBtn = new wxButton(plotsPage, wxID_ANY, "Kill (K)",
+                                  wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    btnSizer->Add(clearBtn, 1, wxRIGHT, 4);
+    btnSizer->Add(invertBtn, 1, wxRIGHT, 4);
+    btnSizer->Add(killBtn, 1);
+    pSizer->Add(btnSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+
+    auto* saveSizer = new wxBoxSizer(wxHORIZONTAL);
+    auto* saveAllBtn = new wxButton(plotsPage, wxID_ANY, "Save All",
+                                     wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    auto* saveSelBtn = new wxButton(plotsPage, wxID_ANY, "Save Selected",
+                                     wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    saveSizer->Add(saveAllBtn, 1, wxRIGHT, 4);
+    saveSizer->Add(saveSelBtn, 1);
+    pSizer->Add(saveSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+
+    m_pointSizeSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
+        float val = m_pointSizeSlider->GetValue() / 10.0f;
+        m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %.1f", val));
+        if (onPointSizeChanged) onPointSizeChanged(val);
+    });
+    m_histBinsSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
+        int val = m_histBinsSlider->GetValue();
+        m_histBinsLabel->SetLabel(wxString::Format("Hist Bins: %d", val));
+        if (onHistBinsChanged) onHistBinsChanged(val);
+    });
+    clearBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (onClearSelection) onClearSelection();
+    });
+    invertBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (onInvertSelection) onInvertSelection();
+    });
+    killBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (onKillSelected) onKillSelected();
+    });
+    saveAllBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (onSaveData) onSaveData(false);
+    });
+    saveSelBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (onSaveData) onSaveData(true);
+    });
+
+    pSizer->AddStretchSpacer();
+    plotsPage->SetSizer(pSizer);
+    m_allSubBook->AddPage(plotsPage, "");
+
+    // ---- Page 1: "Brushes & Colormaps" ----
+    auto* brushPage = new wxScrolledWindow(m_allSubBook);
+    brushPage->SetScrollRate(0, 10);
+    auto* bSizer = new wxBoxSizer(wxVERTICAL);
+
+    // Brush controls
+    auto* brushLabel = new wxStaticText(brushPage, wxID_ANY, "Brush (dbl-click: edit color)");
     auto bFont = brushLabel->GetFont();
     bFont.SetWeight(wxFONTWEIGHT_BOLD);
     brushLabel->SetFont(bFont);
-    sizer->Add(brushLabel, 0, wxLEFT, 8);
+    bSizer->Add(brushLabel, 0, wxLEFT | wxTOP, 8);
 
     auto* brushSizer = new wxGridSizer(1, CP_NUM_BRUSHES, 2, 2);
     for (int i = 0; i < CP_NUM_BRUSHES; i++) {
-        // Button label: "0" for unselected, "1"-"7" for selection brushes
-        auto* btn = new wxButton(m_allPage, wxID_ANY, wxString::Format("%d", i),
+        auto* btn = new wxButton(brushPage, wxID_ANY, wxString::Format("%d", i),
                                   wxDefaultPosition, wxSize(26, 26), wxBU_EXACTFIT);
         wxColour col;
         if (i == 0) {
-            // Brush 0: default unselected color (dark blue)
             col = wxColour(38, 102, 255);
         } else {
             col = wxColour(static_cast<unsigned char>(kDefaultBrushes[i - 1].r * 255),
@@ -660,11 +792,9 @@ void ControlPanel::CreateAllPage() {
         btn->SetForegroundColour(*wxWHITE);
         m_brushButtons[i] = btn;
         brushSizer->Add(btn, 0, wxEXPAND);
-        // Single click: select brush
         btn->Bind(wxEVT_BUTTON, [this, i](wxCommandEvent&) {
             SelectBrush(i);
         });
-        // Double-click: open color picker
 #ifdef __WXMAC__
         btn->Bind(wxEVT_LEFT_DCLICK, [this, i](wxMouseEvent&) {
             wxColour bg = m_brushButtons[i]->GetBackgroundColour();
@@ -695,7 +825,6 @@ void ControlPanel::CreateAllPage() {
             }
         });
 #endif
-        // Right-click: reset brush to default (especially useful for brush 0)
         btn->Bind(wxEVT_RIGHT_DOWN, [this, i](wxMouseEvent&) {
             m_brushSymbols[i] = (i == 0) ? SYMBOL_CIRCLE : (i - 1) % SYMBOL_COUNT;
             m_brushSizeOffsets[i] = 0.0f;
@@ -708,30 +837,29 @@ void ControlPanel::CreateAllPage() {
             if (onBrushReset) onBrushReset(i);
         });
     }
-    sizer->Add(brushSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+    bSizer->Add(brushSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
-    // "All" button below brush grid (affects all brushes)
-    m_allBrushButton = new wxButton(m_allPage, wxID_ANY, "All Brushes",
+    m_allBrushButton = new wxButton(brushPage, wxID_ANY, "All Brushes",
                                      wxDefaultPosition, wxSize(-1, 24), wxBU_EXACTFIT);
     m_allBrushButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         SelectBrush(-1);
     });
-    sizer->Add(m_allBrushButton, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+    bSizer->Add(m_allBrushButton, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
-    // Initialize per-brush defaults to match MainFrame defaults
+    // Initialize per-brush defaults
     for (int i = 0; i < CP_NUM_BRUSHES; i++) {
         m_brushSymbols[i] = (i == 0) ? SYMBOL_CIRCLE : (i - 1) % SYMBOL_COUNT;
         m_brushSizeOffsets[i] = 0.0f;
     }
     SelectBrush(0);
 
-    // Symbol chooser for active brush
-    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Brush Symbol"), 0, wxLEFT | wxTOP, 8);
-    m_brushSymbolChoice = new wxChoice(m_allPage, wxID_ANY);
+    // Symbol chooser
+    bSizer->Add(new wxStaticText(brushPage, wxID_ANY, "Brush Symbol"), 0, wxLEFT | wxTOP, 8);
+    m_brushSymbolChoice = new wxChoice(brushPage, wxID_ANY);
     for (int s = 0; s < SYMBOL_COUNT; s++)
         m_brushSymbolChoice->Append(SymbolName(s));
     m_brushSymbolChoice->SetSelection(0);
-    sizer->Add(m_brushSymbolChoice, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+    bSizer->Add(m_brushSymbolChoice, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
     m_brushSymbolChoice->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
         int sym = m_brushSymbolChoice->GetSelection();
         if (m_activeBrush == -1) {
@@ -745,11 +873,11 @@ void ControlPanel::CreateAllPage() {
         }
     });
 
-    // Per-brush size offset slider
-    m_brushSizeLabel = new wxStaticText(m_allPage, wxID_ANY, "Brush Size +/-: 0.00");
-    sizer->Add(m_brushSizeLabel, 0, wxLEFT | wxTOP, 8);
-    m_brushSizeSlider = new wxSlider(m_allPage, wxID_ANY, 0, -1000, 2000);
-    sizer->Add(m_brushSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+    // Brush size offset slider
+    m_brushSizeLabel = new wxStaticText(brushPage, wxID_ANY, "Brush Size +/-: 0.00");
+    bSizer->Add(m_brushSizeLabel, 0, wxLEFT | wxTOP, 8);
+    m_brushSizeSlider = new wxSlider(brushPage, wxID_ANY, 0, -1000, 2000);
+    bSizer->Add(m_brushSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
     m_brushSizeSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         float offset = m_brushSizeSlider->GetValue() / 100.0f;
         m_brushSizeLabel->SetLabel(wxString::Format("Brush Size +/-: %.2f", offset));
@@ -764,10 +892,10 @@ void ControlPanel::CreateAllPage() {
         }
     });
 
-    // Per-brush opacity offset slider
-    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Brush Opacity +/-"), 0, wxLEFT | wxTOP, 8);
-    m_brushOpacitySlider = new wxSlider(m_allPage, wxID_ANY, 0, -100, 100);
-    sizer->Add(m_brushOpacitySlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+    // Brush opacity offset slider
+    bSizer->Add(new wxStaticText(brushPage, wxID_ANY, "Brush Opacity +/-"), 0, wxLEFT | wxTOP, 8);
+    m_brushOpacitySlider = new wxSlider(brushPage, wxID_ANY, 0, -100, 100);
+    bSizer->Add(m_brushOpacitySlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
     m_brushOpacitySlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         float offset = static_cast<float>(m_brushOpacitySlider->GetValue());
         if (m_activeBrush == -1) {
@@ -781,57 +909,44 @@ void ControlPanel::CreateAllPage() {
         }
     });
 
-    m_additiveSelectedCheck = new wxCheckBox(m_allPage, wxID_ANY, "Blend Selected");
+    m_additiveSelectedCheck = new wxCheckBox(brushPage, wxID_ANY, "Blend Selected");
     m_additiveSelectedCheck->SetValue(false);
-    sizer->Add(m_additiveSelectedCheck, 0, wxLEFT | wxTOP, 8);
+    bSizer->Add(m_additiveSelectedCheck, 0, wxLEFT | wxTOP, 8);
     m_additiveSelectedCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
         if (onAdditiveSelectedChanged) onAdditiveSelectedChanged(m_additiveSelectedCheck->GetValue());
     });
 
-    sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
-
-    m_pointSizeLabel = new wxStaticText(m_allPage, wxID_ANY, "Point Size: 6.0");
-    sizer->Add(m_pointSizeLabel, 0, wxLEFT | wxTOP, 8);
-    m_pointSizeSlider = new wxSlider(m_allPage, wxID_ANY, 60, 5, 300);
-    sizer->Add(m_pointSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
-
-    m_histBinsLabel = new wxStaticText(m_allPage, wxID_ANY, "Hist Bins: 64");
-    sizer->Add(m_histBinsLabel, 0, wxLEFT | wxTOP, 8);
-    m_histBinsSlider = new wxSlider(m_allPage, wxID_ANY, 64, 2, 512);
-    sizer->Add(m_histBinsSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
-
-    sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
+    bSizer->Add(new wxStaticLine(brushPage), 0, wxEXPAND | wxALL, 8);
 
     // Color map controls
-    auto* colorHeader = new wxStaticText(m_allPage, wxID_ANY, "Color Map");
+    auto* colorHeader = new wxStaticText(brushPage, wxID_ANY, "Color Map");
     auto cFont = colorHeader->GetFont();
     cFont.SetWeight(wxFONTWEIGHT_BOLD);
     colorHeader->SetFont(cFont);
-    sizer->Add(colorHeader, 0, wxLEFT, 8);
+    bSizer->Add(colorHeader, 0, wxLEFT, 8);
 
     auto* mapRow = new wxBoxSizer(wxHORIZONTAL);
-    mapRow->Add(new wxStaticText(m_allPage, wxID_ANY, "Map"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
-    auto* colorMapChoice = new wxChoice(m_allPage, wxID_ANY);
+    mapRow->Add(new wxStaticText(brushPage, wxID_ANY, "Map"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    auto* colorMapChoice = new wxChoice(brushPage, wxID_ANY);
     for (const auto& name : AllColorMapNames())
         colorMapChoice->Append(name);
     colorMapChoice->SetSelection(0);
     mapRow->Add(colorMapChoice, 1, wxRIGHT, 4);
-    auto* reversedBtn = new wxToggleButton(m_allPage, wxID_ANY, "\u00B1");
-    // Make it square, matching the height of the color map dropdown
+    auto* reversedBtn = new wxToggleButton(brushPage, wxID_ANY, "\u00B1");
     int btnH = colorMapChoice->GetBestSize().GetHeight();
     reversedBtn->SetMinSize(wxSize(btnH, btnH));
     mapRow->Add(reversedBtn, 0, wxALIGN_CENTER_VERTICAL);
-    sizer->Add(mapRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+    bSizer->Add(mapRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
-    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Color By"), 0, wxLEFT | wxTOP, 8);
-    m_colorVarChoice = new wxChoice(m_allPage, wxID_ANY);
+    bSizer->Add(new wxStaticText(brushPage, wxID_ANY, "Color By"), 0, wxLEFT | wxTOP, 8);
+    m_colorVarChoice = new wxChoice(brushPage, wxID_ANY);
     m_colorVarChoice->Append("(density)");
     m_colorVarChoice->SetSelection(0);
-    sizer->Add(m_colorVarChoice, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+    bSizer->Add(m_colorVarChoice, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
-    sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Background"), 0, wxLEFT | wxTOP, 8);
-    auto* bgSlider = new wxSlider(m_allPage, wxID_ANY, 0, 0, 50);
-    sizer->Add(bgSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+    bSizer->Add(new wxStaticText(brushPage, wxID_ANY, "Background"), 0, wxLEFT | wxTOP, 8);
+    auto* bgSlider = new wxSlider(brushPage, wxID_ANY, 0, 0, 50);
+    bSizer->Add(bgSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
     auto fireColorMapChanged = [this, colorMapChoice, reversedBtn]() {
         if (onColorMapChanged)
@@ -853,110 +968,31 @@ void ControlPanel::CreateAllPage() {
             onBackgroundChanged(static_cast<float>(bgSlider->GetValue()) / 100.0f);
     });
 
-    sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
+    bSizer->AddStretchSpacer();
+    brushPage->SetSizer(bSizer);
+    m_allSubBook->AddPage(brushPage, "");
 
-    // Display toggles (apply to all plots)
-    auto* allShowUnselected = new wxCheckBox(m_allPage, wxID_ANY, "Show unselected");
-    allShowUnselected->SetValue(true);
-    sizer->Add(allShowUnselected, 0, wxLEFT, 8);
+    // Default to "All Plots" sub-page
+    SelectAllSubPage(0);
 
-    auto* allGridLines = new wxCheckBox(m_allPage, wxID_ANY, "Grid lines");
-    allGridLines->SetValue(false);
-    sizer->Add(allGridLines, 0, wxLEFT, 8);
-
-    auto* allHistograms = new wxCheckBox(m_allPage, wxID_ANY, "Histograms");
-    allHistograms->SetValue(true);
-    sizer->Add(allHistograms, 0, wxLEFT, 8);
-
-    m_globalTooltipCheck = new wxCheckBox(m_allPage, wxID_ANY, "Hover shows datapoint details");
-    m_globalTooltipCheck->SetValue(false);
-    sizer->Add(m_globalTooltipCheck, 0, wxLEFT, 8);
-
-    auto* deferRedraws = new wxCheckBox(m_allPage, wxID_ANY, "Defer redraws - fast w/big data");
-    deferRedraws->SetValue(false);
-    sizer->Add(deferRedraws, 0, wxLEFT | wxBOTTOM, 8);
-
-    m_globalTooltipCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
-        if (onGlobalTooltipChanged) onGlobalTooltipChanged(m_globalTooltipCheck->GetValue());
-    });
-    deferRedraws->Bind(wxEVT_CHECKBOX, [this, deferRedraws](wxCommandEvent&) {
-        if (onDeferRedrawsChanged) onDeferRedrawsChanged(deferRedraws->GetValue());
-    });
-
-    allShowUnselected->Bind(wxEVT_CHECKBOX, [this, allShowUnselected](wxCommandEvent&) {
-        bool show = allShowUnselected->GetValue();
-        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
-            if (onShowUnselectedChanged) onShowUnselectedChanged(i, show);
-        }
-    });
-    allGridLines->Bind(wxEVT_CHECKBOX, [this, allGridLines](wxCommandEvent&) {
-        bool show = allGridLines->GetValue();
-        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
-            if (onGridLinesChanged) onGridLinesChanged(i, show);
-        }
-    });
-    allHistograms->Bind(wxEVT_CHECKBOX, [this, allHistograms](wxCommandEvent&) {
-        bool show = allHistograms->GetValue();
-        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
-            if (onShowHistogramsChanged) onShowHistogramsChanged(i, show);
-        }
-    });
-
-    sizer->Add(new wxStaticLine(m_allPage), 0, wxEXPAND | wxALL, 8);
-
-    m_selectionLabel = new wxStaticText(m_allPage, wxID_ANY, "No selection");
-    sizer->Add(m_selectionLabel, 0, wxLEFT | wxTOP, 8);
-
-    auto* btnSizer = new wxBoxSizer(wxHORIZONTAL);
-    auto* clearBtn = new wxButton(m_allPage, wxID_ANY, "Clear (C)",
-                                   wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-    auto* invertBtn = new wxButton(m_allPage, wxID_ANY, "Invert (I)",
-                                    wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-    auto* killBtn = new wxButton(m_allPage, wxID_ANY, "Kill (K)",
-                                  wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-    btnSizer->Add(clearBtn, 1, wxRIGHT, 4);
-    btnSizer->Add(invertBtn, 1, wxRIGHT, 4);
-    btnSizer->Add(killBtn, 1);
-    sizer->Add(btnSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
-
-    auto* saveSizer = new wxBoxSizer(wxHORIZONTAL);
-    auto* saveAllBtn = new wxButton(m_allPage, wxID_ANY, "Save All",
-                                     wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-    auto* saveSelBtn = new wxButton(m_allPage, wxID_ANY, "Save Selected",
-                                     wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-    saveSizer->Add(saveAllBtn, 1, wxRIGHT, 4);
-    saveSizer->Add(saveSelBtn, 1);
-    sizer->Add(saveSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
-
-    sizer->AddStretchSpacer();
-    m_allPage->SetSizer(sizer);
+    m_allPage->SetSizer(topSizer);
     m_book->AddPage(m_allPage, "");
+}
 
-    m_pointSizeSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
-        float val = m_pointSizeSlider->GetValue() / 10.0f;
-        m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %.1f", val));
-        if (onPointSizeChanged) onPointSizeChanged(val);
-    });
-    m_histBinsSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
-        int val = m_histBinsSlider->GetValue();
-        m_histBinsLabel->SetLabel(wxString::Format("Hist Bins: %d", val));
-        if (onHistBinsChanged) onHistBinsChanged(val);
-    });
-    clearBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
-        if (onClearSelection) onClearSelection();
-    });
-    invertBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
-        if (onInvertSelection) onInvertSelection();
-    });
-    killBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
-        if (onKillSelected) onKillSelected();
-    });
-    saveAllBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
-        if (onSaveData) onSaveData(false);
-    });
-    saveSelBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
-        if (onSaveData) onSaveData(true);
-    });
+void ControlPanel::SelectAllSubPage(int idx) {
+    if (m_allSubBook) m_allSubBook->SetSelection(idx);
+
+    wxColour activeBg(80, 120, 200);
+    wxColour normalBg = wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE);
+
+    if (m_allPlotsBtn) {
+        m_allPlotsBtn->SetBackgroundColour(idx == 0 ? activeBg : normalBg);
+        m_allPlotsBtn->Refresh();
+    }
+    if (m_brushesBtn) {
+        m_brushesBtn->SetBackgroundColour(idx == 1 ? activeBg : normalBg);
+        m_brushesBtn->Refresh();
+    }
 }
 
 void ControlPanel::SelectBrush(int index) {
@@ -1003,13 +1039,9 @@ void ControlPanel::SetGlobalTooltip(bool on) {
 void ControlPanel::ShowBrushControls(int brushIndex) {
     int allIdx = static_cast<int>(m_plotTabs.size());
     SelectPage(allIdx);
+    SelectAllSubPage(1);  // switch to "Brushes & Colormaps" sub-page
     if (brushIndex >= 0 && brushIndex < CP_NUM_BRUSHES)
         SelectBrush(brushIndex);
-    // Scroll the All page to the top so brush buttons are visible
-    if (m_allPage) {
-        auto* sw = static_cast<wxScrolledWindow*>(m_allPage);
-        sw->Scroll(0, 0);
-    }
 }
 
 void ControlPanel::ApplyBrushColor(int brushIndex, float r, float g, float b, float a) {
