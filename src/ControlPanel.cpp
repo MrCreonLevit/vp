@@ -815,9 +815,12 @@ void ControlPanel::CreateAllPage() {
     for (const auto& name : AllColorMapNames())
         colorMapChoice->Append(name);
     colorMapChoice->SetSelection(0);
-    mapRow->Add(colorMapChoice, 1, wxRIGHT, 8);
-    auto* reversedCheck = new wxCheckBox(m_allPage, wxID_ANY, "-");
-    mapRow->Add(reversedCheck, 0, wxALIGN_CENTER_VERTICAL);
+    mapRow->Add(colorMapChoice, 1, wxRIGHT, 4);
+    auto* reversedBtn = new wxToggleButton(m_allPage, wxID_ANY, "\u00B1");
+    // Make it square, matching the height of the color map dropdown
+    int btnH = colorMapChoice->GetBestSize().GetHeight();
+    reversedBtn->SetMinSize(wxSize(btnH, btnH));
+    mapRow->Add(reversedBtn, 0, wxALIGN_CENTER_VERTICAL);
     sizer->Add(mapRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
     sizer->Add(new wxStaticText(m_allPage, wxID_ANY, "Color By"), 0, wxLEFT | wxTOP, 8);
@@ -830,11 +833,11 @@ void ControlPanel::CreateAllPage() {
     auto* bgSlider = new wxSlider(m_allPage, wxID_ANY, 0, 0, 50);
     sizer->Add(bgSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
-    auto fireColorMapChanged = [this, colorMapChoice, reversedCheck]() {
+    auto fireColorMapChanged = [this, colorMapChoice, reversedBtn]() {
         if (onColorMapChanged)
             onColorMapChanged(colorMapChoice->GetSelection(),
                               m_colorVarChoice->GetSelection(),
-                              reversedCheck->GetValue());
+                              reversedBtn->GetValue());
     };
     colorMapChoice->Bind(wxEVT_CHOICE, [fireColorMapChanged](wxCommandEvent&) {
         fireColorMapChanged();
@@ -842,7 +845,7 @@ void ControlPanel::CreateAllPage() {
     m_colorVarChoice->Bind(wxEVT_CHOICE, [fireColorMapChanged](wxCommandEvent&) {
         fireColorMapChanged();
     });
-    reversedCheck->Bind(wxEVT_CHECKBOX, [fireColorMapChanged](wxCommandEvent&) {
+    reversedBtn->Bind(wxEVT_TOGGLEBUTTON, [fireColorMapChanged](wxCommandEvent&) {
         fireColorMapChanged();
     });
     bgSlider->Bind(wxEVT_SLIDER, [this, bgSlider](wxCommandEvent&) {

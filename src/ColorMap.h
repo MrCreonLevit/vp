@@ -15,6 +15,12 @@ enum class ColorMapType {
     Hot,           // Black → red → yellow → white
     Cool,          // Cyan → magenta
     BlueRed,       // Blue → white → red (diverging)
+    Spectral,      // Diverging: red → orange → yellow → green → blue
+    PiYG,          // Diverging: pink → white → yellow-green
+    Cubehelix,     // Monotonic luminance with color helix
+    YlOrRd,        // Sequential: yellow → orange → red
+    Jet,           // Classic rainbow (non-perceptual)
+    Tab10,         // 10 distinct categorical colors
     COUNT
 };
 

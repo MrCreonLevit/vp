@@ -13,6 +13,12 @@ const char* ColorMapName(ColorMapType type) {
         case ColorMapType::Hot:       return "Hot";
         case ColorMapType::Cool:      return "Cool";
         case ColorMapType::BlueRed:   return "Blue-Red";
+        case ColorMapType::Spectral:  return "Spectral";
+        case ColorMapType::PiYG:      return "PiYG";
+        case ColorMapType::Cubehelix: return "Cubehelix";
+        case ColorMapType::YlOrRd:    return "YlOrRd";
+        case ColorMapType::Jet:       return "Jet";
+        case ColorMapType::Tab10:     return "Tab10";
         default:                      return "Default";
     }
 }
@@ -133,6 +139,84 @@ void ColorMapLookup(ColorMapType type, float t, float& r, float& g, float& b,
                 {1.0f, 1.0f, 0.1f, 0.0f},
             };
             rampLookup(stops, 3, t, r, g, b);
+            break;
+        }
+        case ColorMapType::Spectral: {
+            static const ColorStop stops[] = {
+                {0.0f,   0.620f, 0.004f, 0.259f},
+                {0.167f, 0.957f, 0.318f, 0.212f},
+                {0.333f, 0.992f, 0.682f, 0.380f},
+                {0.5f,   1.000f, 1.000f, 0.749f},
+                {0.667f, 0.745f, 0.894f, 0.627f},
+                {0.833f, 0.369f, 0.710f, 0.816f},
+                {1.0f,   0.200f, 0.314f, 0.694f},
+            };
+            rampLookup(stops, 7, t, r, g, b);
+            break;
+        }
+        case ColorMapType::PiYG: {
+            static const ColorStop stops[] = {
+                {0.0f,  0.557f, 0.004f, 0.322f},
+                {0.25f, 0.871f, 0.467f, 0.682f},
+                {0.5f,  0.969f, 0.969f, 0.969f},
+                {0.75f, 0.573f, 0.804f, 0.388f},
+                {1.0f,  0.153f, 0.392f, 0.098f},
+            };
+            rampLookup(stops, 5, t, r, g, b);
+            break;
+        }
+        case ColorMapType::Cubehelix: {
+            // Classic cubehelix: start=0.5, rotations=-1.5, hue=1.0, gamma=1.0
+            float a = t * 2.0f * 3.14159265f * (-1.5f) + 0.5f * 2.0f * 3.14159265f;
+            float amp = t * (1.0f - t) * 0.5f;
+            float cosA = std::cos(a), sinA = std::sin(a);
+            r = t + amp * (-0.14861f * cosA + 1.78277f * sinA);
+            g = t + amp * (-0.29227f * cosA - 0.90649f * sinA);
+            b = t + amp * ( 1.97294f * cosA);
+            r = std::max(0.0f, std::min(1.0f, r));
+            g = std::max(0.0f, std::min(1.0f, g));
+            b = std::max(0.0f, std::min(1.0f, b));
+            break;
+        }
+        case ColorMapType::YlOrRd: {
+            static const ColorStop stops[] = {
+                {0.0f,  1.000f, 1.000f, 0.800f},
+                {0.25f, 0.996f, 0.851f, 0.463f},
+                {0.5f,  0.992f, 0.553f, 0.235f},
+                {0.75f, 0.890f, 0.180f, 0.153f},
+                {1.0f,  0.502f, 0.000f, 0.149f},
+            };
+            rampLookup(stops, 5, t, r, g, b);
+            break;
+        }
+        case ColorMapType::Jet: {
+            static const ColorStop stops[] = {
+                {0.0f,   0.0f, 0.0f, 0.5f},
+                {0.125f, 0.0f, 0.0f, 1.0f},
+                {0.375f, 0.0f, 1.0f, 1.0f},
+                {0.625f, 1.0f, 1.0f, 0.0f},
+                {0.875f, 1.0f, 0.0f, 0.0f},
+                {1.0f,   0.5f, 0.0f, 0.0f},
+            };
+            rampLookup(stops, 6, t, r, g, b);
+            break;
+        }
+        case ColorMapType::Tab10: {
+            // 10 distinct colors; t maps to one of 10 bins
+            static const float colors[][3] = {
+                {0.122f, 0.467f, 0.706f},  // blue
+                {1.000f, 0.498f, 0.055f},  // orange
+                {0.173f, 0.627f, 0.173f},  // green
+                {0.839f, 0.153f, 0.157f},  // red
+                {0.580f, 0.404f, 0.741f},  // purple
+                {0.549f, 0.337f, 0.294f},  // brown
+                {0.890f, 0.467f, 0.761f},  // pink
+                {0.498f, 0.498f, 0.498f},  // gray
+                {0.737f, 0.741f, 0.133f},  // olive
+                {0.090f, 0.745f, 0.812f},  // cyan
+            };
+            int idx = std::min(static_cast<int>(t * 10.0f), 9);
+            r = colors[idx][0]; g = colors[idx][1]; b = colors[idx][2];
             break;
         }
         default:
