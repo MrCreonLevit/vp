@@ -147,9 +147,50 @@ void PlotTab::CreateControls(int row, int col) {
     m_histBinsSlider = new wxSlider(this, wxID_ANY, 64, 2, 512);
     sizer->Add(m_histBinsSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
+    sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    m_selectionLabel = new wxStaticText(this, wxID_ANY, "No selection");
+    sizer->Add(m_selectionLabel, 0, wxLEFT | wxTOP, 8);
+
+    auto* selBtnSizer = new wxBoxSizer(wxHORIZONTAL);
+    auto* clearBtn = new wxButton(this, wxID_ANY, "Clear (C)",
+                                   wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    auto* invertBtn = new wxButton(this, wxID_ANY, "Invert (I)",
+                                    wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    auto* killBtn = new wxButton(this, wxID_ANY, "Kill (K)",
+                                  wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    selBtnSizer->Add(clearBtn, 1, wxRIGHT, 4);
+    selBtnSizer->Add(invertBtn, 1, wxRIGHT, 4);
+    selBtnSizer->Add(killBtn, 1);
+    sizer->Add(selBtnSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+
+    auto* saveSizer = new wxBoxSizer(wxHORIZONTAL);
+    auto* saveAllBtn = new wxButton(this, wxID_ANY, "Save All",
+                                     wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    auto* saveSelBtn = new wxButton(this, wxID_ANY, "Save Selected",
+                                     wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    saveSizer->Add(saveAllBtn, 1, wxRIGHT, 4);
+    saveSizer->Add(saveSelBtn, 1);
+    sizer->Add(saveSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+
     sizer->AddStretchSpacer();
     SetSizer(sizer);
 
+    clearBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (onClearSelection) onClearSelection();
+    });
+    invertBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (onInvertSelection) onInvertSelection();
+    });
+    killBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (onKillSelected) onKillSelected();
+    });
+    saveAllBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (onSaveData) onSaveData(false);
+    });
+    saveSelBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        if (onSaveData) onSaveData(true);
+    });
     m_xAxis->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
         if (!m_suppress && onAxisChanged)
             onAxisChanged(m_plotIndex, m_xAxis->GetSelection(), m_yAxis->GetSelection());
@@ -437,6 +478,12 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
     m_allSubBook = nullptr;
     m_allPlotsBtn = nullptr;
     m_brushesBtn = nullptr;
+    m_allXAxis = nullptr;
+    m_allYAxis = nullptr;
+    m_allZAxis = nullptr;
+    m_allXNorm = nullptr;
+    m_allYNorm = nullptr;
+    m_allZNorm = nullptr;
     m_pointSizeSlider = nullptr;
     m_histBinsSlider = nullptr;
     m_selectionLabel = nullptr;
@@ -458,18 +505,31 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
             tab->SetColumns(m_columnNames);
 
         tab->onRandomizeAxes = [this](int pi) {
+            // Individual plot randomize → reset all "All Plots" axis dropdowns
+            if (m_allXAxis) m_allXAxis->SetSelection(0);
+            if (m_allYAxis) m_allYAxis->SetSelection(0);
+            if (m_allZAxis) m_allZAxis->SetSelection(0);
+            if (m_allXNorm) m_allXNorm->SetSelection(0);
+            if (m_allYNorm) m_allYNorm->SetSelection(0);
+            if (m_allZNorm) m_allZNorm->SetSelection(0);
             if (onRandomizeAxes) onRandomizeAxes(pi);
         };
         tab->onAxisChanged = [this](int pi, int x, int y) {
+            if (m_allXAxis) m_allXAxis->SetSelection(0);
+            if (m_allYAxis) m_allYAxis->SetSelection(0);
             if (onAxisChanged) onAxisChanged(pi, x, y);
         };
         tab->onAxisLockChanged = [this](int pi, bool xLock, bool yLock) {
             if (onAxisLockChanged) onAxisLockChanged(pi, xLock, yLock);
         };
         tab->onNormChanged = [this](int pi, int xn, int yn) {
+            if (m_allXNorm) m_allXNorm->SetSelection(0);
+            if (m_allYNorm) m_allYNorm->SetSelection(0);
             if (onNormChanged) onNormChanged(pi, xn, yn);
         };
         tab->onZAxisChanged = [this](int pi, int zCol, int zNorm) {
+            if (m_allZAxis) m_allZAxis->SetSelection(0);
+            if (m_allZNorm) m_allZNorm->SetSelection(0);
             if (onZAxisChanged) onZAxisChanged(pi, zCol, zNorm);
         };
         tab->onRotationChanged = [this](int pi, float angle) {
@@ -498,6 +558,18 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
         };
         tab->onHistBinsChanged = [this](int pi, int bins) {
             if (onPlotHistBinsChanged) onPlotHistBinsChanged(pi, bins);
+        };
+        tab->onClearSelection = [this]() {
+            if (onClearSelection) onClearSelection();
+        };
+        tab->onInvertSelection = [this]() {
+            if (onInvertSelection) onInvertSelection();
+        };
+        tab->onKillSelected = [this]() {
+            if (onKillSelected) onKillSelected();
+        };
+        tab->onSaveData = [this](bool selectedOnly) {
+            if (onSaveData) onSaveData(selectedOnly);
         };
     }
 
@@ -620,6 +692,20 @@ void ControlPanel::StopSpinRock(int plotIndex) {
 void ControlPanel::SetColumns(const std::vector<std::string>& names) {
     m_columnNames = names;
     for (auto* tab : m_plotTabs) tab->SetColumns(names);
+    // Update All Plots axis dropdowns (keep "(no change)" as first entry)
+    if (m_allXAxis) {
+        m_allXAxis->Clear(); m_allYAxis->Clear(); m_allZAxis->Clear();
+        m_allXAxis->Append("(no change)");
+        m_allYAxis->Append("(no change)");
+        m_allZAxis->Append("(no change)");
+        m_allZAxis->Append("(None)");
+        for (const auto& name : names) {
+            m_allXAxis->Append(name); m_allYAxis->Append(name); m_allZAxis->Append(name);
+        }
+        m_allXAxis->SetSelection(0);
+        m_allYAxis->SetSelection(0);
+        m_allZAxis->SetSelection(0);
+    }
     // Update color variable dropdown
     if (m_colorVarChoice) {
         m_colorVarChoice->Clear();
@@ -631,9 +717,13 @@ void ControlPanel::SetColumns(const std::vector<std::string>& names) {
 }
 
 void ControlPanel::SetSelectionInfo(int selected, int total) {
-    if (m_selectionLabel) {
-        m_selectionLabel->SetLabel(selected > 0 ?
-            wxString::Format("Selected: %d / %d", selected, total) : "No selection");
+    wxString text = selected > 0 ?
+        wxString::Format("Selected: %d / %d", selected, total) : wxString("No selection");
+    if (m_selectionLabel)
+        m_selectionLabel->SetLabel(text);
+    for (auto* tab : m_plotTabs) {
+        if (tab->m_selectionLabel)
+            tab->m_selectionLabel->SetLabel(text);
     }
 }
 
@@ -645,15 +735,138 @@ void ControlPanel::CreateAllPage() {
     m_allSubBook = new wxSimplebook(m_allPage);
     topSizer->Add(m_allSubBook, 1, wxEXPAND);
 
-    // ---- Page 0: "All Plots" ----
+    // ---- Page 0: "All Plots" (mirrors PlotTab layout) ----
     auto* plotsPage = new wxScrolledWindow(m_allSubBook);
     plotsPage->SetScrollRate(0, 10);
     auto* pSizer = new wxBoxSizer(wxVERTICAL);
+
+    auto* title = new wxStaticText(plotsPage, wxID_ANY, "All Plots");
+    auto font = title->GetFont();
+    font.SetWeight(wxFONTWEIGHT_BOLD);
+    title->SetFont(font);
+    pSizer->Add(title, 0, wxALL, 8);
+
+    pSizer->Add(new wxStaticLine(plotsPage), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    auto* randBtn = new wxButton(plotsPage, wxID_ANY, "Randomize Axes",
+                                  wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    pSizer->Add(randBtn, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+    randBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        for (int i = 0; i < (int)m_plotTabs.size(); i++)
+            if (onRandomizeAxes) onRandomizeAxes(i);
+        // Reset all axis dropdowns since plots now have different axes
+        if (m_allXAxis) m_allXAxis->SetSelection(0);
+        if (m_allYAxis) m_allYAxis->SetSelection(0);
+        if (m_allZAxis) m_allZAxis->SetSelection(0);
+        if (m_allXNorm) m_allXNorm->SetSelection(0);
+        if (m_allYNorm) m_allYNorm->SetSelection(0);
+        if (m_allZNorm) m_allZNorm->SetSelection(0);
+    });
+
+    // X-axis
+    auto* xRow = new wxBoxSizer(wxHORIZONTAL);
+    xRow->Add(new wxStaticText(plotsPage, wxID_ANY, "X-axis"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    auto* allXLock = new wxCheckBox(plotsPage, wxID_ANY, "Link");
+    xRow->Add(allXLock, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    xRow->Add(new wxStaticText(plotsPage, wxID_ANY, "Norm"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    m_allXNorm = new wxChoice(plotsPage, wxID_ANY);
+    m_allXNorm->Append("(no change)");
+    for (const auto& name : AllNormModeNames()) m_allXNorm->Append(name);
+    m_allXNorm->SetSelection(0);
+    xRow->Add(m_allXNorm, 0, wxALIGN_CENTER_VERTICAL);
+    pSizer->Add(xRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+    m_allXAxis = new wxChoice(plotsPage, wxID_ANY);
+    pSizer->Add(m_allXAxis, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 4);
+
+    // Y-axis
+    auto* yRow = new wxBoxSizer(wxHORIZONTAL);
+    yRow->Add(new wxStaticText(plotsPage, wxID_ANY, "Y-axis"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    auto* allYLock = new wxCheckBox(plotsPage, wxID_ANY, "Link");
+    yRow->Add(allYLock, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    yRow->Add(new wxStaticText(plotsPage, wxID_ANY, "Norm"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    m_allYNorm = new wxChoice(plotsPage, wxID_ANY);
+    m_allYNorm->Append("(no change)");
+    for (const auto& name : AllNormModeNames()) m_allYNorm->Append(name);
+    m_allYNorm->SetSelection(0);
+    yRow->Add(m_allYNorm, 0, wxALIGN_CENTER_VERTICAL);
+    pSizer->Add(yRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 4);
+    m_allYAxis = new wxChoice(plotsPage, wxID_ANY);
+    pSizer->Add(m_allYAxis, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 4);
+
+    // Z-axis
+    auto* zRow = new wxBoxSizer(wxHORIZONTAL);
+    zRow->Add(new wxStaticText(plotsPage, wxID_ANY, "Z-axis"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    m_allZNorm = new wxChoice(plotsPage, wxID_ANY);
+    m_allZNorm->Append("(no change)");
+    for (const auto& name : AllNormModeNames()) m_allZNorm->Append(name);
+    m_allZNorm->SetSelection(0);
+    zRow->Add(m_allZNorm, 0, wxALIGN_CENTER_VERTICAL);
+    pSizer->Add(zRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 4);
+    m_allZAxis = new wxChoice(plotsPage, wxID_ANY);
+    m_allZAxis->Append("(no change)");
+    m_allZAxis->Append("(None)");
+    m_allZAxis->SetSelection(0);
+    pSizer->Add(m_allZAxis, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
+
+    // Rotation sliders
+    const wxSize zeroBtnSize(20, 20);
+    auto* allRotLabel = new wxStaticText(plotsPage, wxID_ANY, "screen y: 0\u00B0");
+    pSizer->Add(allRotLabel, 0, wxLEFT, 8);
+    auto* rotRow = new wxBoxSizer(wxHORIZONTAL);
+    auto* zeroYBtn = new wxButton(plotsPage, wxID_ANY, "0",
+                                   wxDefaultPosition, zeroBtnSize, wxBU_EXACTFIT);
+    rotRow->Add(zeroYBtn, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 2);
+    auto* allRotSlider = new wxSlider(plotsPage, wxID_ANY, 0, -360, 360);
+    rotRow->Add(allRotSlider, 1, wxALIGN_CENTER_VERTICAL);
+    auto* allSpinBtn = new wxToggleButton(plotsPage, wxID_ANY, "Spin",
+                                           wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    rotRow->Add(allSpinBtn, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 2);
+    auto* allRockBtn = new wxToggleButton(plotsPage, wxID_ANY, "Rock",
+                                           wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    rotRow->Add(allRockBtn, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 2);
+    pSizer->Add(rotRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
+
+    auto* allRotXLabel = new wxStaticText(plotsPage, wxID_ANY, "screen x: 0\u00B0");
+    pSizer->Add(allRotXLabel, 0, wxLEFT, 8);
+    auto* rotXRow = new wxBoxSizer(wxHORIZONTAL);
+    auto* zeroXBtn = new wxButton(plotsPage, wxID_ANY, "0",
+                                   wxDefaultPosition, zeroBtnSize, wxBU_EXACTFIT);
+    rotXRow->Add(zeroXBtn, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 2);
+    auto* allRotXSlider = new wxSlider(plotsPage, wxID_ANY, 0, -360, 360);
+    rotXRow->Add(allRotXSlider, 1, wxALIGN_CENTER_VERTICAL);
+    auto* allSpinXBtn = new wxToggleButton(plotsPage, wxID_ANY, "Spin",
+                                            wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    rotXRow->Add(allSpinXBtn, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 2);
+    auto* allRockXBtn = new wxToggleButton(plotsPage, wxID_ANY, "Rock",
+                                            wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    rotXRow->Add(allRockXBtn, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 2);
+    pSizer->Add(rotXRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
+
+    pSizer->Add(new wxStaticLine(plotsPage), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    auto* allShowUnselected = new wxCheckBox(plotsPage, wxID_ANY, "Show unselected");
+    allShowUnselected->SetValue(true);
+    pSizer->Add(allShowUnselected, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+
+    auto* allGridLines = new wxCheckBox(plotsPage, wxID_ANY, "Grid lines");
+    allGridLines->SetValue(false);
+    pSizer->Add(allGridLines, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+
+    auto* allHistograms = new wxCheckBox(plotsPage, wxID_ANY, "Histograms");
+    allHistograms->SetValue(true);
+    pSizer->Add(allHistograms, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 8);
+
+    pSizer->Add(new wxStaticLine(plotsPage), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
     m_pointSizeLabel = new wxStaticText(plotsPage, wxID_ANY, "Point Size: 6.0");
     pSizer->Add(m_pointSizeLabel, 0, wxLEFT | wxTOP, 8);
     m_pointSizeSlider = new wxSlider(plotsPage, wxID_ANY, 60, 5, 300);
     pSizer->Add(m_pointSizeSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+
+    auto* allOpacityLabel = new wxStaticText(plotsPage, wxID_ANY, "Opacity: 5%");
+    pSizer->Add(allOpacityLabel, 0, wxLEFT | wxTOP, 8);
+    auto* allOpacitySlider = new wxSlider(plotsPage, wxID_ANY, 5, 1, 100);
+    pSizer->Add(allOpacitySlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
     m_histBinsLabel = new wxStaticText(plotsPage, wxID_ANY, "Hist Bins: 64");
     pSizer->Add(m_histBinsLabel, 0, wxLEFT | wxTOP, 8);
@@ -662,19 +875,7 @@ void ControlPanel::CreateAllPage() {
 
     pSizer->Add(new wxStaticLine(plotsPage), 0, wxEXPAND | wxALL, 8);
 
-    // Display toggles (apply to all plots)
-    auto* allShowUnselected = new wxCheckBox(plotsPage, wxID_ANY, "Show unselected");
-    allShowUnselected->SetValue(true);
-    pSizer->Add(allShowUnselected, 0, wxLEFT, 8);
-
-    auto* allGridLines = new wxCheckBox(plotsPage, wxID_ANY, "Grid lines");
-    allGridLines->SetValue(false);
-    pSizer->Add(allGridLines, 0, wxLEFT, 8);
-
-    auto* allHistograms = new wxCheckBox(plotsPage, wxID_ANY, "Histograms");
-    allHistograms->SetValue(true);
-    pSizer->Add(allHistograms, 0, wxLEFT, 8);
-
+    // Additional All-only controls
     m_globalTooltipCheck = new wxCheckBox(plotsPage, wxID_ANY, "Hover shows datapoint details");
     m_globalTooltipCheck->SetValue(false);
     pSizer->Add(m_globalTooltipCheck, 0, wxLEFT, 8);
@@ -683,32 +884,7 @@ void ControlPanel::CreateAllPage() {
     deferRedraws->SetValue(false);
     pSizer->Add(deferRedraws, 0, wxLEFT | wxBOTTOM, 8);
 
-    m_globalTooltipCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
-        if (onGlobalTooltipChanged) onGlobalTooltipChanged(m_globalTooltipCheck->GetValue());
-    });
-    deferRedraws->Bind(wxEVT_CHECKBOX, [this, deferRedraws](wxCommandEvent&) {
-        if (onDeferRedrawsChanged) onDeferRedrawsChanged(deferRedraws->GetValue());
-    });
-    allShowUnselected->Bind(wxEVT_CHECKBOX, [this, allShowUnselected](wxCommandEvent&) {
-        bool show = allShowUnselected->GetValue();
-        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
-            if (onShowUnselectedChanged) onShowUnselectedChanged(i, show);
-        }
-    });
-    allGridLines->Bind(wxEVT_CHECKBOX, [this, allGridLines](wxCommandEvent&) {
-        bool show = allGridLines->GetValue();
-        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
-            if (onGridLinesChanged) onGridLinesChanged(i, show);
-        }
-    });
-    allHistograms->Bind(wxEVT_CHECKBOX, [this, allHistograms](wxCommandEvent&) {
-        bool show = allHistograms->GetValue();
-        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
-            if (onShowHistogramsChanged) onShowHistogramsChanged(i, show);
-        }
-    });
-
-    pSizer->Add(new wxStaticLine(plotsPage), 0, wxEXPAND | wxALL, 8);
+    pSizer->Add(new wxStaticLine(plotsPage), 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
     m_selectionLabel = new wxStaticText(plotsPage, wxID_ANY, "No selection");
     pSizer->Add(m_selectionLabel, 0, wxLEFT | wxTOP, 8);
@@ -734,15 +910,240 @@ void ControlPanel::CreateAllPage() {
     saveSizer->Add(saveSelBtn, 1);
     pSizer->Add(saveSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
+    // --- Event bindings for All Plots page ---
+    // Axis/norm dropdowns have "(no change)" at index 0; skip if unspecified,
+    // and preserve each plot's current value for the paired control.
+    // Snapshot all per-plot values upfront before calling callbacks,
+    // so that callbacks (which may call SetPlotConfig/SyncFromConfig)
+    // can't alter other tabs' dropdown state mid-iteration.
+    m_allXAxis->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        int xSel = m_allXAxis->GetSelection();
+        if (xSel == 0) return;  // "(no change)"
+        int xCol = xSel - 1;
+        int ySel = m_allYAxis->GetSelection();
+        std::vector<int> yCols(m_plotTabs.size());
+        for (int i = 0; i < (int)m_plotTabs.size(); i++)
+            yCols[i] = (ySel == 0) ? m_plotTabs[i]->m_yAxis->GetSelection() : ySel - 1;
+        for (int i = 0; i < (int)m_plotTabs.size(); i++)
+            if (onAxisChanged) onAxisChanged(i, xCol, yCols[i]);
+    });
+    m_allYAxis->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        int ySel = m_allYAxis->GetSelection();
+        if (ySel == 0) return;
+        int yCol = ySel - 1;
+        int xSel = m_allXAxis->GetSelection();
+        std::vector<int> xCols(m_plotTabs.size());
+        for (int i = 0; i < (int)m_plotTabs.size(); i++)
+            xCols[i] = (xSel == 0) ? m_plotTabs[i]->m_xAxis->GetSelection() : xSel - 1;
+        for (int i = 0; i < (int)m_plotTabs.size(); i++)
+            if (onAxisChanged) onAxisChanged(i, xCols[i], yCol);
+    });
+    m_allXNorm->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        int xnSel = m_allXNorm->GetSelection();
+        if (xnSel == 0) return;
+        int xNorm = xnSel - 1;
+        int ynSel = m_allYNorm->GetSelection();
+        std::vector<int> yNorms(m_plotTabs.size());
+        for (int i = 0; i < (int)m_plotTabs.size(); i++)
+            yNorms[i] = (ynSel == 0) ? m_plotTabs[i]->m_yNorm->GetSelection() : ynSel - 1;
+        for (int i = 0; i < (int)m_plotTabs.size(); i++)
+            if (onNormChanged) onNormChanged(i, xNorm, yNorms[i]);
+    });
+    m_allYNorm->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        int ynSel = m_allYNorm->GetSelection();
+        if (ynSel == 0) return;
+        int yNorm = ynSel - 1;
+        int xnSel = m_allXNorm->GetSelection();
+        std::vector<int> xNorms(m_plotTabs.size());
+        for (int i = 0; i < (int)m_plotTabs.size(); i++)
+            xNorms[i] = (xnSel == 0) ? m_plotTabs[i]->m_xNorm->GetSelection() : xnSel - 1;
+        for (int i = 0; i < (int)m_plotTabs.size(); i++)
+            if (onNormChanged) onNormChanged(i, xNorms[i], yNorm);
+    });
+    allXLock->Bind(wxEVT_CHECKBOX, [this, allXLock](wxCommandEvent&) {
+        bool xLock = allXLock->GetValue();
+        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
+            bool yLock = m_plotTabs[i]->m_yLock->GetValue();
+            if (onAxisLockChanged) onAxisLockChanged(i, xLock, yLock);
+        }
+    });
+    allYLock->Bind(wxEVT_CHECKBOX, [this, allYLock](wxCommandEvent&) {
+        bool yLock = allYLock->GetValue();
+        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
+            bool xLock = m_plotTabs[i]->m_xLock->GetValue();
+            if (onAxisLockChanged) onAxisLockChanged(i, xLock, yLock);
+        }
+    });
+    m_allZAxis->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        int zSel = m_allZAxis->GetSelection();
+        if (zSel == 0) return;  // "(no change)"
+        // 1="(None)", 2+=column index
+        int zCol = (zSel == 1) ? -1 : zSel - 2;
+        int znSel = m_allZNorm->GetSelection();
+        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
+            int zNorm = (znSel == 0) ? m_plotTabs[i]->m_zNorm->GetSelection() : znSel - 1;
+            if (onZAxisChanged) onZAxisChanged(i, zCol, zNorm);
+        }
+    });
+    m_allZNorm->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        int znSel = m_allZNorm->GetSelection();
+        if (znSel == 0) return;
+        int zNorm = znSel - 1;
+        int zSel = m_allZAxis->GetSelection();
+        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
+            int zCol;
+            if (zSel == 0) {  // Z axis is "(no change)" — preserve per-plot
+                int plotZSel = m_plotTabs[i]->m_zAxis->GetSelection();
+                zCol = (plotZSel == 0) ? -1 : plotZSel - 1;
+            } else {
+                zCol = (zSel == 1) ? -1 : zSel - 2;
+            }
+            if (onZAxisChanged) onZAxisChanged(i, zCol, zNorm);
+        }
+    });
+    allRotSlider->Bind(wxEVT_SLIDER, [this, allRotSlider, allRotLabel](wxCommandEvent&) {
+        float angle = static_cast<float>(allRotSlider->GetValue());
+        allRotLabel->SetLabel(wxString::Format("screen y: %d\u00B0", (int)angle));
+        for (auto* tab : m_plotTabs) {
+            tab->m_spinning = false; tab->m_rocking = false;
+            tab->m_spinButton->SetValue(false); tab->m_rockButton->SetValue(false);
+            tab->m_spinAngle = angle;
+            tab->m_rotationSlider->SetValue((int)angle);
+            tab->m_rotationLabel->SetLabel(wxString::Format("screen y: %d\u00B0", (int)angle));
+            if (onRotationChanged) onRotationChanged(tab->m_plotIndex, angle);
+        }
+    });
+    allRotXSlider->Bind(wxEVT_SLIDER, [this, allRotXSlider, allRotXLabel](wxCommandEvent&) {
+        float angle = static_cast<float>(allRotXSlider->GetValue());
+        allRotXLabel->SetLabel(wxString::Format("screen x: %d\u00B0", (int)angle));
+        for (auto* tab : m_plotTabs) {
+            tab->m_spinningX = false; tab->m_rockingX = false;
+            tab->m_spinXButton->SetValue(false); tab->m_rockXButton->SetValue(false);
+            tab->m_spinXAngle = angle;
+            tab->m_rotationXSlider->SetValue((int)angle);
+            tab->m_rotationXLabel->SetLabel(wxString::Format("screen x: %d\u00B0", (int)angle));
+            if (onRotationXChanged) onRotationXChanged(tab->m_plotIndex, angle);
+        }
+    });
+    allSpinBtn->Bind(wxEVT_TOGGLEBUTTON, [this, allSpinBtn, allRockBtn, allRotSlider](wxCommandEvent&) {
+        bool spinning = allSpinBtn->GetValue();
+        if (spinning) allRockBtn->SetValue(false);
+        for (auto* tab : m_plotTabs) {
+            tab->m_spinning = spinning;
+            tab->m_spinButton->SetValue(spinning);
+            if (spinning) {
+                tab->m_spinAngle = static_cast<float>(allRotSlider->GetValue());
+                tab->m_rocking = false;
+                tab->m_rockButton->SetValue(false);
+            }
+        }
+    });
+    allRockBtn->Bind(wxEVT_TOGGLEBUTTON, [this, allSpinBtn, allRockBtn, allRotSlider](wxCommandEvent&) {
+        bool rocking = allRockBtn->GetValue();
+        if (rocking) allSpinBtn->SetValue(false);
+        for (auto* tab : m_plotTabs) {
+            tab->m_rocking = rocking;
+            tab->m_rockButton->SetValue(rocking);
+            if (rocking) {
+                tab->m_spinAngle = static_cast<float>(allRotSlider->GetValue());
+                tab->m_rockCenter = tab->m_spinAngle;
+                tab->m_rockPhase = 0.0f;
+                tab->m_spinning = false;
+                tab->m_spinButton->SetValue(false);
+            }
+        }
+    });
+    zeroYBtn->Bind(wxEVT_BUTTON, [this, allSpinBtn, allRockBtn, allRotSlider, allRotLabel](wxCommandEvent&) {
+        allSpinBtn->SetValue(false); allRockBtn->SetValue(false);
+        allRotSlider->SetValue(0);
+        allRotLabel->SetLabel("screen y: 0\u00B0");
+        for (auto* tab : m_plotTabs) {
+            tab->m_spinning = false; tab->m_rocking = false;
+            tab->m_spinButton->SetValue(false); tab->m_rockButton->SetValue(false);
+            tab->m_spinAngle = 0.0f;
+            tab->m_rotationSlider->SetValue(0);
+            tab->m_rotationLabel->SetLabel("screen y: 0\u00B0");
+            if (onRotationZeroed) onRotationZeroed(tab->m_plotIndex, true, false);
+        }
+    });
+    allSpinXBtn->Bind(wxEVT_TOGGLEBUTTON, [this, allSpinXBtn, allRockXBtn, allRotXSlider](wxCommandEvent&) {
+        bool spinning = allSpinXBtn->GetValue();
+        if (spinning) allRockXBtn->SetValue(false);
+        for (auto* tab : m_plotTabs) {
+            tab->m_spinningX = spinning;
+            tab->m_spinXButton->SetValue(spinning);
+            if (spinning) {
+                tab->m_spinXAngle = static_cast<float>(allRotXSlider->GetValue());
+                tab->m_rockingX = false;
+                tab->m_rockXButton->SetValue(false);
+            }
+        }
+    });
+    allRockXBtn->Bind(wxEVT_TOGGLEBUTTON, [this, allSpinXBtn, allRockXBtn, allRotXSlider](wxCommandEvent&) {
+        bool rocking = allRockXBtn->GetValue();
+        if (rocking) allSpinXBtn->SetValue(false);
+        for (auto* tab : m_plotTabs) {
+            tab->m_rockingX = rocking;
+            tab->m_rockXButton->SetValue(rocking);
+            if (rocking) {
+                tab->m_spinXAngle = static_cast<float>(allRotXSlider->GetValue());
+                tab->m_rockXCenter = tab->m_spinXAngle;
+                tab->m_rockXPhase = 0.0f;
+                tab->m_spinningX = false;
+                tab->m_spinXButton->SetValue(false);
+            }
+        }
+    });
+    zeroXBtn->Bind(wxEVT_BUTTON, [this, allSpinXBtn, allRockXBtn, allRotXSlider, allRotXLabel](wxCommandEvent&) {
+        allSpinXBtn->SetValue(false); allRockXBtn->SetValue(false);
+        allRotXSlider->SetValue(0);
+        allRotXLabel->SetLabel("screen x: 0\u00B0");
+        for (auto* tab : m_plotTabs) {
+            tab->m_spinningX = false; tab->m_rockingX = false;
+            tab->m_spinXButton->SetValue(false); tab->m_rockXButton->SetValue(false);
+            tab->m_spinXAngle = 0.0f;
+            tab->m_rotationXSlider->SetValue(0);
+            tab->m_rotationXLabel->SetLabel("screen x: 0\u00B0");
+            if (onRotationZeroed) onRotationZeroed(tab->m_plotIndex, false, true);
+        }
+    });
+    allShowUnselected->Bind(wxEVT_CHECKBOX, [this, allShowUnselected](wxCommandEvent&) {
+        bool show = allShowUnselected->GetValue();
+        for (int i = 0; i < (int)m_plotTabs.size(); i++)
+            if (onShowUnselectedChanged) onShowUnselectedChanged(i, show);
+    });
+    allGridLines->Bind(wxEVT_CHECKBOX, [this, allGridLines](wxCommandEvent&) {
+        bool show = allGridLines->GetValue();
+        for (int i = 0; i < (int)m_plotTabs.size(); i++)
+            if (onGridLinesChanged) onGridLinesChanged(i, show);
+    });
+    allHistograms->Bind(wxEVT_CHECKBOX, [this, allHistograms](wxCommandEvent&) {
+        bool show = allHistograms->GetValue();
+        for (int i = 0; i < (int)m_plotTabs.size(); i++)
+            if (onShowHistogramsChanged) onShowHistogramsChanged(i, show);
+    });
     m_pointSizeSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         float val = m_pointSizeSlider->GetValue() / 10.0f;
         m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %.1f", val));
         if (onPointSizeChanged) onPointSizeChanged(val);
     });
+    allOpacitySlider->Bind(wxEVT_SLIDER, [this, allOpacitySlider, allOpacityLabel](wxCommandEvent&) {
+        int val = allOpacitySlider->GetValue();
+        allOpacityLabel->SetLabel(wxString::Format("Opacity: %d%%", val));
+        float alpha = static_cast<float>(val) / 100.0f;
+        for (int i = 0; i < (int)m_plotTabs.size(); i++)
+            if (onPlotOpacityChanged) onPlotOpacityChanged(i, alpha);
+    });
     m_histBinsSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         int val = m_histBinsSlider->GetValue();
         m_histBinsLabel->SetLabel(wxString::Format("Hist Bins: %d", val));
         if (onHistBinsChanged) onHistBinsChanged(val);
+    });
+    m_globalTooltipCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+        if (onGlobalTooltipChanged) onGlobalTooltipChanged(m_globalTooltipCheck->GetValue());
+    });
+    deferRedraws->Bind(wxEVT_CHECKBOX, [this, deferRedraws](wxCommandEvent&) {
+        if (onDeferRedrawsChanged) onDeferRedrawsChanged(deferRedraws->GetValue());
     });
     clearBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         if (onClearSelection) onClearSelection();

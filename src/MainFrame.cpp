@@ -238,10 +238,12 @@ void MainFrame::CreateLayout() {
     m_controlPanel->onAxisChanged = [this](int plotIndex, int xCol, int yCol) {
         if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
             auto& cfg = m_plotConfigs[plotIndex];
+            bool xChanged = (cfg.xCol != static_cast<size_t>(xCol));
+            bool yChanged = (cfg.yCol != static_cast<size_t>(yCol));
             cfg.xCol = static_cast<size_t>(xCol);
             cfg.yCol = static_cast<size_t>(yCol);
-            cfg.xNorm = DefaultNormForColumn(cfg.xCol);
-            cfg.yNorm = DefaultNormForColumn(cfg.yCol);
+            if (xChanged) cfg.xNorm = DefaultNormForColumn(cfg.xCol);
+            if (yChanged) cfg.yNorm = DefaultNormForColumn(cfg.yCol);
             m_controlPanel->SetPlotConfig(plotIndex, cfg);
             UpdatePlot(plotIndex);
         }
@@ -281,6 +283,7 @@ void MainFrame::CreateLayout() {
         if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
             m_plotConfigs[plotIndex].xNorm = static_cast<NormMode>(xNorm);
             m_plotConfigs[plotIndex].yNorm = static_cast<NormMode>(yNorm);
+            m_controlPanel->SetPlotConfig(plotIndex, m_plotConfigs[plotIndex]);
             UpdatePlot(plotIndex);
         }
     };
@@ -1483,6 +1486,10 @@ void MainFrame::LoadFile(const std::string& path) {
     m_controlPanel->SetGlobalPointSize(defaultSize);
 
     SetTitle("Viewpoints — " + wxString(path).AfterLast('/'));
+
+    // Sync each tab's widgets with its config
+    for (int i = 0; i < numPlots; i++)
+        m_controlPanel->SetPlotConfig(i, m_plotConfigs[i]);
 
     UpdateAllPlots();
 

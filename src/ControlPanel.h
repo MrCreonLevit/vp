@@ -36,6 +36,10 @@ public:
     std::function<void(int plotIndex, float angle)> onRotationChanged;
     std::function<void(int plotIndex, float angle)> onRotationXChanged;
     std::function<void(int plotIndex, bool zeroY, bool zeroX)> onRotationZeroed;
+    std::function<void()> onClearSelection;
+    std::function<void()> onInvertSelection;
+    std::function<void()> onKillSelected;
+    std::function<void(bool selectedOnly)> onSaveData;
 
 private:
     friend class ControlPanel;
@@ -79,6 +83,7 @@ private:
     wxStaticText* m_pointSizeLabel = nullptr;
     wxStaticText* m_opacityLabel = nullptr;
     wxStaticText* m_histBinsLabel = nullptr;
+    wxStaticText* m_selectionLabel = nullptr;
 };
 
 // Main control panel with grid-based plot selector
@@ -168,6 +173,14 @@ private:
     wxSimplebook* m_allSubBook = nullptr;
     wxButton* m_allPlotsBtn = nullptr;
     wxButton* m_brushesBtn = nullptr;
+
+    // "All Plots" page axis controls (need member access for SetColumns + reset)
+    wxChoice* m_allXAxis = nullptr;
+    wxChoice* m_allYAxis = nullptr;
+    wxChoice* m_allZAxis = nullptr;
+    wxChoice* m_allXNorm = nullptr;
+    wxChoice* m_allYNorm = nullptr;
+    wxChoice* m_allZNorm = nullptr;
 
     // "All" page widgets
     wxChoice* m_colorVarChoice = nullptr;
