@@ -505,31 +505,22 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
             tab->SetColumns(m_columnNames);
 
         tab->onRandomizeAxes = [this](int pi) {
-            // Individual plot randomize → reset all "All Plots" axis dropdowns
-            if (m_allXAxis) m_allXAxis->SetSelection(0);
-            if (m_allYAxis) m_allYAxis->SetSelection(0);
-            if (m_allZAxis) m_allZAxis->SetSelection(0);
-            if (m_allXNorm) m_allXNorm->SetSelection(0);
-            if (m_allYNorm) m_allYNorm->SetSelection(0);
-            if (m_allZNorm) m_allZNorm->SetSelection(0);
+            ResetAllAxisDropdowns();
             if (onRandomizeAxes) onRandomizeAxes(pi);
         };
         tab->onAxisChanged = [this](int pi, int x, int y) {
-            if (m_allXAxis) m_allXAxis->SetSelection(0);
-            if (m_allYAxis) m_allYAxis->SetSelection(0);
+            ResetAllAxisDropdowns(true, false, false);
             if (onAxisChanged) onAxisChanged(pi, x, y);
         };
         tab->onAxisLockChanged = [this](int pi, bool xLock, bool yLock) {
             if (onAxisLockChanged) onAxisLockChanged(pi, xLock, yLock);
         };
         tab->onNormChanged = [this](int pi, int xn, int yn) {
-            if (m_allXNorm) m_allXNorm->SetSelection(0);
-            if (m_allYNorm) m_allYNorm->SetSelection(0);
+            ResetAllAxisDropdowns(false, true, false);
             if (onNormChanged) onNormChanged(pi, xn, yn);
         };
         tab->onZAxisChanged = [this](int pi, int zCol, int zNorm) {
-            if (m_allZAxis) m_allZAxis->SetSelection(0);
-            if (m_allZNorm) m_allZNorm->SetSelection(0);
+            ResetAllAxisDropdowns(false, false, true);
             if (onZAxisChanged) onZAxisChanged(pi, zCol, zNorm);
         };
         tab->onRotationChanged = [this](int pi, float angle) {
@@ -551,13 +542,13 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
             if (onShowHistogramsChanged) onShowHistogramsChanged(pi, show);
         };
         tab->onPointSizeChanged = [this](int pi, float size) {
-            if (onPlotPointSizeChanged) onPlotPointSizeChanged(pi, size);
+            if (onPointSizeChanged) onPointSizeChanged(pi, size);
         };
         tab->onOpacityChanged = [this](int pi, float alpha) {
-            if (onPlotOpacityChanged) onPlotOpacityChanged(pi, alpha);
+            if (onOpacityChanged) onOpacityChanged(pi, alpha);
         };
         tab->onHistBinsChanged = [this](int pi, int bins) {
-            if (onPlotHistBinsChanged) onPlotHistBinsChanged(pi, bins);
+            if (onHistBinsChanged) onHistBinsChanged(pi, bins);
         };
         tab->onClearSelection = [this]() {
             if (onClearSelection) onClearSelection();
@@ -689,6 +680,21 @@ void ControlPanel::StopSpinRock(int plotIndex) {
     }
 }
 
+void ControlPanel::ResetAllAxisDropdowns(bool axes, bool norms, bool z) {
+    if (axes) {
+        if (m_allXAxis) m_allXAxis->SetSelection(0);
+        if (m_allYAxis) m_allYAxis->SetSelection(0);
+    }
+    if (norms) {
+        if (m_allXNorm) m_allXNorm->SetSelection(0);
+        if (m_allYNorm) m_allYNorm->SetSelection(0);
+    }
+    if (z) {
+        if (m_allZAxis) m_allZAxis->SetSelection(0);
+        if (m_allZNorm) m_allZNorm->SetSelection(0);
+    }
+}
+
 void ControlPanel::SetColumns(const std::vector<std::string>& names) {
     m_columnNames = names;
     for (auto* tab : m_plotTabs) tab->SetColumns(names);
@@ -731,11 +737,18 @@ void ControlPanel::CreateAllPage() {
     m_allPage = new wxPanel(m_book);
     auto* topSizer = new wxBoxSizer(wxVERTICAL);
 
-    // Sub-book with two pages (buttons are in the selector grid)
     m_allSubBook = new wxSimplebook(m_allPage);
     topSizer->Add(m_allSubBook, 1, wxEXPAND);
 
-    // ---- Page 0: "All Plots" (mirrors PlotTab layout) ----
+    CreateAllPlotsSubPage();
+    CreateBrushesSubPage();
+
+    SelectAllSubPage(0);
+    m_allPage->SetSizer(topSizer);
+    m_book->AddPage(m_allPage, "");
+}
+
+void ControlPanel::CreateAllPlotsSubPage() {
     auto* plotsPage = new wxScrolledWindow(m_allSubBook);
     plotsPage->SetScrollRate(0, 10);
     auto* pSizer = new wxBoxSizer(wxVERTICAL);
@@ -754,13 +767,7 @@ void ControlPanel::CreateAllPage() {
     randBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         for (int i = 0; i < (int)m_plotTabs.size(); i++)
             if (onRandomizeAxes) onRandomizeAxes(i);
-        // Reset all axis dropdowns since plots now have different axes
-        if (m_allXAxis) m_allXAxis->SetSelection(0);
-        if (m_allYAxis) m_allYAxis->SetSelection(0);
-        if (m_allZAxis) m_allZAxis->SetSelection(0);
-        if (m_allXNorm) m_allXNorm->SetSelection(0);
-        if (m_allYNorm) m_allYNorm->SetSelection(0);
-        if (m_allZNorm) m_allZNorm->SetSelection(0);
+        ResetAllAxisDropdowns();
     });
 
     // X-axis
@@ -1125,19 +1132,19 @@ void ControlPanel::CreateAllPage() {
     m_pointSizeSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         float val = m_pointSizeSlider->GetValue() / 10.0f;
         m_pointSizeLabel->SetLabel(wxString::Format("Point Size: %.1f", val));
-        if (onPointSizeChanged) onPointSizeChanged(val);
+        if (onGlobalPointSizeChanged) onGlobalPointSizeChanged(val);
     });
     allOpacitySlider->Bind(wxEVT_SLIDER, [this, allOpacitySlider, allOpacityLabel](wxCommandEvent&) {
         int val = allOpacitySlider->GetValue();
         allOpacityLabel->SetLabel(wxString::Format("Opacity: %d%%", val));
         float alpha = static_cast<float>(val) / 100.0f;
         for (int i = 0; i < (int)m_plotTabs.size(); i++)
-            if (onPlotOpacityChanged) onPlotOpacityChanged(i, alpha);
+            if (onOpacityChanged) onOpacityChanged(i, alpha);
     });
     m_histBinsSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         int val = m_histBinsSlider->GetValue();
         m_histBinsLabel->SetLabel(wxString::Format("Hist Bins: %d", val));
-        if (onHistBinsChanged) onHistBinsChanged(val);
+        if (onGlobalHistBinsChanged) onGlobalHistBinsChanged(val);
     });
     m_globalTooltipCheck->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
         if (onGlobalTooltipChanged) onGlobalTooltipChanged(m_globalTooltipCheck->GetValue());
@@ -1164,8 +1171,9 @@ void ControlPanel::CreateAllPage() {
     pSizer->AddStretchSpacer();
     plotsPage->SetSizer(pSizer);
     m_allSubBook->AddPage(plotsPage, "");
+}
 
-    // ---- Page 1: "Brushes & Colormaps" ----
+void ControlPanel::CreateBrushesSubPage() {
     auto* brushPage = new wxScrolledWindow(m_allSubBook);
     brushPage->SetScrollRate(0, 10);
     auto* bSizer = new wxBoxSizer(wxVERTICAL);
@@ -1372,12 +1380,6 @@ void ControlPanel::CreateAllPage() {
     bSizer->AddStretchSpacer();
     brushPage->SetSizer(bSizer);
     m_allSubBook->AddPage(brushPage, "");
-
-    // Default to "All Plots" sub-page
-    SelectAllSubPage(0);
-
-    m_allPage->SetSizer(topSizer);
-    m_book->AddPage(m_allPage, "");
 }
 
 void ControlPanel::SelectAllSubPage(int idx) {

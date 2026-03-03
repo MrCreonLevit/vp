@@ -35,6 +35,13 @@ static void mat3PreRotateX(float* m, float deg) {
     m[6] = s*r1[0] + c*r2[0]; m[7] = s*r1[1] + c*r2[1]; m[8] = s*r1[2] + c*r2[2];
 }
 
+static float angleDelta(float newAngle, float oldAngle) {
+    float d = newAngle - oldAngle;
+    while (d > 180.0f) d -= 360.0f;
+    while (d < -180.0f) d += 360.0f;
+    return d;
+}
+
 static void mat3Identity(float* m) {
     const float id[9] = {1,0,0, 0,1,0, 0,0,1};
     std::memcpy(m, id, sizeof(id));
@@ -236,17 +243,16 @@ void MainFrame::CreateLayout() {
     };
 
     m_controlPanel->onAxisChanged = [this](int plotIndex, int xCol, int yCol) {
-        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            auto& cfg = m_plotConfigs[plotIndex];
-            bool xChanged = (cfg.xCol != static_cast<size_t>(xCol));
-            bool yChanged = (cfg.yCol != static_cast<size_t>(yCol));
-            cfg.xCol = static_cast<size_t>(xCol);
-            cfg.yCol = static_cast<size_t>(yCol);
-            if (xChanged) cfg.xNorm = DefaultNormForColumn(cfg.xCol);
-            if (yChanged) cfg.yNorm = DefaultNormForColumn(cfg.yCol);
-            m_controlPanel->SetPlotConfig(plotIndex, cfg);
-            UpdatePlot(plotIndex);
-        }
+        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
+        auto& cfg = m_plotConfigs[plotIndex];
+        bool xChanged = (cfg.xCol != static_cast<size_t>(xCol));
+        bool yChanged = (cfg.yCol != static_cast<size_t>(yCol));
+        cfg.xCol = static_cast<size_t>(xCol);
+        cfg.yCol = static_cast<size_t>(yCol);
+        if (xChanged) cfg.xNorm = DefaultNormForColumn(cfg.xCol);
+        if (yChanged) cfg.yNorm = DefaultNormForColumn(cfg.yCol);
+        m_controlPanel->SetPlotConfig(plotIndex, cfg);
+        UpdatePlot(plotIndex);
     };
 
     m_controlPanel->onAxisLockChanged = [this](int plotIndex, bool xLock, bool yLock) {
@@ -280,83 +286,71 @@ void MainFrame::CreateLayout() {
     // Axis lock callback is also wired per-canvas below in RebuildGrid
 
     m_controlPanel->onNormChanged = [this](int plotIndex, int xNorm, int yNorm) {
-        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            m_plotConfigs[plotIndex].xNorm = static_cast<NormMode>(xNorm);
-            m_plotConfigs[plotIndex].yNorm = static_cast<NormMode>(yNorm);
-            m_controlPanel->SetPlotConfig(plotIndex, m_plotConfigs[plotIndex]);
-            UpdatePlot(plotIndex);
-        }
+        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
+        m_plotConfigs[plotIndex].xNorm = static_cast<NormMode>(xNorm);
+        m_plotConfigs[plotIndex].yNorm = static_cast<NormMode>(yNorm);
+        m_controlPanel->SetPlotConfig(plotIndex, m_plotConfigs[plotIndex]);
+        UpdatePlot(plotIndex);
     };
 
     m_controlPanel->onZAxisChanged = [this](int plotIndex, int zCol, int zNorm) {
-        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            auto& cfg = m_plotConfigs[plotIndex];
-            bool newColumn = (zCol != cfg.zCol && zCol >= 0);
-            cfg.zCol = zCol;
-            cfg.zNorm = newColumn ? DefaultNormForColumn(static_cast<size_t>(zCol))
-                                  : static_cast<NormMode>(zNorm);
-            UpdatePlot(plotIndex);
-            m_controlPanel->SetPlotConfig(plotIndex, cfg);
-        }
+        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
+        auto& cfg = m_plotConfigs[plotIndex];
+        bool newColumn = (zCol != cfg.zCol && zCol >= 0);
+        cfg.zCol = zCol;
+        cfg.zNorm = newColumn ? DefaultNormForColumn(static_cast<size_t>(zCol))
+                              : static_cast<NormMode>(zNorm);
+        UpdatePlot(plotIndex);
+        m_controlPanel->SetPlotConfig(plotIndex, cfg);
     };
 
     m_controlPanel->onRotationChanged = [this](int plotIndex, float angle) {
-        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            auto& cfg = m_plotConfigs[plotIndex];
-            float delta = angle - cfg.rotationY;
-            while (delta > 180.0f) delta -= 360.0f;
-            while (delta < -180.0f) delta += 360.0f;
-            cfg.rotationY = angle;
-            mat3PreRotateY(cfg.rotMatrix, delta);
-            m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
-        }
+        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
+        auto& cfg = m_plotConfigs[plotIndex];
+        float delta = angleDelta(angle, cfg.rotationY);
+        cfg.rotationY = angle;
+        mat3PreRotateY(cfg.rotMatrix, delta);
+        m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
     };
 
     m_controlPanel->onRotationXChanged = [this](int plotIndex, float angle) {
-        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            auto& cfg = m_plotConfigs[plotIndex];
-            float delta = angle - cfg.rotationX;
-            while (delta > 180.0f) delta -= 360.0f;
-            while (delta < -180.0f) delta += 360.0f;
-            cfg.rotationX = angle;
-            mat3PreRotateX(cfg.rotMatrix, delta);
-            m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
-        }
+        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
+        auto& cfg = m_plotConfigs[plotIndex];
+        float delta = angleDelta(angle, cfg.rotationX);
+        cfg.rotationX = angle;
+        mat3PreRotateX(cfg.rotMatrix, delta);
+        m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
     };
 
     m_controlPanel->onRotationZeroed = [this](int plotIndex, bool zeroY, bool zeroX) {
-        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            auto& cfg = m_plotConfigs[plotIndex];
-            if (zeroY) cfg.rotationY = 0.0f;
-            if (zeroX) cfg.rotationX = 0.0f;
-            // Rebuild matrix from remaining axis value(s)
-            mat3Identity(cfg.rotMatrix);
-            if (cfg.rotationX != 0.0f) mat3PreRotateX(cfg.rotMatrix, cfg.rotationX);
-            if (cfg.rotationY != 0.0f) mat3PreRotateY(cfg.rotMatrix, cfg.rotationY);
-            m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
-            m_controlPanel->SetPlotConfig(plotIndex, cfg);
-        }
+        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
+        auto& cfg = m_plotConfigs[plotIndex];
+        if (zeroY) cfg.rotationY = 0.0f;
+        if (zeroX) cfg.rotationX = 0.0f;
+        // Rebuild matrix from remaining axis value(s)
+        mat3Identity(cfg.rotMatrix);
+        if (cfg.rotationX != 0.0f) mat3PreRotateX(cfg.rotMatrix, cfg.rotationX);
+        if (cfg.rotationY != 0.0f) mat3PreRotateY(cfg.rotMatrix, cfg.rotationY);
+        m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
+        m_controlPanel->SetPlotConfig(plotIndex, cfg);
     };
 
     m_controlPanel->onShowUnselectedChanged = [this](int plotIndex, bool show) {
-        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            m_plotConfigs[plotIndex].showUnselected = show;
-            m_canvases[plotIndex]->SetShowUnselected(show);
-        }
+        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
+        m_plotConfigs[plotIndex].showUnselected = show;
+        m_canvases[plotIndex]->SetShowUnselected(show);
     };
 
     m_controlPanel->onGridLinesChanged = [this](int plotIndex, bool show) {
-        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            m_plotConfigs[plotIndex].showGridLines = show;
-            m_canvases[plotIndex]->SetShowGridLines(show);
-        }
+        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
+        m_plotConfigs[plotIndex].showGridLines = show;
+        m_canvases[plotIndex]->SetShowGridLines(show);
     };
 
     m_controlPanel->onShowHistogramsChanged = [this](int plotIndex, bool show) {
-        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            m_plotConfigs[plotIndex].showHistograms = show;
-            m_canvases[plotIndex]->SetShowHistograms(show);
-        }
+        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
+        m_plotConfigs[plotIndex].showHistograms = show;
+        m_canvases[plotIndex]->SetShowHistograms(show);
     };
 
     m_controlPanel->onGlobalTooltipChanged = [this](bool show) {
@@ -367,25 +361,22 @@ void MainFrame::CreateLayout() {
     };
 
     // Per-plot rendering callbacks
-    m_controlPanel->onPlotPointSizeChanged = [this](int plotIndex, float size) {
-        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            m_plotConfigs[plotIndex].pointSize = size;
-            m_canvases[plotIndex]->SetPointSize(size);
-        }
+    m_controlPanel->onPointSizeChanged = [this](int plotIndex, float size) {
+        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
+        m_plotConfigs[plotIndex].pointSize = size;
+        m_canvases[plotIndex]->SetPointSize(size);
     };
 
-    m_controlPanel->onPlotOpacityChanged = [this](int plotIndex, float alpha) {
-        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            m_plotConfigs[plotIndex].opacity = alpha;
-            m_canvases[plotIndex]->SetOpacity(alpha);
-        }
+    m_controlPanel->onOpacityChanged = [this](int plotIndex, float alpha) {
+        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
+        m_plotConfigs[plotIndex].opacity = alpha;
+        m_canvases[plotIndex]->SetOpacity(alpha);
     };
 
-    m_controlPanel->onPlotHistBinsChanged = [this](int plotIndex, int bins) {
-        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size()) {
-            m_plotConfigs[plotIndex].histBins = bins;
-            m_canvases[plotIndex]->SetHistBins(bins);
-        }
+    m_controlPanel->onHistBinsChanged = [this](int plotIndex, int bins) {
+        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
+        m_plotConfigs[plotIndex].histBins = bins;
+        m_canvases[plotIndex]->SetHistBins(bins);
     };
 
     m_controlPanel->onTabSelected = [this](int plotIndex) {
@@ -397,7 +388,7 @@ void MainFrame::CreateLayout() {
     };
 
     // Global callbacks (from "All" tab) — apply to all plots and update configs
-    m_controlPanel->onPointSizeChanged = [this](float size) {
+    m_controlPanel->onGlobalPointSizeChanged = [this](float size) {
         for (int i = 0; i < (int)m_canvases.size(); i++) {
             m_plotConfigs[i].pointSize = size;
             m_canvases[i]->SetPointSize(size);
@@ -405,7 +396,7 @@ void MainFrame::CreateLayout() {
     };
 
 
-    m_controlPanel->onHistBinsChanged = [this](int bins) {
+    m_controlPanel->onGlobalHistBinsChanged = [this](int bins) {
         for (int i = 0; i < (int)m_canvases.size(); i++) {
             m_plotConfigs[i].histBins = bins;
             m_canvases[i]->SetHistBins(bins);

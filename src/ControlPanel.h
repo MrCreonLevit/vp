@@ -110,16 +110,16 @@ public:
     std::function<void(int plotIndex, bool show)> onShowUnselectedChanged;
     std::function<void(int plotIndex, bool show)> onGridLinesChanged;
     std::function<void(int plotIndex, bool show)> onShowHistogramsChanged;
-    std::function<void(int plotIndex, float size)> onPlotPointSizeChanged;
-    std::function<void(int plotIndex, float alpha)> onPlotOpacityChanged;
-    std::function<void(int plotIndex, int bins)> onPlotHistBinsChanged;
+    std::function<void(int plotIndex, float size)> onPointSizeChanged;
+    std::function<void(int plotIndex, float alpha)> onOpacityChanged;
+    std::function<void(int plotIndex, int bins)> onHistBinsChanged;
     std::function<void(int plotIndex)> onTabSelected;
     std::function<void()> onAllSelected;
 
     // Global callbacks
     std::function<void(bool show)> onGlobalTooltipChanged;
-    std::function<void(float size)> onPointSizeChanged;
-    std::function<void(int bins)> onHistBinsChanged;
+    std::function<void(float size)> onGlobalPointSizeChanged;
+    std::function<void(int bins)> onGlobalHistBinsChanged;
     std::function<void(int colormap, int colorVar, bool reversed)> onColorMapChanged;
     std::function<void(float brightness)> onBackgroundChanged;
     std::function<void(bool defer)> onDeferRedrawsChanged;
@@ -144,6 +144,9 @@ public:
 
 private:
     void CreateAllPage();
+    void CreateAllPlotsSubPage();
+    void CreateBrushesSubPage();
+    void ResetAllAxisDropdowns(bool axes = true, bool norms = true, bool z = true);
     void SelectPage(int pageIndex);  // 0..N-1 = plot, N = "All"
     void SelectAllSubPage(int idx);  // 0 = All Plots, 1 = Brushes & Colormaps
     void RebuildSelectorGrid();
