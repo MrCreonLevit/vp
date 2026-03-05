@@ -35,6 +35,17 @@ static void mat3PreRotateX(float* m, float deg) {
     m[6] = s*r1[0] + c*r2[0]; m[7] = s*r1[1] + c*r2[1]; m[8] = s*r1[2] + c*r2[2];
 }
 
+static void mat3PreRotateZ(float* m, float deg) {
+    float rad = deg * 3.14159265f / 180.0f;
+    float c = std::cos(rad), s = std::sin(rad);
+    // Rz = [ c -s 0; s c 0; 0 0 1 ]  (row-major)
+    // new_row0 = c*row0 - s*row1, new_row1 = s*row0 + c*row1
+    float r0[3] = {m[0], m[1], m[2]};
+    float r1[3] = {m[3], m[4], m[5]};
+    m[0] = c*r0[0] - s*r1[0]; m[1] = c*r0[1] - s*r1[1]; m[2] = c*r0[2] - s*r1[2];
+    m[3] = s*r0[0] + c*r1[0]; m[4] = s*r0[1] + c*r1[1]; m[5] = s*r0[2] + c*r1[2];
+}
+
 static float angleDelta(float newAngle, float oldAngle) {
     float d = newAngle - oldAngle;
     while (d > 180.0f) d -= 360.0f;
@@ -197,6 +208,7 @@ void MainFrame::CreateMenuBar() {
             m_canvases[m_activePlot]->ResetView();
             m_plotConfigs[m_activePlot].rotationY = 0.0f;
             m_plotConfigs[m_activePlot].rotationX = 0.0f;
+            m_plotConfigs[m_activePlot].rotationZ = 0.0f;
             mat3Identity(m_plotConfigs[m_activePlot].rotMatrix);
             m_controlPanel->StopSpinRock(m_activePlot);
             m_controlPanel->SetPlotConfig(m_activePlot, m_plotConfigs[m_activePlot]);
@@ -324,13 +336,24 @@ void MainFrame::CreateLayout() {
         m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
     };
 
-    m_controlPanel->onRotationZeroed = [this](int plotIndex, bool zeroY, bool zeroX) {
+    m_controlPanel->onRotationZChanged = [this](int plotIndex, float angle) {
+        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
+        auto& cfg = m_plotConfigs[plotIndex];
+        float delta = angleDelta(angle, cfg.rotationZ);
+        cfg.rotationZ = angle;
+        mat3PreRotateZ(cfg.rotMatrix, delta);
+        m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
+    };
+
+    m_controlPanel->onRotationZeroed = [this](int plotIndex, bool zeroY, bool zeroX, bool zeroZ) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
         auto& cfg = m_plotConfigs[plotIndex];
         if (zeroY) cfg.rotationY = 0.0f;
         if (zeroX) cfg.rotationX = 0.0f;
+        if (zeroZ) cfg.rotationZ = 0.0f;
         // Rebuild matrix from remaining axis value(s)
         mat3Identity(cfg.rotMatrix);
+        if (cfg.rotationZ != 0.0f) mat3PreRotateZ(cfg.rotMatrix, cfg.rotationZ);
         if (cfg.rotationX != 0.0f) mat3PreRotateX(cfg.rotMatrix, cfg.rotationX);
         if (cfg.rotationY != 0.0f) mat3PreRotateY(cfg.rotMatrix, cfg.rotationY);
         m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
@@ -772,6 +795,7 @@ void MainFrame::RebuildGrid() {
             m_canvases[i]->ResetView();
             m_plotConfigs[i].rotationY = 0.0f;
             m_plotConfigs[i].rotationX = 0.0f;
+            m_plotConfigs[i].rotationZ = 0.0f;
             mat3Identity(m_plotConfigs[i].rotMatrix);
             m_controlPanel->StopSpinRock(i);
             m_controlPanel->SetPlotConfig(i, m_plotConfigs[i]);
@@ -781,6 +805,7 @@ void MainFrame::RebuildGrid() {
                 m_canvases[j]->ResetView();
                 m_plotConfigs[j].rotationY = 0.0f;
                 m_plotConfigs[j].rotationX = 0.0f;
+                m_plotConfigs[j].rotationZ = 0.0f;
                 mat3Identity(m_plotConfigs[j].rotMatrix);
                 m_controlPanel->StopSpinRock(j);
                 m_controlPanel->SetPlotConfig(j, m_plotConfigs[j]);

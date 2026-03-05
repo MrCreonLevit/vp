@@ -35,7 +35,8 @@ public:
     std::function<void(int plotIndex, int zCol, int zNorm)> onZAxisChanged;
     std::function<void(int plotIndex, float angle)> onRotationChanged;
     std::function<void(int plotIndex, float angle)> onRotationXChanged;
-    std::function<void(int plotIndex, bool zeroY, bool zeroX)> onRotationZeroed;
+    std::function<void(int plotIndex, float angle)> onRotationZChanged;
+    std::function<void(int plotIndex, bool zeroY, bool zeroX, bool zeroZ)> onRotationZeroed;
     std::function<void()> onClearSelection;
     std::function<void()> onInvertSelection;
     std::function<void()> onKillSelected;
@@ -60,10 +61,14 @@ private:
     wxStaticText* m_rotationLabel = nullptr;
     wxSlider* m_rotationXSlider = nullptr;
     wxStaticText* m_rotationXLabel = nullptr;
+    wxSlider* m_rotationZSlider = nullptr;
+    wxStaticText* m_rotationZLabel = nullptr;
     wxToggleButton* m_spinButton = nullptr;
     wxToggleButton* m_rockButton = nullptr;
     wxToggleButton* m_spinXButton = nullptr;
     wxToggleButton* m_rockXButton = nullptr;
+    wxToggleButton* m_spinZButton = nullptr;
+    wxToggleButton* m_rockZButton = nullptr;
     float m_spinAngle = 0.0f;
     bool m_spinning = false;
     bool m_rocking = false;
@@ -74,6 +79,11 @@ private:
     bool m_rockingX = false;
     float m_rockXCenter = 0.0f;
     float m_rockXPhase = 0.0f;
+    float m_spinZAngle = 0.0f;
+    bool m_spinningZ = false;
+    bool m_rockingZ = false;
+    float m_rockZCenter = 0.0f;
+    float m_rockZPhase = 0.0f;
     wxCheckBox* m_showUnselected = nullptr;
     wxCheckBox* m_showGridLines = nullptr;
     wxCheckBox* m_showHistograms = nullptr;
@@ -106,7 +116,8 @@ public:
     std::function<void(int plotIndex, int zCol, int zNorm)> onZAxisChanged;
     std::function<void(int plotIndex, float angle)> onRotationChanged;
     std::function<void(int plotIndex, float angle)> onRotationXChanged;
-    std::function<void(int plotIndex, bool zeroY, bool zeroX)> onRotationZeroed;
+    std::function<void(int plotIndex, float angle)> onRotationZChanged;
+    std::function<void(int plotIndex, bool zeroY, bool zeroX, bool zeroZ)> onRotationZeroed;
     std::function<void(int plotIndex, bool show)> onShowUnselectedChanged;
     std::function<void(int plotIndex, bool show)> onGridLinesChanged;
     std::function<void(int plotIndex, bool show)> onShowHistogramsChanged;

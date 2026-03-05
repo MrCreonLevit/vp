@@ -28,6 +28,7 @@ struct PlotConfig {
     NormMode zNorm = NormMode::MinMax;
     float rotationY = 0.0f;  // slider value (degrees, 0-360)
     float rotationX = 0.0f;  // slider value (degrees, 0-360)
+    float rotationZ = 0.0f;  // slider value (degrees, 0-360)
     float rotMatrix[9] = {1,0,0, 0,1,0, 0,0,1};  // accumulated rotation (row-major 3x3)
     bool showUnselected = true;
     bool showGridLines = false;
