@@ -166,7 +166,9 @@ void MainFrame::CreateMenuBar() {
             "  Drag: select (brush) points\n"
             "  Double-click: choose brush\n"
             "  Opt+drag: move selection\n"
-            "  Cmd+drag: extend selection\n"
+            "  Cmd+drag: add to selection\n"
+            "  Cmd+drag inside selection: extend selection by painting\n"
+            "  Cmd+Opt+drag inside selection: remove from selection by painting\n"
             "  Shift+drag: pan\n"
             "  Scroll: pan\n"
             "  Pinch: zoom\n"
@@ -639,8 +641,8 @@ void MainFrame::RebuildGrid() {
         cellPanel->SetSizer(cellSizer);
 
         // Wire callbacks
-        canvas->onBrushRect = [this](int pi, float x0, float y0, float x1, float y1, bool ext) {
-            HandleBrushRect(pi, x0, y0, x1, y1, ext);
+        canvas->onBrushRect = [this](int pi, float x0, float y0, float x1, float y1, int mode) {
+            HandleBrushRect(pi, x0, y0, x1, y1, mode);
         };
         canvas->onSelectionDoubleClick = [this, i](int) {
             wxMenu menu;
@@ -1282,7 +1284,7 @@ void MainFrame::UpdateAllPlots() {
         UpdatePlot(i);
 }
 
-void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, float y1, bool extend) {
+void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, float y1, int brushMode) {
     const auto& ds = m_dataManager.dataset();
     if (ds.numRows == 0)
         return;
@@ -1309,8 +1311,8 @@ void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, flo
     if (m_selection.size() != ds.numRows)
         m_selection.assign(ds.numRows, 0);
 
-    if (!extend) {
-        // Clear only the current brush's selections, preserve other brushes
+    if (brushMode == 0) {
+        // Replace: clear only the current brush's selections, preserve other brushes
         for (auto& s : m_selection)
             if (s == m_activeBrush) s = 0;
     }
@@ -1324,7 +1326,13 @@ void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, flo
         float py = m[3]*ox + m[4]*oy + m[5]*oz;
         if (px >= rectMinX && px <= rectMaxX &&
             py >= rectMinY && py <= rectMaxY) {
-            m_selection[r] = m_activeBrush;
+            if (brushMode == 2) {
+                // Remove: deselect points matching the active brush
+                if (m_selection[r] == m_activeBrush)
+                    m_selection[r] = 0;
+            } else {
+                m_selection[r] = m_activeBrush;
+            }
             matchCount++;
         }
     }

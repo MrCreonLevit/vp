@@ -98,7 +98,8 @@ public:
 
     // Called when user completes a brush rectangle in this canvas.
     // Provides world-space rect so MainFrame can test rows and propagate.
-    std::function<void(int plotIndex, float x0, float y0, float x1, float y1, bool extend)> onBrushRect;
+    // brushMode: 0=replace, 1=extend (add), 2=remove (erase)
+    std::function<void(int plotIndex, float x0, float y0, float x1, float y1, int brushMode)> onBrushRect;
     std::function<void()> onClearRequested;
     std::function<void()> onKillRequested;
     // Called when user pans or zooms this plot
@@ -231,6 +232,8 @@ private:
     bool m_panning = false;
     bool m_selecting = false;
     bool m_translating = false;
+    bool m_painting = false;      // Cmd+drag inside last rect: paint-extend selection
+    bool m_paintErase = false;     // true when painting in erase mode (Cmd+Opt)
     wxPoint m_lastMouse;
     wxPoint m_selectStart;
     wxPoint m_selectEnd;

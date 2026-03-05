@@ -53,7 +53,7 @@ private:
     void SetActivePlot(int plotIndex);
     void HighlightAllPlots();
     void PropagateSelection(const std::vector<int>& selection);
-    void HandleBrushRect(int plotIndex, float x0, float y0, float x1, float y1, bool extend);
+    void HandleBrushRect(int plotIndex, float x0, float y0, float x1, float y1, int brushMode);
     void ClearAllSelections();
     void KillSelectedPoints();
     void InvertAllSelections();

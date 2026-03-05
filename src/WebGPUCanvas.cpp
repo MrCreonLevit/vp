@@ -1684,7 +1684,7 @@ void WebGPUCanvas::OnSize(wxSizeEvent& event) {
 
 void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
     bool isPan = event.ShiftDown() || event.MiddleIsDown() || event.RightIsDown();
-    bool isTranslate = event.AltDown() && m_hasLastRect;
+    bool isTranslate = event.AltDown() && !event.CmdDown() && !event.ControlDown() && m_hasLastRect;
 
     if (event.LeftDClick()) {
         if (onSelectionDoubleClick)
@@ -1699,6 +1699,21 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             onPointHover(m_plotIndex, -1, 0, 0);
         if (isPan || event.MiddleDown() || event.RightDown()) {
             m_panning = true;
+        } else if ((event.CmdDown() || event.ControlDown()) && m_hasLastRect) {
+            // Cmd/Ctrl + click inside last rect: paint mode (add or erase)
+            float wx, wy;
+            ScreenToWorld(event.GetX(), event.GetY(), wx, wy);
+            if (wx >= m_lastRectX0 && wx <= m_lastRectX1 &&
+                wy >= m_lastRectY0 && wy <= m_lastRectY1) {
+                m_painting = true;
+                m_paintErase = event.AltDown();
+            } else {
+                // Cmd+click outside rect: normal extend selection
+                m_selecting = true;
+                m_showLastRect = false;
+                m_selectStart = event.GetPosition();
+                m_selectEnd = m_selectStart;
+            }
         } else if (isTranslate) {
             m_translating = true;
         } else {
@@ -1717,9 +1732,9 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
 
             if (std::abs(m_selectEnd.x - m_selectStart.x) > 3 ||
                 std::abs(m_selectEnd.y - m_selectStart.y) > 3) {
-                bool extend = event.CmdDown() || event.ControlDown();
+                int brushMode = (event.CmdDown() || event.ControlDown()) ? 1 : 0;
                 if (onBrushRect)
-                    onBrushRect(m_plotIndex, wx0, wy0, wx1, wy1, extend);
+                    onBrushRect(m_plotIndex, wx0, wy0, wx1, wy1, brushMode);
                 // Save the rect for later translation
                 m_lastRectX0 = std::min(wx0, wx1);
                 m_lastRectY0 = std::min(wy0, wy1);
@@ -1731,12 +1746,18 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             }
             m_selecting = false;
         }
+        if (m_painting && m_hasLastRect) {
+            // Paint-extend complete: rect stays where it ended
+            m_showLastRect = true;
+            BuildSelRectFromWorld();
+        }
+        m_painting = false;
         if (m_translating && m_hasLastRect) {
             if (m_deferRedraws) {
                 // Deferred translate: apply the final rect position on mouse-up
-                bool extend = event.CmdDown() || event.ControlDown();
+                int brushMode = (event.CmdDown() || event.ControlDown()) ? 1 : 0;
                 if (onBrushRect)
-                    onBrushRect(m_plotIndex, m_lastRectX0, m_lastRectY0, m_lastRectX1, m_lastRectY1, extend);
+                    onBrushRect(m_plotIndex, m_lastRectX0, m_lastRectY0, m_lastRectX1, m_lastRectY1, brushMode);
             }
             m_showLastRect = true;
             BuildSelRectFromWorld();
@@ -1771,15 +1792,39 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             m_lastRectY1 += dy;
             m_lastMouse = pos;
             if (!m_deferRedraws) {
-                bool extend = event.CmdDown() || event.ControlDown();
+                int brushMode = (event.CmdDown() || event.ControlDown()) ? 1 : 0;
                 if (onBrushRect)
-                    onBrushRect(m_plotIndex, m_lastRectX0, m_lastRectY0, m_lastRectX1, m_lastRectY1, extend);
+                    onBrushRect(m_plotIndex, m_lastRectX0, m_lastRectY0, m_lastRectX1, m_lastRectY1, brushMode);
             }
             if (m_deferRedraws) {
                 // Show lightweight native overlay rectangle
                 int sx0, sy0, sx1, sy1;
                 WorldToScreen(m_lastRectX0, m_lastRectY1, sx0, sy0);  // top-left
                 WorldToScreen(m_lastRectX1, m_lastRectY0, sx1, sy1);  // bottom-right
+                ShowSelectionOverlay(sx0, sy0, sx1, sy1);
+            } else {
+                Refresh();
+            }
+        } else if (m_painting && m_hasLastRect) {
+            // Paint-extend: translate the rect and select with extend=true
+            wxSize size = GetClientSize();
+            float hw = 1.0f / m_zoomX;
+            float hh = 1.0f / m_zoomY;
+            float dx = static_cast<float>(pos.x - m_lastMouse.x) / size.GetWidth() * 2.0f * hw;
+            float dy = -static_cast<float>(pos.y - m_lastMouse.y) / size.GetHeight() * 2.0f * hh;
+            m_lastRectX0 += dx;
+            m_lastRectX1 += dx;
+            m_lastRectY0 += dy;
+            m_lastRectY1 += dy;
+            m_lastMouse = pos;
+            // Extend (add) or remove based on mode set at mouse-down
+            int paintMode = m_paintErase ? 2 : 1;
+            if (onBrushRect)
+                onBrushRect(m_plotIndex, m_lastRectX0, m_lastRectY0, m_lastRectX1, m_lastRectY1, paintMode);
+            if (m_deferRedraws) {
+                int sx0, sy0, sx1, sy1;
+                WorldToScreen(m_lastRectX0, m_lastRectY1, sx0, sy0);
+                WorldToScreen(m_lastRectX1, m_lastRectY0, sx1, sy1);
                 ShowSelectionOverlay(sx0, sy0, sx1, sy1);
             } else {
                 Refresh();
@@ -1792,9 +1837,9 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             if (std::abs(m_selectEnd.x - m_selectStart.x) > 3 ||
                 std::abs(m_selectEnd.y - m_selectStart.y) > 3) {
                 if (!m_deferRedraws) {
-                    bool extend = event.CmdDown() || event.ControlDown();
+                    int brushMode = (event.CmdDown() || event.ControlDown()) ? 1 : 0;
                     if (onBrushRect)
-                        onBrushRect(m_plotIndex, wx0, wy0, wx1, wy1, extend);
+                        onBrushRect(m_plotIndex, wx0, wy0, wx1, wy1, brushMode);
                 }
                 // Update saved rect during drag too
                 m_lastRectX0 = std::min(wx0, wx1);
@@ -1964,7 +2009,7 @@ void WebGPUCanvas::OnKeyDown(wxKeyEvent& event) {
                 // Update selection
                 if (onBrushRect)
                     onBrushRect(m_plotIndex, m_lastRectX0, m_lastRectY0,
-                                m_lastRectX1, m_lastRectY1, false);
+                                m_lastRectX1, m_lastRectY1, 0);
 
                 // Show the rect and refresh
                 m_showLastRect = true;
