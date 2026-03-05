@@ -1732,7 +1732,8 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
 
             if (std::abs(m_selectEnd.x - m_selectStart.x) > 3 ||
                 std::abs(m_selectEnd.y - m_selectStart.y) > 3) {
-                int brushMode = (event.CmdDown() || event.ControlDown()) ? 1 : 0;
+                int brushMode = (event.CmdDown() || event.ControlDown())
+                    ? (event.AltDown() ? 2 : 1) : 0;
                 if (onBrushRect)
                     onBrushRect(m_plotIndex, wx0, wy0, wx1, wy1, brushMode);
                 // Save the rect for later translation
@@ -1755,7 +1756,8 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
         if (m_translating && m_hasLastRect) {
             if (m_deferRedraws) {
                 // Deferred translate: apply the final rect position on mouse-up
-                int brushMode = (event.CmdDown() || event.ControlDown()) ? 1 : 0;
+                int brushMode = (event.CmdDown() || event.ControlDown())
+                    ? (event.AltDown() ? 2 : 1) : 0;
                 if (onBrushRect)
                     onBrushRect(m_plotIndex, m_lastRectX0, m_lastRectY0, m_lastRectX1, m_lastRectY1, brushMode);
             }
@@ -1792,7 +1794,8 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             m_lastRectY1 += dy;
             m_lastMouse = pos;
             if (!m_deferRedraws) {
-                int brushMode = (event.CmdDown() || event.ControlDown()) ? 1 : 0;
+                int brushMode = (event.CmdDown() || event.ControlDown())
+                    ? (event.AltDown() ? 2 : 1) : 0;
                 if (onBrushRect)
                     onBrushRect(m_plotIndex, m_lastRectX0, m_lastRectY0, m_lastRectX1, m_lastRectY1, brushMode);
             }
@@ -1837,7 +1840,8 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             if (std::abs(m_selectEnd.x - m_selectStart.x) > 3 ||
                 std::abs(m_selectEnd.y - m_selectStart.y) > 3) {
                 if (!m_deferRedraws) {
-                    int brushMode = (event.CmdDown() || event.ControlDown()) ? 1 : 0;
+                    int brushMode = (event.CmdDown() || event.ControlDown())
+                    ? (event.AltDown() ? 2 : 1) : 0;
                     if (onBrushRect)
                         onBrushRect(m_plotIndex, wx0, wy0, wx1, wy1, brushMode);
                 }
