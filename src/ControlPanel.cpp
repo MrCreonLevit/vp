@@ -80,7 +80,7 @@ void PlotTab::CreateControls(int row, int col) {
     m_zAxis = new wxChoice(this, wxID_ANY);
     m_zAxis->Append("(None)");
     m_zAxis->SetSelection(0);
-    sizer->Add(m_zAxis, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
+    sizer->Add(m_zAxis, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 4);
 
     // Rotation sliders (for 3D) with zero/spin/rock buttons
     sizer->Add(new wxStaticText(this, wxID_ANY, "Rotations"), 0, wxLEFT | wxTOP, 8);
