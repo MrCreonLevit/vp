@@ -42,6 +42,11 @@ public:
     // Remove rows where selection[row] > 0. Returns number of rows removed.
     size_t removeSelectedRows(const std::vector<int>& selection);
 
+    // Replace dataset from pre-parsed text lines (header + data rows).
+    // The first element of `lines` is the column header; the rest are data rows.
+    // Returns true on success.
+    bool replaceFromLines(const std::vector<std::string>& lines);
+
     // Save data to CSV. If selection is provided, only saves rows where selection[row] > 0.
     bool saveAsCsv(const std::string& path, const std::vector<int>& selection = {}) const;
 

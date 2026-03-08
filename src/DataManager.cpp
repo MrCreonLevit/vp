@@ -377,6 +377,50 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
     return true;
 }
 
+bool DataManager::replaceFromLines(const std::vector<std::string>& lines) {
+    if (lines.size() < 2) {
+        m_error = "Need at least a header and one data row";
+        return false;
+    }
+
+    m_data = DataSet{};
+    m_delimiter = ' ';  // stdin protocol uses whitespace
+
+    // First line is the header
+    m_data.columnLabels = splitTokens(lines[0], m_delimiter);
+    m_data.numCols = m_data.columnLabels.size();
+    if (m_data.numCols == 0) {
+        m_error = "Empty header line";
+        return false;
+    }
+
+    m_data.data.reserve(m_data.numCols * (lines.size() - 1));
+
+    for (size_t i = 1; i < lines.size(); i++) {
+        auto tokens = splitTokens(lines[i], m_delimiter);
+        if (tokens.size() < m_data.numCols)
+            continue;  // skip short lines
+        for (size_t col = 0; col < m_data.numCols; col++) {
+            float val = 0.0f;
+            std::istringstream ss(tokens[col]);
+            double dval;
+            if (ss >> dval)
+                val = static_cast<float>(dval);
+            m_data.data.push_back(val);
+        }
+        m_data.numRows++;
+    }
+
+    if (m_data.numRows == 0) {
+        m_error = "No valid data rows";
+        return false;
+    }
+
+    m_data.columnMeta.resize(m_data.numCols);
+    appendRowIndexColumn();
+    return true;
+}
+
 size_t DataManager::removeSelectedRows(const std::vector<int>& selection) {
     if (selection.size() != m_data.numRows)
         return 0;

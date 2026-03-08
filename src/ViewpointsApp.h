@@ -12,4 +12,5 @@ public:
 private:
     wxString m_inputFile;
     long m_maxRows = 0;  // 0 = no limit
+    bool m_stdinMode = false;
 };

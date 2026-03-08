@@ -11,6 +11,9 @@
 #include <vector>
 #include <array>
 #include <unordered_map>
+#include <thread>
+#include <mutex>
+#include <atomic>
 
 class WebGPUCanvas;
 class ControlPanel;
@@ -41,8 +44,10 @@ struct PlotConfig {
 class MainFrame : public wxFrame {
 public:
     MainFrame();
+    ~MainFrame();
     void LoadFileFromPath(const std::string& path);
     void SetMaxRows(size_t maxRows) { m_maxRows = maxRows; }
+    void StartStdinReader(const std::string& header);
 
 private:
     void CreateMenuBar();
@@ -152,6 +157,16 @@ private:
     const std::vector<float>& GetNormalized(size_t col, NormMode mode);
     void InvalidateNormCache();
 
+    // Stdin streaming mode
+    std::thread m_stdinThread;
+    std::mutex m_stdinMutex;
+    std::atomic<bool> m_stdinRunning{false};
+    std::vector<std::string> m_stdinSnapshot;  // guarded by m_stdinMutex
+    std::string m_stdinHeader;
+    bool m_stdinFirstSnapshot = true;
+    std::vector<int> m_stdinPrevPIDs;  // PIDs from previous snapshot for selection tracking
+    void OnStdinSnapshot(wxCommandEvent& event);
+
     enum {
         ID_AddRow = wxID_HIGHEST + 1,
         ID_AddCol,
@@ -161,5 +176,6 @@ private:
         ID_SaveAll,
         ID_SaveSelected,
         ID_Shortcuts,
+        ID_StdinSnapshot,
     };
 };

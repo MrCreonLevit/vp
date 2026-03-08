@@ -2,6 +2,8 @@
 #include "ViewpointsApp.h"
 #include "MainFrame.h"
 #include <wx/cmdline.h>
+#include <iostream>
+#include <string>
 
 void ViewpointsApp::OnInitCmdLine(wxCmdLineParser& parser) {
     wxApp::OnInitCmdLine(parser);
@@ -9,6 +11,7 @@ void ViewpointsApp::OnInitCmdLine(wxCmdLineParser& parser) {
                      wxCMD_LINE_VAL_STRING, wxCMD_LINE_PARAM_OPTIONAL);
     parser.AddOption("n", "number-of-rows", "Maximum number of rows to read",
                      wxCMD_LINE_VAL_NUMBER, wxCMD_LINE_PARAM_OPTIONAL);
+    parser.AddSwitch("", "stdin", "Read streaming data from stdin (pipe mode)");
     parser.AddParam("input file", wxCMD_LINE_VAL_STRING, wxCMD_LINE_PARAM_OPTIONAL);
 }
 
@@ -20,6 +23,7 @@ bool ViewpointsApp::OnCmdLineParsed(wxCmdLineParser& parser) {
         m_inputFile = parser.GetParam(0);
     }
     parser.Found("n", &m_maxRows);
+    m_stdinMode = parser.Found("stdin");
     return wxApp::OnCmdLineParsed(parser);
 }
 
@@ -33,7 +37,18 @@ bool ViewpointsApp::OnInit() {
     if (m_maxRows > 0)
         frame->SetMaxRows(static_cast<size_t>(m_maxRows));
 
-    if (!m_inputFile.empty()) {
+    if (m_stdinMode) {
+        // Read header line from stdin, then start streaming
+        std::string header;
+        if (std::getline(std::cin, header)) {
+            if (!header.empty() && header.back() == '\r')
+                header.pop_back();
+            frame->StartStdinReader(header);
+        } else {
+            wxMessageBox("No header line received on stdin", "Stdin Error",
+                         wxOK | wxICON_ERROR);
+        }
+    } else if (!m_inputFile.empty()) {
         frame->LoadFileFromPath(m_inputFile.ToStdString());
     } else if (wxFileExists("data/sampledata.txt")) {
         frame->LoadFileFromPath("data/sampledata.txt");

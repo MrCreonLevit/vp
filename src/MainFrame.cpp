@@ -10,6 +10,7 @@
 #include <queue>
 #include <unordered_set>
 #include <cstring>
+#include <iostream>
 
 // Pre-multiply a row-major 3x3 rotation matrix by Ry(deg) or Rx(deg).
 // R_new = R_delta * R_old — rotates around screen axis.
@@ -133,6 +134,8 @@ MainFrame::MainFrame()
     CreateLayout();
     CreateStatusBar();
     SetStatusText("Ready — use File > Open to load data");
+
+    Bind(wxEVT_COMMAND_MENU_SELECTED, &MainFrame::OnStdinSnapshot, this, ID_StdinSnapshot);
 }
 
 void MainFrame::CreateMenuBar() {
@@ -1585,6 +1588,148 @@ void MainFrame::OnSave(bool selectedOnly) {
 
 void MainFrame::LoadFileFromPath(const std::string& path) {
     CallAfter([this, path]() { LoadFile(path); });
+}
+
+MainFrame::~MainFrame() {
+    m_stdinRunning = false;
+    if (m_stdinThread.joinable())
+        m_stdinThread.join();
+}
+
+void MainFrame::StartStdinReader(const std::string& header) {
+    m_stdinHeader = header;
+    m_stdinRunning = true;
+    m_stdinFirstSnapshot = true;
+
+    SetTitle("Viewpoints — stdin (streaming)");
+    SetStatusText("Waiting for first data snapshot from stdin...");
+
+    m_stdinThread = std::thread([this]() {
+        std::string line;
+        std::vector<std::string> currentSnapshot;
+
+        while (m_stdinRunning && std::getline(std::cin, line)) {
+            // Strip trailing \r
+            if (!line.empty() && line.back() == '\r')
+                line.pop_back();
+
+            if (line == "---") {
+                // Snapshot complete — post to main thread
+                if (!currentSnapshot.empty()) {
+                    {
+                        std::lock_guard<std::mutex> lock(m_stdinMutex);
+                        m_stdinSnapshot = std::move(currentSnapshot);
+                    }
+                    currentSnapshot.clear();
+
+                    // Post event to main thread
+                    auto* evt = new wxCommandEvent(wxEVT_COMMAND_MENU_SELECTED, ID_StdinSnapshot);
+                    wxQueueEvent(this, evt);
+                }
+            } else if (!line.empty()) {
+                currentSnapshot.push_back(line);
+            }
+        }
+        m_stdinRunning = false;
+    });
+}
+
+void MainFrame::OnStdinSnapshot(wxCommandEvent& event) {
+    std::vector<std::string> snapshot;
+    {
+        std::lock_guard<std::mutex> lock(m_stdinMutex);
+        snapshot = std::move(m_stdinSnapshot);
+    }
+
+    if (snapshot.empty())
+        return;
+
+    // Prepend the header line
+    snapshot.insert(snapshot.begin(), m_stdinHeader);
+
+    if (!m_dataManager.replaceFromLines(snapshot)) {
+        fprintf(stderr, "stdin snapshot parse failed: %s\n", m_dataManager.errorMessage().c_str());
+        return;
+    }
+
+    const auto& ds = m_dataManager.dataset();
+    InvalidateNormCache();
+
+    if (m_stdinFirstSnapshot) {
+        m_stdinFirstSnapshot = false;
+        m_controlPanel->SetColumns(ds.columnLabels);
+
+        // Auto-assign column pairs to plots
+        int numPlots = m_gridRows * m_gridCols;
+        for (int i = 0; i < numPlots; i++) {
+            size_t col1 = (i * 2) % ds.numCols;
+            size_t col2 = (i * 2 + 1) % ds.numCols;
+            m_plotConfigs[i] = {col1, col2};
+            m_plotConfigs[i].xNorm = DefaultNormForColumn(col1);
+            m_plotConfigs[i].yNorm = DefaultNormForColumn(col2);
+        }
+        for (int i = 0; i < numPlots; i++) {
+            int next = (i + 1) % numPlots;
+            m_plotConfigs[i].zCol = static_cast<int>(m_plotConfigs[next].xCol);
+            m_plotConfigs[i].zNorm = DefaultNormForColumn(m_plotConfigs[next].xCol);
+        }
+
+        float defaultSize = std::max(0.5f, std::min(30.0f,
+            14.0f - 2.0f * std::log10(static_cast<float>(ds.numRows))));
+        defaultSize = std::round(defaultSize * 10.0f) / 10.0f;
+        float defaultOpacity = std::max(0.03f, std::min(1.0f,
+            1.2f - 0.2f * std::log10(static_cast<float>(ds.numRows))));
+        defaultOpacity = std::round(defaultOpacity * 100.0f) / 100.0f;
+        for (auto& cfg : m_plotConfigs) {
+            cfg.pointSize = defaultSize;
+            cfg.opacity = defaultOpacity;
+        }
+        for (auto* c : m_canvases) {
+            c->SetPointSize(defaultSize);
+            c->SetOpacity(defaultOpacity);
+        }
+        m_controlPanel->SetGlobalPointSize(defaultSize);
+
+        for (int i = 0; i < numPlots; i++)
+            m_controlPanel->SetPlotConfig(i, m_plotConfigs[i]);
+
+        SetActivePlot(0);
+    }
+
+    // Preserve selections by PID (column 0) across snapshots
+    if (m_stdinFirstSnapshot) {
+        // Already set to false above, but just in case
+        m_selection.assign(ds.numRows, 0);
+    } else {
+        // Build PID -> selection map from old selection
+        // (m_selection still has old size, m_stdinPrevPIDs has old PIDs)
+        std::unordered_map<int, int> pidSelection;
+        for (size_t r = 0; r < m_stdinPrevPIDs.size() && r < m_selection.size(); r++) {
+            if (m_selection[r] > 0)
+                pidSelection[m_stdinPrevPIDs[r]] = m_selection[r];
+        }
+
+        // Rebuild selection for new rows by matching PIDs
+        m_selection.assign(ds.numRows, 0);
+        for (size_t r = 0; r < ds.numRows; r++) {
+            int pid = static_cast<int>(ds.value(r, 0));
+            auto it = pidSelection.find(pid);
+            if (it != pidSelection.end())
+                m_selection[r] = it->second;
+        }
+    }
+
+    // Store current PIDs for next snapshot
+    m_stdinPrevPIDs.resize(ds.numRows);
+    for (size_t r = 0; r < ds.numRows; r++)
+        m_stdinPrevPIDs[r] = static_cast<int>(ds.value(r, 0));
+
+    m_dataStatusText = wxString::Format("%zu rows x %zu columns (streaming)", ds.numRows, ds.numCols);
+    int selCount = 0;
+    for (int s : m_selection) if (s > 0) selCount++;
+    float pct = ds.numRows > 0 ? (100.0f * selCount / ds.numRows) : 0;
+    SetStatusText(m_dataStatusText + wxString::Format("  |  Selected: %d / %zu (%.1f%%)", selCount, ds.numRows, pct));
+    UpdateAllPlots();
 }
 
 void MainFrame::OnQuit(wxCommandEvent& event) { Close(true); }
