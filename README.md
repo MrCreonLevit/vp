@@ -1,3 +1,5 @@
+<img width="3114" height="1846" alt="2026-03-13 09 12 35" src="https://github.com/user-attachments/assets/94119291-c586-465f-bc08-7b32067ca453" />
+
 # Viewpoints
 
 **Fast interactive linked scatter plots for exploring large multivariate datasets.**
@@ -10,7 +12,7 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 
 ### Data Visualization
 - **Multi-plot grid** — configurable NxM grid of scatter plots, each showing a different pair (or more) of variables; **draggable dividers** between plots to resize rows and columns independently
-- **Linked brushing** — select points in any plot, see them highlighted in all plots
+- **Linked brushing** — select points in any plot, see them highlighted in all plots. Updates dynamically.
 - **7 different brushes** — each with independent color, opacity, symbol, and size; "All" button to apply changes to every brush at once
 - **10 procedural point symbols** — circle, square, diamond, triangles, cross, plus, star, ring, outlines (SDF-based, crisp at any zoom)
 - **Additive blending** — dense regions glow brighter, revealing structure in overplotted data
@@ -32,7 +34,7 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 - **Save All / Save Selected** — export data or just brushed points as Parquet or CSV
 - **10 normalization modes** — Min-Max, +only, Max |val|, Trim percentile, 3 Sigma, Log10, Arctan, Rank, Gaussianize (per-plot, per-axis, smart defaults)
 - **Large dataset subsampling** — datasets over 4M points are automatically subsampled per plot for GPU memory management
-- Tested with datasets up to **12.6 million rows** (NYC taxi data)
+- **FAST** can render and re-render millions of points in all plots simultaneously at interactive speeds on a Mac with Apple Silicon. 
 
 ### Interaction
 - **Trackpad Scroll** (two-finger) or shift-drag to pan
