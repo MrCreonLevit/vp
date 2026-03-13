@@ -1,5 +1,3 @@
-<img width="3114" height="1846" alt="2026-03-13 09 12 35" src="https://github.com/user-attachments/assets/94119291-c586-465f-bc08-7b32067ca453" />
-
 # Viewpoints
 
 **Fast interactive linked scatter plots for exploring large multivariate datasets.**
