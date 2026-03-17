@@ -31,6 +31,8 @@ bool ViewpointsApp::OnInit() {
     if (!wxApp::OnInit())
         return false;
 
+    wxInitAllImageHandlers();
+
     auto* frame = new MainFrame();
     frame->Show();
 

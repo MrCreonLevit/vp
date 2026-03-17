@@ -442,6 +442,17 @@ size_t DataManager::removeSelectedRows(const std::vector<int>& selection) {
     m_data.numRows -= removed;
     m_data.data.shrink_to_fit();
 
+    // Keep pointImages in sync
+    if (!m_data.pointImages.empty()) {
+        std::vector<std::vector<uint8_t>> newImages;
+        newImages.reserve(m_data.numRows);
+        for (size_t row = 0; row < selection.size(); row++) {
+            if (selection[row] == 0)
+                newImages.push_back(std::move(m_data.pointImages[row]));
+        }
+        m_data.pointImages = std::move(newImages);
+    }
+
     fprintf(stderr, "Removed %zu selected rows, %zu rows remaining\n",
             removed, m_data.numRows);
     return removed;
@@ -643,10 +654,76 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
         fprintf(stderr, "Parquet: %lld rows x %d columns\n", numRows, numCols);
     }
 
-    // Identify accepted columns (numeric + string types)
+    // Detect a binary column containing PNG images (first one wins)
+    int pngColIdx = -1;
+    for (int c = 0; c < numCols; c++) {
+        auto typeId = table->column(c)->type()->id();
+        if (typeId != arrow::Type::BINARY && typeId != arrow::Type::LARGE_BINARY)
+            continue;
+        // Check first non-null value for PNG magic bytes (\x89PNG)
+        auto chunked = table->column(c);
+        bool foundPng = false;
+        for (int chunk = 0; chunk < chunked->num_chunks() && !foundPng; chunk++) {
+            auto arr = chunked->chunk(chunk);
+            for (int64_t r = 0; r < arr->length(); r++) {
+                if (arr->IsNull(r)) continue;
+                const uint8_t* val = nullptr;
+                int32_t len = 0;
+                if (typeId == arrow::Type::BINARY) {
+                    auto binArr = std::static_pointer_cast<arrow::BinaryArray>(arr);
+                    val = binArr->GetValue(r, &len);
+                } else {
+                    auto binArr = std::static_pointer_cast<arrow::LargeBinaryArray>(arr);
+                    int64_t len64 = 0;
+                    val = binArr->GetValue(r, &len64);
+                    len = static_cast<int32_t>(std::min(len64, (int64_t)INT32_MAX));
+                }
+                if (len >= 8 && val[0] == 0x89 && val[1] == 'P' && val[2] == 'N' && val[3] == 'G') {
+                    pngColIdx = c;
+                    foundPng = true;
+                }
+                break; // only check first non-null value
+            }
+        }
+        if (pngColIdx >= 0) break;
+    }
+
+    // Extract PNG images if found
+    if (pngColIdx >= 0) {
+        m_data.pointImageColumnName = table->field(pngColIdx)->name();
+        m_data.pointImages.resize(static_cast<size_t>(numRows));
+        auto chunked = table->column(pngColIdx);
+        auto typeId = chunked->type()->id();
+        size_t rowOffset = 0;
+        for (int chunk = 0; chunk < chunked->num_chunks(); chunk++) {
+            auto arr = chunked->chunk(chunk);
+            for (int64_t r = 0; r < arr->length(); r++) {
+                if (!arr->IsNull(r)) {
+                    const uint8_t* val = nullptr;
+                    int64_t len = 0;
+                    if (typeId == arrow::Type::BINARY) {
+                        auto binArr = std::static_pointer_cast<arrow::BinaryArray>(arr);
+                        int32_t len32 = 0;
+                        val = binArr->GetValue(r, &len32);
+                        len = len32;
+                    } else {
+                        auto binArr = std::static_pointer_cast<arrow::LargeBinaryArray>(arr);
+                        val = binArr->GetValue(r, &len);
+                    }
+                    m_data.pointImages[rowOffset + r].assign(val, val + len);
+                }
+            }
+            rowOffset += arr->length();
+        }
+        fprintf(stderr, "  Extracted PNG images from column '%s' (%zu rows)\n",
+                m_data.pointImageColumnName.c_str(), m_data.pointImages.size());
+    }
+
+    // Identify accepted columns (numeric + string types, skip PNG column)
     std::vector<int> acceptedCols;
     std::vector<bool> isStringCol;
     for (int c = 0; c < numCols; c++) {
+        if (c == pngColIdx) continue;
         auto type = table->column(c)->type();
         if (type->id() == arrow::Type::DOUBLE || type->id() == arrow::Type::FLOAT ||
             type->id() == arrow::Type::INT8 || type->id() == arrow::Type::INT16 ||

@@ -4,6 +4,7 @@
 #include "ControlPanel.h"
 #include <wx/popupwin.h>
 #include <wx/progdlg.h>
+#include <wx/mstream.h>
 #include <algorithm>
 #include <cmath>
 #include <random>
@@ -64,6 +65,12 @@ class PointTooltip : public wxPopupWindow {
 public:
     PointTooltip(wxWindow* parent) : wxPopupWindow(parent, wxBORDER_SIMPLE) {
         SetBackgroundColour(wxColour(25, 25, 38));
+        m_sizer = new wxBoxSizer(wxVERTICAL);
+
+        m_imageBitmap = new wxStaticBitmap(this, wxID_ANY, wxNullBitmap);
+        m_imageBitmap->Hide();
+        m_sizer->Add(m_imageBitmap, 0, wxALL, 4);
+
         m_text = new wxStaticText(this, wxID_ANY, "");
         m_text->SetForegroundColour(wxColour(200, 210, 230));
         m_text->SetBackgroundColour(wxColour(25, 25, 38));
@@ -71,13 +78,35 @@ public:
         font.SetPointSize(font.GetPointSize() - 1);
         font.SetFamily(wxFONTFAMILY_TELETYPE);
         m_text->SetFont(font);
-        auto* sizer = new wxBoxSizer(wxVERTICAL);
-        sizer->Add(m_text, 0, wxALL, 4);
-        SetSizer(sizer);
+        m_sizer->Add(m_text, 0, wxALL, 4);
+
+        SetSizer(m_sizer);
     }
 
-    void ShowAt(const wxString& content, const wxPoint& screenPos) {
+    void ShowAt(const wxString& content, const wxPoint& screenPos,
+                const std::vector<uint8_t>* pngData = nullptr) {
         m_text->SetLabel(content);
+
+        if (pngData && !pngData->empty()) {
+            wxMemoryInputStream stream(pngData->data(), pngData->size());
+            wxImage img(stream, wxBITMAP_TYPE_PNG);
+            if (img.IsOk()) {
+                // Scale to reasonable tooltip size (max 128px on longest side)
+                int maxDim = 128;
+                int w = img.GetWidth(), h = img.GetHeight();
+                if (w > maxDim || h > maxDim) {
+                    double scale = (double)maxDim / std::max(w, h);
+                    img.Rescale((int)(w * scale), (int)(h * scale), wxIMAGE_QUALITY_BILINEAR);
+                }
+                m_imageBitmap->SetBitmap(wxBitmap(img));
+                m_imageBitmap->Show();
+            } else {
+                m_imageBitmap->Hide();
+            }
+        } else {
+            m_imageBitmap->Hide();
+        }
+
         Layout();
         Fit();
         SetPosition(screenPos);
@@ -85,6 +114,8 @@ public:
     }
 
 private:
+    wxBoxSizer* m_sizer;
+    wxStaticBitmap* m_imageBitmap;
     wxStaticText* m_text;
 };
 
@@ -838,9 +869,15 @@ void MainFrame::RebuildGrid() {
             m_hoveredDataRow = dataRow;
             wxString text = BuildTooltipText(dataRow);
 
+            const std::vector<uint8_t>* pngData = nullptr;
+            if (dataRow >= 0 && dataRow < (int)ds.pointImages.size() &&
+                !ds.pointImages[dataRow].empty()) {
+                pngData = &ds.pointImages[dataRow];
+            }
+
             if (pi >= 0 && pi < (int)m_tooltips.size()) {
                 wxPoint screenPos = m_canvases[pi]->ClientToScreen(wxPoint(sx, sy));
-                m_tooltips[pi]->ShowAt(text, screenPos + wxPoint(12, 12));
+                m_tooltips[pi]->ShowAt(text, screenPos + wxPoint(12, 12), pngData);
             }
             for (int j = 0; j < (int)m_tooltips.size(); j++) {
                 if (j != pi) m_tooltips[j]->Hide();

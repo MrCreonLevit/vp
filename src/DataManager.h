@@ -5,6 +5,7 @@
 #include <vector>
 #include <functional>
 #include <cstddef>
+#include <cstdint>
 
 struct ColumnMeta {
     bool isCategorical = false;
@@ -24,6 +25,10 @@ struct DataSet {
 
     // Get a column's min and max values
     void columnRange(size_t col, float& minVal, float& maxVal) const;
+
+    // Per-point PNG images extracted from a binary parquet column (one per row, may be empty)
+    std::vector<std::vector<uint8_t>> pointImages;
+    std::string pointImageColumnName;
 };
 
 class DataManager {

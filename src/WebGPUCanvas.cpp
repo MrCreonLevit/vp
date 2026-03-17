@@ -155,6 +155,10 @@ int WebGPUCanvas::FindNearestPoint(int sx, int sy) {
                         m[3]==0 && m[4]==1 && m[5]==0);
 
     for (size_t i = 0; i < numPoints; i++) {
+        // Skip hidden (unselected) points
+        if (!m_showUnselected && (i >= m_selection.size() || m_selection[i] == 0))
+            continue;
+
         float px = m_basePositions[i * 2];
         float py = m_basePositions[i * 2 + 1];
 
