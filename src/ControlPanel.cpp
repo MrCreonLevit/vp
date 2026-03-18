@@ -398,15 +398,22 @@ void PlotTab::SetColumns(const std::vector<std::string>& names) {
 
 void PlotTab::SyncFromConfig(const PlotConfig& cfg) {
     m_suppress = true;
-    if ((int)cfg.xCol < m_xAxis->GetCount()) m_xAxis->SetSelection(cfg.xCol);
-    if ((int)cfg.yCol < m_yAxis->GetCount()) m_yAxis->SetSelection(cfg.yCol);
+    // Only call SetSelection when the value actually differs to avoid
+    // spurious wxEVT_CHOICE events on macOS Cocoa.
+    auto setIfDiff = [](wxChoice* ch, int sel) {
+        if (sel >= 0 && sel < (int)ch->GetCount() && ch->GetSelection() != sel)
+            ch->SetSelection(sel);
+    };
+    setIfDiff(m_xAxis, cfg.xCol);
+    setIfDiff(m_yAxis, cfg.yCol);
     m_xLock->SetValue(cfg.xLocked);
     m_yLock->SetValue(cfg.yLocked);
-    if ((int)cfg.xNorm < m_xNorm->GetCount()) m_xNorm->SetSelection(static_cast<int>(cfg.xNorm));
-    if ((int)cfg.yNorm < m_yNorm->GetCount()) m_yNorm->SetSelection(static_cast<int>(cfg.yNorm));
+    setIfDiff(m_xNorm, static_cast<int>(cfg.xNorm));
+    setIfDiff(m_yNorm, static_cast<int>(cfg.yNorm));
     // Z-axis: -1="(None)" maps to dropdown index 0, column N maps to index N+1
-    m_zAxis->SetSelection(cfg.zCol < 0 ? 0 : std::min(cfg.zCol + 1, (int)m_zAxis->GetCount() - 1));
-    if ((int)cfg.zNorm < m_zNorm->GetCount()) m_zNorm->SetSelection(static_cast<int>(cfg.zNorm));
+    int zSel = cfg.zCol < 0 ? 0 : std::min(cfg.zCol + 1, (int)m_zAxis->GetCount() - 1);
+    setIfDiff(m_zAxis, zSel);
+    setIfDiff(m_zNorm, static_cast<int>(cfg.zNorm));
     if (!m_spinning && !m_rocking) {
         m_spinAngle = cfg.rotationY;
         m_rotationSlider->SetValue(static_cast<int>(cfg.rotationY));

@@ -1085,6 +1085,7 @@ void MainFrame::SetActivePlot(int plotIndex) {
     if (plotIndex < 0 || plotIndex >= (int)m_canvases.size())
         return;
 
+    bool alreadyActive = (m_activePlot == plotIndex);
     m_activePlot = plotIndex;
 
     // Highlight label/tick area of active plot (not the canvas itself)
@@ -1107,12 +1108,15 @@ void MainFrame::SetActivePlot(int plotIndex) {
     // Canvas background stays black (no SetActive highlight)
     for (auto* c : m_canvases) c->SetActive(false);
 
-    m_controlPanel->SelectTab(plotIndex);
-    if (plotIndex < (int)m_plotConfigs.size())
-        m_controlPanel->SetPlotConfig(plotIndex, m_plotConfigs[plotIndex]);
+    if (!alreadyActive) {
+        m_controlPanel->SelectTab(plotIndex);
+        if (plotIndex < (int)m_plotConfigs.size())
+            m_controlPanel->SetPlotConfig(plotIndex, m_plotConfigs[plotIndex]);
+    }
 }
 
 void MainFrame::HighlightAllPlots() {
+    m_activePlot = -1;  // invalidate so next SetActivePlot always syncs
     wxColour activeBg(50, 50, 70);
     for (auto& pw : m_plotWidgets) {
         if (pw.cellPanel) pw.cellPanel->SetBackgroundColour(activeBg);
