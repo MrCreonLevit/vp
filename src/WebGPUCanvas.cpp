@@ -959,26 +959,30 @@ void WebGPUCanvas::UpdateHistograms() {
     float xBinWidth = (xViewMax - xViewMin) / numBins;
     float yBinWidth = (yViewMax - yViewMin) / numBins;
 
+    // Determine which brushes are active
+    constexpr int MAX_BRUSHES = 8;  // brush 0 = all points, brushes 1-7 = selected
     std::vector<int> xBinsAll(numBins, 0), yBinsAll(numBins, 0);
-    std::vector<int> xBinsSel(numBins, 0), yBinsSel(numBins, 0);
+    std::vector<std::vector<int>> xBinsPerBrush(MAX_BRUSHES, std::vector<int>(numBins, 0));
+    std::vector<std::vector<int>> yBinsPerBrush(MAX_BRUSHES, std::vector<int>(numBins, 0));
 
     for (size_t i = 0; i < numPoints; i++) {
         float px = m_basePositions[i * 2];
         float py = m_basePositions[i * 2 + 1];
-        bool selected = (i < m_selection.size() && m_selection[i] > 0);
+        int brush = (i < m_selection.size()) ? m_selection[i] : 0;
+        if (brush < 0 || brush >= MAX_BRUSHES) brush = 0;
 
         if (px >= xViewMin && px <= xViewMax) {
             int xBin = static_cast<int>((px - xViewMin) / xBinWidth);
             xBin = std::max(0, std::min(xBin, numBins - 1));
             xBinsAll[xBin]++;
-            if (selected) xBinsSel[xBin]++;
+            if (brush > 0) xBinsPerBrush[brush][xBin]++;
         }
 
         if (py >= yViewMin && py <= yViewMax) {
             int yBin = static_cast<int>((py - yViewMin) / yBinWidth);
             yBin = std::max(0, std::min(yBin, numBins - 1));
             yBinsAll[yBin]++;
-            if (selected) yBinsSel[yBin]++;
+            if (brush > 0) yBinsPerBrush[brush][yBin]++;
         }
     }
 
@@ -988,7 +992,7 @@ void WebGPUCanvas::UpdateHistograms() {
     if (yMaxAll == 0) yMaxAll = 1;
 
     std::vector<PointVertex> histVerts;
-    histVerts.reserve(numBins * 24 * 2);  // outline bars use more vertices
+    histVerts.reserve(numBins * 24 * (MAX_BRUSHES + 1));  // outline bars for all + per-brush
 
     // Filled rectangle helper
     auto addFilledBar = [&](float x0, float y0, float x1, float y1,
@@ -1065,13 +1069,31 @@ void WebGPUCanvas::UpdateHistograms() {
             addHLine(base, base + prevH, 1.0f, r, g, b, a);
     };
 
-    // X histogram (bottom edge)
+    // X histogram (bottom edge) — all points outline
     addStaircaseX(xBinsAll, xMaxAll, -1.0f, 0.3f, 0.5f, 0.8f, 0.5f);
-    addStaircaseX(xBinsSel, xMaxAll, -1.0f, 1.0f, 0.5f, 0.2f, 0.7f);
-
-    // Y histogram (left edge)
+    // Y histogram (left edge) — all points outline
     addStaircaseY(yBinsAll, yMaxAll, -1.0f, 0.3f, 0.5f, 0.8f, 0.5f);
-    addStaircaseY(yBinsSel, yMaxAll, -1.0f, 1.0f, 0.5f, 0.2f, 0.7f);
+
+    // Per-brush selected histograms using each brush's color
+    for (int b = 1; b < MAX_BRUSHES; b++) {
+        // Check if this brush has any points
+        bool hasX = false, hasY = false;
+        for (int i = 0; i < numBins; i++) {
+            if (xBinsPerBrush[b][i] > 0) hasX = true;
+            if (yBinsPerBrush[b][i] > 0) hasY = true;
+        }
+        if (!hasX && !hasY) continue;
+
+        float r = 1.0f, g = 0.5f, bv = 0.2f;
+        if (b < (int)m_brushColors.size()) {
+            r = m_brushColors[b].r;
+            g = m_brushColors[b].g;
+            bv = m_brushColors[b].b;
+        }
+
+        if (hasX) addStaircaseX(xBinsPerBrush[b], xMaxAll, -1.0f, r, g, bv, 0.7f);
+        if (hasY) addStaircaseY(yBinsPerBrush[b], yMaxAll, -1.0f, r, g, bv, 0.7f);
+    }
 
     m_histVertexCount = histVerts.size();
 
