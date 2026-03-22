@@ -139,6 +139,24 @@ static std::vector<float> computeNiceTicks(float rangeMin, float rangeMax, int a
     return ticks;
 }
 
+// Format a number compactly using SI suffixes for large values
+static wxString formatCompact(float val) {
+    if (val == 0.0f) return "0";
+    float absVal = std::abs(val);
+    const char* sign = val < 0 ? "-" : "";
+    if (absVal >= 1e9f)
+        return wxString::Format("%s%.3gB", sign, absVal / 1e9f);
+    if (absVal >= 1e6f)
+        return wxString::Format("%s%.3gM", sign, absVal / 1e6f);
+    if (absVal >= 1e4f)
+        return wxString::Format("%s%.3gk", sign, absVal / 1e3f);
+    if (absVal >= 1.0f)
+        return wxString::Format("%s%.4g", sign, absVal);
+    if (absVal >= 0.001f)
+        return wxString::Format("%s%.4g", sign, absVal);
+    return wxString::Format("%s%.2g", sign, absVal);
+}
+
 MainFrame::MainFrame()
     : wxFrame(nullptr, wxID_ANY, "Viewpoints")
 {
@@ -610,12 +628,12 @@ void MainFrame::RebuildGrid() {
         leftSizer->Add(pw.yLabel, 0, wxEXPAND | wxLEFT, 4);
 
         // Y tick panel: manually positioned labels
-        pw.yTickPanel = new wxPanel(cellPanel, wxID_ANY, wxDefaultPosition, wxSize(16, -1));
-        pw.yTickPanel->SetMinSize(wxSize(16, -1));
+        pw.yTickPanel = new wxPanel(cellPanel, wxID_ANY, wxDefaultPosition, wxSize(38, -1));
+        pw.yTickPanel->SetMinSize(wxSize(38, -1));
         pw.yTickPanel->SetBackgroundColour(bgColor);
         for (int t = 0; t < MAX_NICE_TICKS; t++) {
             auto* tickLabel = new wxStaticText(pw.yTickPanel, wxID_ANY, "",
-                wxDefaultPosition, wxDefaultSize, wxST_NO_AUTORESIZE);
+                wxDefaultPosition, wxDefaultSize, wxALIGN_RIGHT | wxST_NO_AUTORESIZE);
             tickLabel->SetFont(tickFont);
             tickLabel->SetForegroundColour(tickTextColor);
             tickLabel->SetBackgroundColour(bgColor);
@@ -655,7 +673,7 @@ void MainFrame::RebuildGrid() {
             arrow->SetForegroundColour(arrowColor);
             arrow->SetBackgroundColour(bgColor);
             auto arrowFont = arrow->GetFont();
-            arrowFont.SetPointSize(arrowFont.GetPointSize() + 2);
+            arrowFont.SetPointSize(arrowFont.GetPointSize() - 1);
             arrow->SetFont(arrowFont);
             arrow->Hide();
             return arrow;
@@ -678,6 +696,7 @@ void MainFrame::RebuildGrid() {
             tickLabel->Hide();
             pw.xTicks[t] = tickLabel;
         }
+        rightSizer->AddSpacer(4);
         rightSizer->Add(pw.xTickPanel, 0, wxEXPAND);
 
         // X axis label
@@ -971,7 +990,7 @@ void MainFrame::RebuildGrid() {
                     int idx = std::max(0, std::min(static_cast<int>(std::round(dataVal)), static_cast<int>(cats.size()) - 1));
                     return wxString::FromUTF8(truncate(cats[idx], maxLen));
                 }
-                return wxString::Format("%.4g", dataVal);
+                return formatCompact(dataVal);
             };
 
             // Compute ticks: categorical low-cardinality uses explicit integer positions
@@ -991,7 +1010,7 @@ void MainFrame::RebuildGrid() {
                     xTickLabels.push_back(tickLabel(v, true, xCats, 8));
             } else {
                 for (float v : xNiceTicks)
-                    xTickLabels.push_back(wxString::Format("%.4g", v));
+                    xTickLabels.push_back(formatCompact(v));
             }
 
             if (yCat) {
@@ -1005,7 +1024,7 @@ void MainFrame::RebuildGrid() {
                     yTickLabels.push_back(tickLabel(v, true, yCats, 8));
             } else {
                 for (float v : yNiceTicks)
-                    yTickLabels.push_back(wxString::Format("%.4g", v));
+                    yTickLabels.push_back(formatCompact(v));
             }
 
             // Map nice tick data values to clip space for grid lines
@@ -1047,7 +1066,8 @@ void MainFrame::RebuildGrid() {
                     if (clipX > -0.9f && clipX < 0.9f) {
                         int px = static_cast<int>((clipX + 1.0f) * 0.5f * canvasW);
                         pw2.xTicks[t]->SetLabel(xTickLabels[t]);
-                        pw2.xTicks[t]->SetSize(pw2.xTicks[t]->GetBestSize());
+                        wxSize best = pw2.xTicks[t]->GetBestSize();
+                        pw2.xTicks[t]->SetSize(best.GetWidth() + 4, best.GetHeight());
                         wxSize tsz = pw2.xTicks[t]->GetSize();
                         pw2.xTicks[t]->SetPosition(wxPoint(px - tsz.GetWidth() / 2, 0));
                         pw2.xTicks[t]->Show();
@@ -1066,9 +1086,9 @@ void MainFrame::RebuildGrid() {
                     if (clipY > -0.9f && clipY < 0.9f) {
                         int py = canvasTopY + static_cast<int>((1.0f - clipY) * 0.5f * canvasH);
                         pw2.yTicks[t]->SetLabel(yTickLabels[t]);
-                        pw2.yTicks[t]->SetSize(pw2.yTicks[t]->GetBestSize());
-                        wxSize tsz = pw2.yTicks[t]->GetSize();
-                        pw2.yTicks[t]->SetPosition(wxPoint(16 - tsz.GetWidth() - 2, py - tsz.GetHeight() / 2));
+                        int labelH = pw2.yTicks[t]->GetBestSize().GetHeight();
+                        pw2.yTicks[t]->SetSize(36, labelH);
+                        pw2.yTicks[t]->SetPosition(wxPoint(0, py - labelH / 2));
                         pw2.yTicks[t]->Show();
                     } else {
                         pw2.yTicks[t]->Hide();
