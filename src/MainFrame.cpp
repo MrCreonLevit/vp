@@ -172,7 +172,7 @@ MainFrame::MainFrame()
     m_brushColors.push_back({0.15f, 0.4f, 1.0f, 1.0f, SYMBOL_CIRCLE, 0.0f, 0.0f, true});
     // Brushes 1-7 = selection brushes
     for (int i = 0; i < NUM_BRUSHES; i++)
-        m_brushColors.push_back({kDefaultBrushes[i].r, kDefaultBrushes[i].g, kDefaultBrushes[i].b, 1.0f, i % SYMBOL_COUNT});
+        m_brushColors.push_back({kDefaultBrushes[i].r, kDefaultBrushes[i].g, kDefaultBrushes[i].b, 1.0f, SYMBOL_CIRCLE});
 
     // Initialize shared GPU context before creating any canvases
     if (!m_gpuContext.Initialize()) {
@@ -713,6 +713,7 @@ void MainFrame::RebuildGrid() {
         // Click on axis labels to change variable
         pw.xLabel->SetCursor(wxCursor(wxCURSOR_HAND));
         pw.xLabel->Bind(wxEVT_LEFT_DOWN, [this, i](wxMouseEvent&) {
+            SetActivePlot(i);
             const auto& ds = m_dataManager.dataset();
             if (ds.numCols == 0) return;
             wxMenu menu;
@@ -729,6 +730,7 @@ void MainFrame::RebuildGrid() {
         });
         pw.yLabel->SetCursor(wxCursor(wxCURSOR_HAND));
         pw.yLabel->Bind(wxEVT_LEFT_DOWN, [this, i](wxMouseEvent&) {
+            SetActivePlot(i);
             const auto& ds = m_dataManager.dataset();
             if (ds.numCols == 0) return;
             wxMenu menu;
