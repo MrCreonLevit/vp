@@ -88,6 +88,11 @@ private:
         wxPanel* yTickPanel = nullptr;
         std::array<wxStaticText*, MAX_NICE_TICKS> xTicks = {};
         std::array<wxStaticText*, MAX_NICE_TICKS> yTicks = {};
+        // Overflow arrow indicators (positioned outside canvas edges)
+        wxStaticText* arrowLeft = nullptr;
+        wxStaticText* arrowRight = nullptr;
+        wxStaticText* arrowTop = nullptr;
+        wxStaticText* arrowBottom = nullptr;
     };
 
     std::vector<WebGPUCanvas*> m_canvases;

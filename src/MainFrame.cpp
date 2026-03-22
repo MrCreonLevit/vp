@@ -626,13 +626,44 @@ void MainFrame::RebuildGrid() {
 
         cellSizer->Add(leftSizer, 0, wxEXPAND);
 
-        // Right side: canvas + X tick panel + X label
+        // Right side: canvas (with right margin) + X tick panel + X label
         auto* rightSizer = new wxBoxSizer(wxVERTICAL);
 
+        // Top margin for overflow arrow
+        auto* topMargin = new wxPanel(cellPanel, wxID_ANY, wxDefaultPosition, wxSize(-1, 14));
+        topMargin->SetMinSize(wxSize(-1, 14));
+        topMargin->SetBackgroundColour(bgColor);
+        rightSizer->Add(topMargin, 0, wxEXPAND);
+
+        // Canvas row: canvas + right margin for overflow arrow
+        auto* canvasRow = new wxBoxSizer(wxHORIZONTAL);
         auto* canvas = new WebGPUCanvas(cellPanel, &m_gpuContext, i);
         canvas->SetShowTooltip(m_globalTooltip);
         m_canvases[i] = canvas;
-        rightSizer->Add(canvas, 1, wxEXPAND);
+        canvasRow->Add(canvas, 1, wxEXPAND);
+        auto* rightMargin = new wxPanel(cellPanel, wxID_ANY, wxDefaultPosition, wxSize(16, -1));
+        rightMargin->SetMinSize(wxSize(16, -1));
+        rightMargin->SetBackgroundColour(bgColor);
+        canvasRow->Add(rightMargin, 0, wxEXPAND);
+        rightSizer->Add(canvasRow, 1, wxEXPAND);
+
+        // Overflow arrow indicators (children of cellPanel, positioned at canvas edges)
+        wxColour arrowColor(255, 80, 80);
+        auto makeArrow = [&](const wxString& label) {
+            auto* arrow = new wxStaticText(cellPanel, wxID_ANY, label,
+                wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
+            arrow->SetForegroundColour(arrowColor);
+            arrow->SetBackgroundColour(bgColor);
+            auto arrowFont = arrow->GetFont();
+            arrowFont.SetPointSize(arrowFont.GetPointSize() + 2);
+            arrow->SetFont(arrowFont);
+            arrow->Hide();
+            return arrow;
+        };
+        pw.arrowLeft   = makeArrow("\xe2\x97\x80");  // ◀
+        pw.arrowRight  = makeArrow("\xe2\x96\xb6");  // ▶
+        pw.arrowTop    = makeArrow("\xe2\x96\xb2");  // ▲
+        pw.arrowBottom = makeArrow("\xe2\x96\xbc");  // ▼
 
         // X tick panel: manually positioned labels
         pw.xTickPanel = new wxPanel(cellPanel, wxID_ANY, wxDefaultPosition, wxSize(-1, 14));
@@ -1045,6 +1076,62 @@ void MainFrame::RebuildGrid() {
                 } else {
                     pw2.yTicks[t]->Hide();
                 }
+            }
+        };
+
+        canvas->onOverflowChanged = [this](int pi, bool left, bool right, bool top, bool bottom) {
+            if (pi < 0 || pi >= (int)m_plotWidgets.size()) return;
+            if (pi >= (int)m_canvases.size()) return;
+            auto& pw2 = m_plotWidgets[pi];
+
+            pw2.arrowLeft->Show(left);
+            pw2.arrowRight->Show(right);
+            pw2.arrowTop->Show(top);
+            pw2.arrowBottom->Show(bottom);
+
+            // Raise visible arrows above tick panels and other siblings
+            if (left) pw2.arrowLeft->Raise();
+            if (right) pw2.arrowRight->Raise();
+            if (top) pw2.arrowTop->Raise();
+            if (bottom) pw2.arrowBottom->Raise();
+
+            // Compute canvas position relative to cellPanel (arrow parent)
+            wxPoint canvasPos(0, 0);
+            wxWindow* w = m_canvases[pi];
+            while (w && w != pw2.cellPanel) {
+                wxPoint pp = w->GetPosition();
+                canvasPos.x += pp.x;
+                canvasPos.y += pp.y;
+                w = w->GetParent();
+            }
+            wxSize canvasSize = m_canvases[pi]->GetClientSize();
+
+            int cx = canvasPos.x + canvasSize.GetWidth() / 2;
+            int cy = canvasPos.y + canvasSize.GetHeight() / 2;
+
+            if (left) {
+                wxSize sz = pw2.arrowLeft->GetBestSize();
+                pw2.arrowLeft->SetSize(sz);
+                pw2.arrowLeft->SetPosition(wxPoint(canvasPos.x - sz.GetWidth() - 1,
+                                                    cy - sz.GetHeight() / 2));
+            }
+            if (right) {
+                wxSize sz = pw2.arrowRight->GetBestSize();
+                pw2.arrowRight->SetSize(sz);
+                pw2.arrowRight->SetPosition(wxPoint(canvasPos.x + canvasSize.GetWidth() + 1,
+                                                     cy - sz.GetHeight() / 2));
+            }
+            if (top) {
+                wxSize sz = pw2.arrowTop->GetBestSize();
+                pw2.arrowTop->SetSize(sz);
+                pw2.arrowTop->SetPosition(wxPoint(cx - sz.GetWidth() / 2,
+                                                   canvasPos.y - sz.GetHeight() - 1));
+            }
+            if (bottom) {
+                wxSize sz = pw2.arrowBottom->GetBestSize();
+                pw2.arrowBottom->SetSize(sz);
+                pw2.arrowBottom->SetPosition(wxPoint(cx - sz.GetWidth() / 2,
+                                                      canvasPos.y + canvasSize.GetHeight() + 1));
             }
         };
 

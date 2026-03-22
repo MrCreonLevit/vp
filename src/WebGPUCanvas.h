@@ -118,6 +118,8 @@ public:
     std::function<void(int plotIndex)> onSelectionDoubleClick;
     // Called on each render with current visible range in normalized coords
     std::function<void(int plotIndex, float xMin, float xMax, float yMin, float yMax)> onViewportChanged;
+    // Called when overflow state changes (points exist beyond visible edges)
+    std::function<void(int plotIndex, bool left, bool right, bool top, bool bottom)> onOverflowChanged;
 
 private:
     void InitSurface();
@@ -204,10 +206,10 @@ private:
     WGPUBuffer m_gridLineBuffer = nullptr;
     size_t m_gridLineVertexCount = 0;
 
-    // Overflow arrow indicators
-    WGPUBuffer m_arrowBuffer = nullptr;
-    size_t m_arrowVertexCount = 0;
-    void UpdateOverflowArrows();
+    // Overflow detection
+    bool m_overflowLeft = false, m_overflowRight = false;
+    bool m_overflowTop = false, m_overflowBottom = false;
+    void UpdateOverflowState();
 
     // Display settings
     bool m_showTooltip = false;
