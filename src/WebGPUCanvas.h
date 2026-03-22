@@ -6,6 +6,7 @@
 #include <wgpu.h>
 #include <vector>
 #include <functional>
+#include <chrono>
 
 class WebGPUContext;
 
@@ -22,7 +23,7 @@ struct Uniforms {
     float pointSize;
     float viewportW;
     float viewportH;
-    float _pad0;
+    float showUnselected;
     float rotRow0[4];  // rotation matrix row 0 (xyz, w=0)
     float rotRow1[4];  // rotation matrix row 1 (xyz, w=0)
 };
@@ -124,6 +125,7 @@ private:
     void ConfigureSurface(int width, int height);
     void UpdateVertexBuffer();
     void UpdatePointColors();
+    void RebuildOverlay();       // rebuild overlay buffer for selected points (no vertex re-upload)
     void UpdateHistograms();
     void UpdateGridLines();
     void RecomputeDensityColors();
@@ -181,6 +183,7 @@ private:
     // Histogram rendering
     WGPURenderPipeline m_histPipeline = nullptr;
     WGPUBuffer m_histBuffer = nullptr;
+    size_t m_histBufferCapacity = 0;  // current buffer size in vertices
     size_t m_histVertexCount = 0;
     bool m_showHistograms = true;
     int m_histBins = 64;
@@ -189,6 +192,9 @@ private:
     std::string m_xLabel, m_yLabel;
     float m_xDataMin = 0.0f, m_xDataMax = 1.0f;
     float m_yDataMin = 0.0f, m_yDataMax = 1.0f;
+
+    // Dirty flag: set when pan/zoom/selection changes, cleared after Render rebuilds
+    bool m_viewDirty = true;
 
     // Grid lines
     bool m_deferRedraws = false;
@@ -212,6 +218,10 @@ private:
     int m_colorMap = 0;
     int m_colorVariable = 0;  // 0=density, 1+=column index
     bool m_colorMapReversed = false;
+    // Throttle density recomputation during interactive pan/zoom
+    std::chrono::steady_clock::time_point m_lastDensityTime{};
+    bool m_densityPending = false;
+    void ThrottledDensityRecompute();
     float m_pointSize = 6.0f;
     float m_opacity = 0.05f;
 

@@ -1086,6 +1086,8 @@ void MainFrame::SetActivePlot(int plotIndex) {
         return;
 
     bool alreadyActive = (m_activePlot == plotIndex);
+    if (alreadyActive) return;
+
     m_activePlot = plotIndex;
 
     // Highlight label/tick area of active plot (not the canvas itself)
@@ -1108,11 +1110,9 @@ void MainFrame::SetActivePlot(int plotIndex) {
     // Canvas background stays black (no SetActive highlight)
     for (auto* c : m_canvases) c->SetActive(false);
 
-    if (!alreadyActive) {
-        m_controlPanel->SelectTab(plotIndex);
-        if (plotIndex < (int)m_plotConfigs.size())
-            m_controlPanel->SetPlotConfig(plotIndex, m_plotConfigs[plotIndex]);
-    }
+    m_controlPanel->SelectTab(plotIndex);
+    if (plotIndex < (int)m_plotConfigs.size())
+        m_controlPanel->SetPlotConfig(plotIndex, m_plotConfigs[plotIndex]);
 }
 
 void MainFrame::HighlightAllPlots() {

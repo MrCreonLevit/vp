@@ -11,7 +11,7 @@ struct Uniforms {
     point_size: f32,
     viewport_w: f32,
     viewport_h: f32,
-    _pad0: f32,
+    show_unselected: f32,
     rot_row0: vec4f,
     rot_row1: vec4f,
 }
@@ -63,6 +63,11 @@ fn vs_main(
         color = vec4f(brush_colors[brush_idx].rgb,
                       brush_colors[brush_idx].a);
     }
+    // Hide unselected points when show_unselected is off
+    if (brush_idx == 0u && uniforms.show_unselected < 0.5) {
+        color.a = 0.0;
+    }
+
     var sym = brush_params[brush_idx].x;
     var size_scale = brush_params[brush_idx].y;
 

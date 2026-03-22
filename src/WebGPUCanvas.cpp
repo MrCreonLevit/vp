@@ -114,6 +114,7 @@ void WebGPUCanvas::SetPointSize(float size) {
 
 void WebGPUCanvas::SetHistBins(int bins) {
     m_histBins = std::max(2, bins);
+    m_viewDirty = true;
     Refresh();
 }
 
@@ -122,6 +123,7 @@ void WebGPUCanvas::SetPanZoom(float panX, float panY, float zoomX, float zoomY) 
     m_panY = panY;
     m_zoomX = zoomX;
     m_zoomY = zoomY;
+    m_viewDirty = true;
     Refresh();
 }
 
@@ -192,17 +194,19 @@ size_t WebGPUCanvas::GetOriginalDataRow(int displayIndex) const {
 
 void WebGPUCanvas::SetShowUnselected(bool show) {
     m_showUnselected = show;
-    UpdatePointColors();
-    Update();
+    // Shader handles hiding via the showUnselected uniform — just refresh
+    Refresh();
 }
 
 void WebGPUCanvas::SetShowGridLines(bool show) {
     m_showGridLines = show;
+    m_viewDirty = true;
     Refresh();
 }
 
 void WebGPUCanvas::SetShowHistograms(bool show) {
     m_showHistograms = show;
+    m_viewDirty = true;
     Refresh();
 }
 
@@ -242,15 +246,13 @@ void WebGPUCanvas::SetGridLinePositions(const std::vector<float>& xPositions,
 
 void WebGPUCanvas::SetOpacity(float alpha) {
     m_opacity = alpha;
-    // Update vertex alpha in-place (apply brush 0 opacity offset for unselected points)
+    // Update vertex alpha in-place (apply brush 0 opacity offset)
+    // Shader handles show/hide unselected — vertex alpha is always the base opacity
     float brush0Opacity = m_opacity;
     if (!m_brushColors.empty())
         brush0Opacity = std::max(0.0f, std::min(1.0f, m_opacity + m_brushColors[0].opacityOffset / 100.0f));
     for (size_t i = 0; i < m_points.size(); i++) {
-        if (!m_showUnselected && (i >= m_selection.size() || m_selection[i] == 0))
-            m_points[i].a = 0.0f;
-        else
-            m_points[i].a = brush0Opacity;
+        m_points[i].a = brush0Opacity;
     }
     if (m_initialized) {
         // Re-upload brush colors since brush alpha depends on m_opacity,
@@ -293,12 +295,10 @@ void WebGPUCanvas::SetBrushColors(const std::vector<BrushColor>& colors) {
         wgpuQueueWriteBuffer(queue, m_brushParamsGpuBuffer, 0, paramData, sizeof(paramData));
 
         // Update vertex alpha for brush 0 opacity offset
+        // Shader handles show/hide unselected — vertex alpha is always the base opacity
         float brush0Opacity = std::max(0.0f, std::min(1.0f, m_opacity + colors[0].opacityOffset / 100.0f));
         for (size_t i = 0; i < m_points.size(); i++) {
-            if (!m_showUnselected && (i >= m_selection.size() || m_selection[i] == 0))
-                m_points[i].a = 0.0f;
-            else
-                m_points[i].a = brush0Opacity;
+            m_points[i].a = brush0Opacity;
         }
         UpdateVertexBuffer();
 
@@ -374,9 +374,10 @@ void WebGPUCanvas::SetSelection(const std::vector<int>& sel) {
                              selU32.data(), numPoints * sizeof(uint32_t));
     }
 
-    // Rebuild base colors (hides unselected when needed) and the overlay
-    // buffer so selected points are always drawn on top in all plots.
-    UpdatePointColors();
+    // Rebuild overlay buffer so selected points draw on top.
+    // Main vertex buffer is NOT re-uploaded — geometry stays on GPU.
+    m_viewDirty = true;
+    RebuildOverlay();
     Refresh();
 }
 
@@ -385,13 +386,15 @@ void WebGPUCanvas::ClearSelection() {
     m_showLastRect = false;
     m_hasLastRect = false;
     m_selRectVertexCount = 0;
-    UpdatePointColors();
+    m_viewDirty = true;
+    RebuildOverlay();
 }
 
 void WebGPUCanvas::InvertSelection() {
     for (auto& s : m_selection)
         s = (s == 0) ? 1 : 0;
-    UpdatePointColors();
+    m_viewDirty = true;
+    RebuildOverlay();
 }
 
 int WebGPUCanvas::GetSelectedCount() const {
@@ -411,6 +414,7 @@ void WebGPUCanvas::ResetView() {
     m_panY = 0.0f;
     m_zoomX = 1.0f;
     m_zoomY = 1.0f;
+    m_viewDirty = true;
     const float identity[9] = {1,0,0, 0,1,0, 0,0,1};
     std::memcpy(m_rotMatrix, identity, sizeof(m_rotMatrix));
     if (m_initialized) {
@@ -422,31 +426,35 @@ void WebGPUCanvas::ResetView() {
 void WebGPUCanvas::UpdatePointColors() {
     // Set BASE colors in the vertex buffer. The GPU shader overrides these
     // for selected points using the selection storage buffer + brush uniforms.
-    // Symbol and sizeScale are always base values here — brush-specific
-    // values come from the GPU uniform lookup only.
+    // Shader handles show/hide unselected via the showUnselected uniform.
     float brush0Opacity = m_opacity;
     if (!m_brushColors.empty())
         brush0Opacity = std::max(0.0f, std::min(1.0f, m_opacity + m_brushColors[0].opacityOffset / 100.0f));
     for (size_t i = 0; i < m_points.size(); i++) {
-        if (!m_showUnselected && (i >= m_selection.size() || m_selection[i] == 0)) {
-            m_points[i].r = 0.0f;
-            m_points[i].g = 0.0f;
-            m_points[i].b = 0.0f;
-            m_points[i].a = 0.0f;
-        } else {
-            m_points[i].r = (i * 3 < m_baseColors.size()) ? m_baseColors[i * 3] : 0.15f;
-            m_points[i].g = (i * 3 + 1 < m_baseColors.size()) ? m_baseColors[i * 3 + 1] : 0.4f;
-            m_points[i].b = (i * 3 + 2 < m_baseColors.size()) ? m_baseColors[i * 3 + 2] : 1.0f;
-            m_points[i].a = brush0Opacity;
-        }
+        m_points[i].r = (i * 3 < m_baseColors.size()) ? m_baseColors[i * 3] : 0.15f;
+        m_points[i].g = (i * 3 + 1 < m_baseColors.size()) ? m_baseColors[i * 3 + 1] : 0.4f;
+        m_points[i].b = (i * 3 + 2 < m_baseColors.size()) ? m_baseColors[i * 3 + 2] : 1.0f;
+        m_points[i].a = brush0Opacity;
         m_points[i].symbol = 0.0f;
         m_points[i].sizeScale = 1.0f;
     }
 
+    if (m_initialized) {
+        UpdateVertexBuffer();
+        RebuildOverlay();
+        UpdateHistograms();
+        Refresh();
+    }
+}
+
+void WebGPUCanvas::RebuildOverlay() {
     // Build overlay buffer for all selected points (brushes 1-7).
-    // The main pass skips these; they are drawn only here with alpha blending.
-    // Vertex positions come from the point data; the shader reads brush color,
-    // symbol, and size from uniforms via the overlay selection buffer.
+    // Selected points are drawn on top with alpha blending.
+    // Only the compact selected-point data is uploaded — the main
+    // vertex buffer is NOT touched here.
+    if (!m_initialized || !m_ctx)
+        return;
+
     std::vector<PointVertex> selPoints;
     std::vector<uint32_t> selBrushIds;
     for (size_t i = 0; i < m_points.size(); i++) {
@@ -458,52 +466,44 @@ void WebGPUCanvas::UpdatePointColors() {
     }
     m_selVertexCount = selPoints.size();
 
-    if (m_initialized) {
-        UpdateVertexBuffer();
+    auto device = m_ctx->GetDevice();
+    auto queue = m_ctx->GetQueue();
+    if (m_selVertexBuffer) {
+        wgpuBufferRelease(m_selVertexBuffer);
+        m_selVertexBuffer = nullptr;
+    }
+    if (m_overlaySelBuffer) { wgpuBufferRelease(m_overlaySelBuffer); m_overlaySelBuffer = nullptr; }
+    if (m_overlayBindGroup) { wgpuBindGroupRelease(m_overlayBindGroup); m_overlayBindGroup = nullptr; }
+    if (!selPoints.empty()) {
+        size_t dataSize = selPoints.size() * sizeof(PointVertex);
+        WGPUBufferDescriptor sbDesc = {};
+        sbDesc.label = {"sel_instances", WGPU_STRLEN};
+        sbDesc.size = dataSize;
+        sbDesc.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        m_selVertexBuffer = wgpuDeviceCreateBuffer(device, &sbDesc);
+        wgpuQueueWriteBuffer(queue, m_selVertexBuffer, 0, selPoints.data(), dataSize);
 
-        // Update selection vertex buffer
-        auto device = m_ctx->GetDevice();
-        auto queue = m_ctx->GetQueue();
-        if (m_selVertexBuffer) {
-            wgpuBufferRelease(m_selVertexBuffer);
-            m_selVertexBuffer = nullptr;
-        }
-        if (m_overlaySelBuffer) { wgpuBufferRelease(m_overlaySelBuffer); m_overlaySelBuffer = nullptr; }
-        if (m_overlayBindGroup) { wgpuBindGroupRelease(m_overlayBindGroup); m_overlayBindGroup = nullptr; }
-        if (!selPoints.empty()) {
-            size_t dataSize = selPoints.size() * sizeof(PointVertex);
-            WGPUBufferDescriptor sbDesc = {};
-            sbDesc.label = {"sel_instances", WGPU_STRLEN};
-            sbDesc.size = dataSize;
-            sbDesc.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
-            m_selVertexBuffer = wgpuDeviceCreateBuffer(device, &sbDesc);
-            wgpuQueueWriteBuffer(queue, m_selVertexBuffer, 0, selPoints.data(), dataSize);
+        // Selection buffer with correct brush indices for overlay points
+        size_t selSize = selBrushIds.size() * sizeof(uint32_t);
+        WGPUBufferDescriptor zDesc = {};
+        zDesc.label = {"overlay_sel", WGPU_STRLEN};
+        zDesc.size = selSize;
+        zDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
+        m_overlaySelBuffer = wgpuDeviceCreateBuffer(device, &zDesc);
+        wgpuQueueWriteBuffer(queue, m_overlaySelBuffer, 0, selBrushIds.data(), selSize);
 
-            // Selection buffer with correct brush indices for overlay points
-            size_t selSize = selBrushIds.size() * sizeof(uint32_t);
-            WGPUBufferDescriptor zDesc = {};
-            zDesc.label = {"overlay_sel", WGPU_STRLEN};
-            zDesc.size = selSize;
-            zDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
-            m_overlaySelBuffer = wgpuDeviceCreateBuffer(device, &zDesc);
-            wgpuQueueWriteBuffer(queue, m_overlaySelBuffer, 0, selBrushIds.data(), selSize);
-
-            WGPUBindGroupEntry entries[3] = {};
-            entries[0].binding = 0; entries[0].buffer = m_overlaySelBuffer;
-            entries[0].offset = 0; entries[0].size = selSize;
-            entries[1].binding = 1; entries[1].buffer = m_brushColorGpuBuffer;
-            entries[1].offset = 0; entries[1].size = 8 * 16;
-            entries[2].binding = 2; entries[2].buffer = m_brushParamsGpuBuffer;
-            entries[2].offset = 0; entries[2].size = 8 * 16;
-            WGPUBindGroupDescriptor bgDesc = {};
-            bgDesc.layout = m_ctx->GetSelectionBindGroupLayout();
-            bgDesc.entryCount = 3;
-            bgDesc.entries = entries;
-            m_overlayBindGroup = wgpuDeviceCreateBindGroup(device, &bgDesc);
-        }
-
-        UpdateHistograms();
-        Refresh();
+        WGPUBindGroupEntry entries[3] = {};
+        entries[0].binding = 0; entries[0].buffer = m_overlaySelBuffer;
+        entries[0].offset = 0; entries[0].size = selSize;
+        entries[1].binding = 1; entries[1].buffer = m_brushColorGpuBuffer;
+        entries[1].offset = 0; entries[1].size = 8 * 16;
+        entries[2].binding = 2; entries[2].buffer = m_brushParamsGpuBuffer;
+        entries[2].offset = 0; entries[2].size = 8 * 16;
+        WGPUBindGroupDescriptor bgDesc = {};
+        bgDesc.layout = m_ctx->GetSelectionBindGroupLayout();
+        bgDesc.entryCount = 3;
+        bgDesc.entries = entries;
+        m_overlayBindGroup = wgpuDeviceCreateBindGroup(device, &bgDesc);
     }
 }
 
@@ -1080,18 +1080,21 @@ void WebGPUCanvas::UpdateHistograms() {
 
     auto device = m_ctx->GetDevice();
     auto queue = m_ctx->GetQueue();
-
-    if (m_histBuffer) {
-        wgpuBufferRelease(m_histBuffer);
-        m_histBuffer = nullptr;
-    }
-
     size_t dataSize = m_histVertexCount * sizeof(PointVertex);
-    WGPUBufferDescriptor hbDesc = {};
-    hbDesc.label = {"histogram", WGPU_STRLEN};
-    hbDesc.size = dataSize;
-    hbDesc.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
-    m_histBuffer = wgpuDeviceCreateBuffer(device, &hbDesc);
+
+    // Reuse existing buffer if large enough; only recreate when we need more space
+    if (m_histVertexCount > m_histBufferCapacity) {
+        if (m_histBuffer) {
+            wgpuBufferRelease(m_histBuffer);
+            m_histBuffer = nullptr;
+        }
+        m_histBufferCapacity = m_histVertexCount;
+        WGPUBufferDescriptor hbDesc = {};
+        hbDesc.label = {"histogram", WGPU_STRLEN};
+        hbDesc.size = dataSize;
+        hbDesc.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        m_histBuffer = wgpuDeviceCreateBuffer(device, &hbDesc);
+    }
     wgpuQueueWriteBuffer(queue, m_histBuffer, 0, histVerts.data(), dataSize);
 }
 
@@ -1472,6 +1475,33 @@ void WebGPUCanvas::RecomputeDensityColors() {
     }
 }
 
+void WebGPUCanvas::ThrottledDensityRecompute() {
+    if (m_colorMap == 0) return;
+    if (m_colorVariable > 0) return;  // variable-based coloring doesn't depend on viewport
+
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastDensityTime).count();
+    constexpr long THROTTLE_MS = 150;
+
+    if (elapsed >= THROTTLE_MS) {
+        m_lastDensityTime = now;
+        m_densityPending = false;
+        RecomputeDensityColors();
+    } else {
+        // Mark pending — the deferred call below ensures it fires eventually
+        if (!m_densityPending) {
+            m_densityPending = true;
+            CallAfter([this]() {
+                if (m_densityPending) {
+                    m_densityPending = false;
+                    m_lastDensityTime = std::chrono::steady_clock::now();
+                    RecomputeDensityColors();
+                }
+            });
+        }
+    }
+}
+
 void WebGPUCanvas::UpdateUniforms() {
     float hw = 1.0f / m_zoomX;
     float hh = 1.0f / m_zoomY;
@@ -1484,6 +1514,7 @@ void WebGPUCanvas::UpdateUniforms() {
     m_uniforms.pointSize = m_pointSize * static_cast<float>(scale) * zoomScale;
     m_uniforms.viewportW = static_cast<float>(size.GetWidth() * scale);
     m_uniforms.viewportH = static_cast<float>(size.GetHeight() * scale);
+    m_uniforms.showUnselected = m_showUnselected ? 1.0f : 0.0f;
     // Copy rotation matrix rows 0 and 1 to uniform buffer
     m_uniforms.rotRow0[0] = m_rotMatrix[0]; m_uniforms.rotRow0[1] = m_rotMatrix[1];
     m_uniforms.rotRow0[2] = m_rotMatrix[2]; m_uniforms.rotRow0[3] = 0.0f;
@@ -1536,17 +1567,22 @@ void WebGPUCanvas::Render() {
 #endif
 
     UpdateUniforms();
-    UpdateHistograms();
-    UpdateGridLines();
-    UpdateOverflowArrows();
-    UpdateSelectionRect();
 
-    // Notify MainFrame of current viewport for tick value labels
-    if (onViewportChanged) {
-        float hw = 1.0f / m_zoomX;
-        float hh = 1.0f / m_zoomY;
-        onViewportChanged(m_plotIndex, m_panX - hw, m_panX + hw, m_panY - hh, m_panY + hh);
+    // Only rebuild view-dependent geometry when pan/zoom/selection actually changed
+    if (m_viewDirty) {
+        m_viewDirty = false;
+        UpdateHistograms();
+        UpdateGridLines();
+        UpdateOverflowArrows();
+
+        // Notify MainFrame of current viewport for tick value labels
+        if (onViewportChanged) {
+            float hw = 1.0f / m_zoomX;
+            float hh = 1.0f / m_zoomY;
+            onViewportChanged(m_plotIndex, m_panX - hw, m_panX + hw, m_panY - hh, m_panY + hh);
+        }
     }
+    UpdateSelectionRect();
 
     WGPUSurfaceTexture surfTex;
     wgpuSurfaceGetCurrentTexture(m_surface, &surfTex);
@@ -1681,6 +1717,7 @@ void WebGPUCanvas::OnSize(wxSizeEvent& event) {
         CAMetalLayer* metalLayer = (__bridge CAMetalLayer*)m_metalLayer;
         metalLayer.frame = nsView.bounds;
 #endif
+        m_viewDirty = true;
         Refresh();
     }
     event.Skip();
@@ -1783,6 +1820,7 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             m_panX -= dx * 2.0f / m_zoomX;
             m_panY += dy * 2.0f / m_zoomY;
             m_lastMouse = pos;
+            m_viewDirty = true;
             if (onViewChanged) onViewChanged(m_plotIndex, m_panX, m_panY, m_zoomX, m_zoomY);
             Refresh();
         } else if (m_translating && m_hasLastRect) {
@@ -1906,8 +1944,9 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             m_panY += dy;
         }
 
+        m_viewDirty = true;
         if (onViewChanged) onViewChanged(m_plotIndex, m_panX, m_panY, m_zoomX, m_zoomY);
-        if (m_colorMap != 0) RecomputeDensityColors();
+        ThrottledDensityRecompute();
         Refresh();
     } else if (m_showTooltip && event.Moving()) {
         // Tooltip hover detection: find nearest point under cursor
@@ -1954,9 +1993,10 @@ void WebGPUCanvas::OnMagnify(wxMouseEvent& event) {
     m_panY = wy - ndcY / newZoomY;
     m_zoomX = newZoomX;
     m_zoomY = newZoomY;
+    m_viewDirty = true;
 
     if (onViewChanged) onViewChanged(m_plotIndex, m_panX, m_panY, m_zoomX, m_zoomY);
-    if (m_colorMap != 0) RecomputeDensityColors();
+    ThrottledDensityRecompute();
     Refresh();
 }
 
