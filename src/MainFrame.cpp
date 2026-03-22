@@ -648,10 +648,10 @@ void MainFrame::RebuildGrid() {
         auto* rightSizer = new wxBoxSizer(wxVERTICAL);
 
         // Top margin for overflow arrow
-        auto* topMargin = new wxPanel(cellPanel, wxID_ANY, wxDefaultPosition, wxSize(-1, 14));
-        topMargin->SetMinSize(wxSize(-1, 14));
-        topMargin->SetBackgroundColour(bgColor);
-        rightSizer->Add(topMargin, 0, wxEXPAND);
+        pw.topMargin = new wxPanel(cellPanel, wxID_ANY, wxDefaultPosition, wxSize(-1, 14));
+        pw.topMargin->SetMinSize(wxSize(-1, 14));
+        pw.topMargin->SetBackgroundColour(bgColor);
+        rightSizer->Add(pw.topMargin, 0, wxEXPAND);
 
         // Canvas row: canvas + right margin for overflow arrow
         auto* canvasRow = new wxBoxSizer(wxHORIZONTAL);
@@ -659,10 +659,10 @@ void MainFrame::RebuildGrid() {
         canvas->SetShowTooltip(m_globalTooltip);
         m_canvases[i] = canvas;
         canvasRow->Add(canvas, 1, wxEXPAND);
-        auto* rightMargin = new wxPanel(cellPanel, wxID_ANY, wxDefaultPosition, wxSize(16, -1));
-        rightMargin->SetMinSize(wxSize(16, -1));
-        rightMargin->SetBackgroundColour(bgColor);
-        canvasRow->Add(rightMargin, 0, wxEXPAND);
+        pw.rightMargin = new wxPanel(cellPanel, wxID_ANY, wxDefaultPosition, wxSize(16, -1));
+        pw.rightMargin->SetMinSize(wxSize(16, -1));
+        pw.rightMargin->SetBackgroundColour(bgColor);
+        canvasRow->Add(pw.rightMargin, 0, wxEXPAND);
         rightSizer->Add(canvasRow, 1, wxEXPAND);
 
         // Overflow arrow indicators (children of cellPanel, positioned at canvas edges)
@@ -1208,6 +1208,8 @@ void MainFrame::SetActivePlot(int plotIndex) {
         if (pw.cellPanel) pw.cellPanel->SetBackgroundColour(bg);
         if (pw.xTickPanel) pw.xTickPanel->SetBackgroundColour(bg);
         if (pw.yTickPanel) pw.yTickPanel->SetBackgroundColour(bg);
+        if (pw.topMargin) pw.topMargin->SetBackgroundColour(bg);
+        if (pw.rightMargin) pw.rightMargin->SetBackgroundColour(bg);
         if (pw.xLabel) pw.xLabel->SetBackgroundColour(bg);
         if (pw.yLabel) pw.yLabel->SetBackgroundColour(bg);
         // Update tick label backgrounds
@@ -1231,6 +1233,8 @@ void MainFrame::HighlightAllPlots() {
         if (pw.cellPanel) pw.cellPanel->SetBackgroundColour(activeBg);
         if (pw.xTickPanel) pw.xTickPanel->SetBackgroundColour(activeBg);
         if (pw.yTickPanel) pw.yTickPanel->SetBackgroundColour(activeBg);
+        if (pw.topMargin) pw.topMargin->SetBackgroundColour(activeBg);
+        if (pw.rightMargin) pw.rightMargin->SetBackgroundColour(activeBg);
         if (pw.xLabel) pw.xLabel->SetBackgroundColour(activeBg);
         if (pw.yLabel) pw.yLabel->SetBackgroundColour(activeBg);
         for (auto* t : pw.xTicks) if (t) t->SetBackgroundColour(activeBg);

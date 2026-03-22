@@ -88,6 +88,9 @@ private:
         wxPanel* yTickPanel = nullptr;
         std::array<wxStaticText*, MAX_NICE_TICKS> xTicks = {};
         std::array<wxStaticText*, MAX_NICE_TICKS> yTicks = {};
+        // Canvas margin panels (for overflow arrows)
+        wxPanel* topMargin = nullptr;
+        wxPanel* rightMargin = nullptr;
         // Overflow arrow indicators (positioned outside canvas edges)
         wxStaticText* arrowLeft = nullptr;
         wxStaticText* arrowRight = nullptr;
