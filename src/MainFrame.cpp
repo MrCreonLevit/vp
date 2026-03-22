@@ -160,10 +160,10 @@ static wxString formatCompact(float val) {
 MainFrame::MainFrame()
     : wxFrame(nullptr, wxID_ANY, "Viewpoints")
 {
-    // Size window to ~85% of usable screen area
+    // Size window to 95% of usable screen area
     wxRect clientArea = wxGetClientDisplayRect();  // excludes dock/menubar
-    int w = std::min(static_cast<int>(clientArea.width * 0.90), 1800);
-    int h = std::min(static_cast<int>(clientArea.height * 0.85), 960);
+    int w = static_cast<int>(clientArea.width * 0.95);
+    int h = static_cast<int>(clientArea.height * 0.95);
     SetSize(w, h);
     Centre();
 
