@@ -48,8 +48,14 @@ set(VIEWPOINTS_SOURCES
     $<$<PLATFORM_ID:Darwin>:src/ColorPanelHelper.mm>
 )
 
+# --- App icon ---
+if(APPLE)
+    set(APP_ICON "${CMAKE_SOURCE_DIR}/src/vp.icns")
+    set_source_files_properties(${APP_ICON} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+endif()
+
 # --- Executable ---
-add_executable(vp ${VIEWPOINTS_SOURCES})
+add_executable(vp ${VIEWPOINTS_SOURCES} ${APP_ICON})
 
 target_include_directories(vp PRIVATE
     ${WGPU_INCLUDE_DIR}

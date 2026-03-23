@@ -5,7 +5,9 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleExecutable</key>
-    <string>viewpoints</string>
+    <string>vp</string>
+    <key>CFBundleIconFile</key>
+    <string>vp.icns</string>
     <key>CFBundleIdentifier</key>
     <string>com.viewpoints.app</string>
     <key>CFBundleInfoDictionaryVersion</key>
