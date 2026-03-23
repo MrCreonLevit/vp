@@ -76,7 +76,17 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 | Build System | CMake |
 | Platforms | macOS (Linux/Windows possible with platform surface code) |
 
-## Building
+## Download
+
+**[Viewpoints.dmg](https://github.com/MrCreonLevit/vp/releases/latest/download/Viewpoints.dmg)** — standalone macOS app for Apple Silicon. No dependencies required.
+
+1. Download and open the DMG
+2. Drag `vp.app` to Applications
+3. Right-click → Open on first launch (required for unsigned apps)
+
+To load data: drag a file onto the app, or use File → Open. Supports CSV, TSV, and Parquet.
+
+## Building from source
 
 ### Prerequisites (macOS)
 
