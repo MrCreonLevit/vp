@@ -2,7 +2,6 @@
 
 BUILD_DIR   := build
 APP_BUNDLE  := $(BUILD_DIR)/vp.app
-APP_NAME    := Viewpoints.app
 DIST_DIR    := dist
 
 .PHONY: all clean app dmg
@@ -15,7 +14,10 @@ clean:
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 
 # Build a standalone macOS .app bundle (Apple Silicon)
-app: all
+app:
+	@cmake -S . -B $(BUILD_DIR)
+	@rm -f $(APP_BUNDLE)/Contents/MacOS/vp
+	@cmake --build $(BUILD_DIR) -j$(shell sysctl -n hw.ncpu)
 	@echo "==> Bundling dynamic libraries..."
 	@dylibbundler -od -b \
 		-x $(APP_BUNDLE)/Contents/MacOS/vp \
