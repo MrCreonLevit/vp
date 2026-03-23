@@ -82,7 +82,11 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 
 1. Download and open the DMG
 2. Drag `vp.app` to Applications
-3. Right-click → Open on first launch (required for unsigned apps)
+3. Clear the quarantine flag (required for unsigned apps):
+   ```bash
+   xattr -cr /Applications/vp.app
+   ```
+4. Double-click `vp.app` to launch
 
 To load data: drag a file onto the app, or use File → Open. Supports CSV, TSV, and Parquet.
 
