@@ -72,3 +72,13 @@ data/nyc_taxi/
 data/chicago_taxi/
 data/gaia_dr3/
 data/sdss/
+
+# Compiled binaries in scripts/ (sources like gpustat.m are kept)
+scripts/gpustat
+
+# R session history
+.Rhistory
+
+# Top-level generated data files (subdir outputs already ignored above)
+data/*.parquet
+data/*.html
