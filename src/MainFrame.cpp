@@ -857,15 +857,17 @@ void MainFrame::RebuildGrid() {
         canvas->onInvertRequested = [this]() { InvertAllSelections(); };
         canvas->onKillRequested = [this]() { KillSelectedPoints(); };
         canvas->onToggleUnselected = [this]() {
-            // Toggle globally across all plots
+             // Toggle globally across all plots
             bool newState = !m_plotConfigs[0].showUnselected;
             for (int j = 0; j < (int)m_canvases.size(); j++) {
                 m_plotConfigs[j].showUnselected = newState;
                 m_canvases[j]->SetShowUnselected(newState);
-            }
+             }
             if (m_activePlot >= 0 && m_activePlot < (int)m_plotConfigs.size())
                 m_controlPanel->SetPlotConfig(m_activePlot, m_plotConfigs[m_activePlot]);
-        };
+            LogAction(wxString::Format("Show unselected: %s",
+                newState ? "on" : "off"));
+         };
 
         // Linked axis view: propagate pan/zoom to plots sharing locked variables
         canvas->onViewChanged = [this](int pi, float panX, float panY, float zoomX, float zoomY) {
@@ -1568,7 +1570,7 @@ void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, flo
             if (s == m_activeBrush) s = 0;
     }
 
-    int matchCount = 0;
+int matchCount = 0;
     for (size_t r = 0; r < ds.numRows; r++) {
         float ox = xVals[r];
         float oy = yVals[r];
@@ -1578,16 +1580,36 @@ void MainFrame::HandleBrushRect(int plotIndex, float x0, float y0, float x1, flo
         if (px >= rectMinX && px <= rectMaxX &&
             py >= rectMinY && py <= rectMaxY) {
             if (brushMode == 2) {
-                // Remove: deselect points matching the active brush
+                 // Remove: deselect points matching the active brush
                 if (m_selection[r] == m_activeBrush)
                     m_selection[r] = 0;
-            } else {
+             } else {
                 m_selection[r] = m_activeBrush;
-            }
+             }
             matchCount++;
-        }
-    }
+         }
+     }
     PropagateSelection(m_selection);
+
+       // Log the brush operation.  Throttled per plot so a drag (many calls)
+       // collapses to one final-value line, while discrete ops (arrow-step,
+       // click) still get logged.  Mode: 0=select, 1=extend, 2=erase.
+    int selCount = 0;
+    for (int s : m_selection) if (s > 0) selCount++;
+    auto fmtRange = [&](float lo, float hi, size_t col) -> wxString {
+        float mn, mx;
+        ds.columnRange(col, mn, mx);
+        float loD = mn + ((std::min(lo, hi) + 0.9f) / 1.8f) * (mx - mn);
+        float hiD = mn + ((std::max(lo, hi) + 0.9f) / 1.8f) * (mx - mn);
+        return LogAxisRange(loD, hiD, col);
+       };
+    wxString xRange = fmtRange(rectMinX, rectMaxX, cfg.xCol);
+    wxString yRange = fmtRange(rectMinY, rectMaxY, cfg.yCol);
+    const char* op = (brushMode == 1 ? "Extend" : brushMode == 2 ? "Erase" : "Select");
+    LogActionThrottled(wxString::Format("brush_%d", plotIndex),
+        wxString::Format("%s on %s: X [%s] Y [%s], brush %d, %d / %zu selected",
+            wxString(op), PlotLoc(plotIndex), xRange, yRange,
+            m_activeBrush, selCount, m_selection.size()));
 }
 
 void MainFrame::PropagateSelection(const std::vector<int>& selection) {
@@ -2274,6 +2296,24 @@ wxString MainFrame::PlotLoc(int plotIndex) const {
     int r = plotIndex / m_gridCols + 1;
     int c = plotIndex % m_gridCols + 1;
     return wxString::Format("plot(%d,%d)", r, c);
+}
+
+// Format a [lo,hi] data-space range for one axis, showing category names
+// for categorical columns (mirrors the onSelectionDrag status bar formatting).
+wxString MainFrame::LogAxisRange(float lo, float hi, size_t col) const {
+    const auto& ds = m_dataManager.dataset();
+    auto fmtVal = [&](float val) -> wxString {
+        if (col < ds.columnMeta.size() && ds.columnMeta[col].isCategorical) {
+            const auto& cats = ds.columnMeta[col].categories;
+            if (!cats.empty()) {
+                int idx = std::max(0, std::min(static_cast<int>(std::round(val)),
+                                               static_cast<int>(cats.size()) - 1));
+                return wxString::FromUTF8(cats[idx]);
+             }
+         }
+        return wxString::Format("%.4g", val);
+     };
+    return fmtVal(lo) + " - " + fmtVal(hi);
 }
 
 void MainFrame::OnToggleLog(wxCommandEvent&) {
