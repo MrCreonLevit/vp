@@ -45,7 +45,8 @@ set(VIEWPOINTS_SOURCES
     src/WebGPUContext.cpp
     src/Normalize.cpp
     src/ColorMap.cpp
-    $<$<PLATFORM_ID:Darwin>:src/ColorPanelHelper.mm>
+    src/ChatPanel.cpp
+      $<$<PLATFORM_ID:Darwin>:src/ColorPanelHelper.mm>
 )
 
 # --- App icon ---

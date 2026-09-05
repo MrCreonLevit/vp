@@ -184,7 +184,10 @@ MainFrame::MainFrame()
     CreateStatusBar();
     SetStatusText("Ready — use File > Open to load data");
 
+    SetupLogThrottle();
+
     Bind(wxEVT_COMMAND_MENU_SELECTED, &MainFrame::OnStdinSnapshot, this, ID_StdinSnapshot);
+    Bind(wxEVT_COMMAND_MENU_SELECTED, &MainFrame::OnToggleLog, this, ID_ToggleLog);
 }
 
 void MainFrame::CreateMenuBar() {
@@ -207,6 +210,9 @@ void MainFrame::CreateMenuBar() {
     viewMenu->Append(ID_RemoveCol, "Remove Column", "Remove right column");
     viewMenu->AppendSeparator();
     viewMenu->Append(ID_ResetViews, "Reset View\tR", "Reset pan and zoom on active plot");
+    viewMenu->AppendSeparator();
+    viewMenu->Append(ID_ToggleLog, "Show/Hide Actions Log\tCtrl+L",
+                            "Toggle the output-only action log panel");
     menuBar->Append(viewMenu, "&View");
 
     auto* helpMenu = new wxMenu();
@@ -282,6 +288,13 @@ void MainFrame::CreateLayout() {
     m_gridPanel->Bind(wxEVT_MOTION, &MainFrame::OnGridMouse, this);
     mainSizer->Add(m_gridPanel, 1, wxEXPAND);
 
+     // Output-only action log panel (Phase 1).  Starts hidden; toggle via the
+     // View menu.  Hidden via sizer so the grid reclaims the width.
+    m_logPanel = new ChatPanel(this, 360);
+    mainSizer->Add(m_logPanel, 0, wxEXPAND);
+    mainSizer->Show(m_logPanel, false);
+    m_logSizer = mainSizer;   // keep a handle to toggle the log element
+
     SetSizer(mainSizer);
 
     // Wire control panel callbacks — per-plot (carry plotIndex)
@@ -306,7 +319,8 @@ void MainFrame::CreateLayout() {
         }
         m_controlPanel->SetPlotConfig(plotIndex, cfg);
         UpdatePlot(plotIndex);
-    };
+        LogAction(wxString::Format("Randomized axes on %s", PlotLoc(plotIndex)));
+     };
 
     m_controlPanel->onAxisChanged = [this](int plotIndex, int xCol, int yCol) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
@@ -319,7 +333,10 @@ void MainFrame::CreateLayout() {
         if (yChanged) cfg.yNorm = DefaultNormForColumn(cfg.yCol);
         m_controlPanel->SetPlotConfig(plotIndex, cfg);
         UpdatePlot(plotIndex);
-    };
+        LogAction(wxString::Format("Axis on %s: x=%s, y=%s",
+            PlotLoc(plotIndex), ColName(static_cast<size_t>(xCol)),
+            ColName(static_cast<size_t>(yCol))));
+     };
 
     m_controlPanel->onAxisLockChanged = [this](int plotIndex, bool xLock, bool yLock) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
@@ -345,9 +362,13 @@ void MainFrame::CreateLayout() {
                 if (other.yCol == col) { other.yLocked = yLock; changed = true; }
             }
             if (changed)
-                m_controlPanel->SetPlotConfig(j, other);
-        }
-    };
+                 m_controlPanel->SetPlotConfig(j, other);
+             }
+        if (xChanged || yChanged)
+            LogAction(wxString::Format("Axis lock on %s: x=%s y=%s",
+                PlotLoc(plotIndex), xLock ? "locked" : "unlocked",
+                yLock ? "locked" : "unlocked"));
+      };
 
     // Axis lock callback is also wired per-canvas below in RebuildGrid
 
@@ -357,7 +378,10 @@ void MainFrame::CreateLayout() {
         m_plotConfigs[plotIndex].yNorm = static_cast<NormMode>(yNorm);
         m_controlPanel->SetPlotConfig(plotIndex, m_plotConfigs[plotIndex]);
         UpdatePlot(plotIndex);
-    };
+        LogAction(wxString::Format("Normalization on %s: x=%s, y=%s",
+            PlotLoc(plotIndex), NormModeName(static_cast<NormMode>(xNorm)),
+            NormModeName(static_cast<NormMode>(yNorm))));
+      };
 
     m_controlPanel->onZAxisChanged = [this](int plotIndex, int zCol, int zNorm) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
@@ -365,10 +389,13 @@ void MainFrame::CreateLayout() {
         bool newColumn = (zCol != cfg.zCol && zCol >= 0);
         cfg.zCol = zCol;
         cfg.zNorm = newColumn ? DefaultNormForColumn(static_cast<size_t>(zCol))
-                              : static_cast<NormMode>(zNorm);
+                               : static_cast<NormMode>(zNorm);
         UpdatePlot(plotIndex);
         m_controlPanel->SetPlotConfig(plotIndex, cfg);
-    };
+        wxString zAxis = zCol < 0 ? "none" : ColName(static_cast<size_t>(zCol));
+        LogAction(wxString::Format("Z-axis on %s: %s, norm=%s",
+            PlotLoc(plotIndex), zAxis, NormModeName(static_cast<NormMode>(zNorm))));
+       };
 
     m_controlPanel->onRotationChanged = [this](int plotIndex, float angle) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
@@ -377,7 +404,9 @@ void MainFrame::CreateLayout() {
         cfg.rotationY = angle;
         mat3PreRotateY(cfg.rotMatrix, delta);
         m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
-    };
+        LogActionThrottled(wxString::Format("rotY_%d", plotIndex),
+            wxString::Format("Rotate Y %d° on %s", (int)angle, PlotLoc(plotIndex)));
+      };
 
     m_controlPanel->onRotationXChanged = [this](int plotIndex, float angle) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
@@ -386,7 +415,9 @@ void MainFrame::CreateLayout() {
         cfg.rotationX = angle;
         mat3PreRotateX(cfg.rotMatrix, delta);
         m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
-    };
+        LogActionThrottled(wxString::Format("rotX_%d", plotIndex),
+            wxString::Format("Rotate X %d° on %s", (int)angle, PlotLoc(plotIndex)));
+      };
 
     m_controlPanel->onRotationZChanged = [this](int plotIndex, float angle) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
@@ -395,7 +426,9 @@ void MainFrame::CreateLayout() {
         cfg.rotationZ = angle;
         mat3PreRotateZ(cfg.rotMatrix, delta);
         m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
-    };
+        LogActionThrottled(wxString::Format("rotZ_%d", plotIndex),
+            wxString::Format("Rotate Z %d° on %s", (int)angle, PlotLoc(plotIndex)));
+      };
 
     m_controlPanel->onRotationZeroed = [this](int plotIndex, bool zeroY, bool zeroX, bool zeroZ) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
@@ -403,58 +436,72 @@ void MainFrame::CreateLayout() {
         if (zeroY) cfg.rotationY = 0.0f;
         if (zeroX) cfg.rotationX = 0.0f;
         if (zeroZ) cfg.rotationZ = 0.0f;
-        // Rebuild matrix from remaining axis value(s)
+          // Rebuild matrix from remaining axis value(s)
         mat3Identity(cfg.rotMatrix);
         if (cfg.rotationZ != 0.0f) mat3PreRotateZ(cfg.rotMatrix, cfg.rotationZ);
         if (cfg.rotationX != 0.0f) mat3PreRotateX(cfg.rotMatrix, cfg.rotationX);
         if (cfg.rotationY != 0.0f) mat3PreRotateY(cfg.rotMatrix, cfg.rotationY);
         m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
         m_controlPanel->SetPlotConfig(plotIndex, cfg);
-    };
+        LogAction(wxString::Format("Reset rotation on %s", PlotLoc(plotIndex)));
+      };
 
     m_controlPanel->onShowUnselectedChanged = [this](int plotIndex, bool show) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
         m_plotConfigs[plotIndex].showUnselected = show;
         m_canvases[plotIndex]->SetShowUnselected(show);
-    };
+        LogAction(wxString::Format("Show unselected on %s: %s",
+            PlotLoc(plotIndex), show ? "on" : "off"));
+       };
 
     m_controlPanel->onGridLinesChanged = [this](int plotIndex, bool show) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
         m_plotConfigs[plotIndex].showGridLines = show;
         m_canvases[plotIndex]->SetShowGridLines(show);
-    };
+        LogAction(wxString::Format("Grid lines on %s: %s",
+            PlotLoc(plotIndex), show ? "on" : "off"));
+       };
 
     m_controlPanel->onShowHistogramsChanged = [this](int plotIndex, bool show) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
         m_plotConfigs[plotIndex].showHistograms = show;
         m_canvases[plotIndex]->SetShowHistograms(show);
-    };
+        LogAction(wxString::Format("Histograms on %s: %s",
+            PlotLoc(plotIndex), show ? "on" : "off"));
+       };
 
     m_controlPanel->onGlobalTooltipChanged = [this](bool show) {
         m_globalTooltip = show;
         for (auto* c : m_canvases)
             c->SetShowTooltip(show);
         if (!show) HideAllTooltips();
-    };
+        LogAction(wxString::Format("Hover details: %s", show ? "on" : "off"));
+       };
 
-    // Per-plot rendering callbacks
+       // Per-plot rendering callbacks
     m_controlPanel->onPointSizeChanged = [this](int plotIndex, float size) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
         m_plotConfigs[plotIndex].pointSize = size;
         m_canvases[plotIndex]->SetPointSize(size);
-    };
+        LogActionThrottled(wxString::Format("ptsz_%d", plotIndex),
+            wxString::Format("Point size %.1f on %s", size, PlotLoc(plotIndex)));
+       };
 
     m_controlPanel->onOpacityChanged = [this](int plotIndex, float alpha) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
         m_plotConfigs[plotIndex].opacity = alpha;
         m_canvases[plotIndex]->SetOpacity(alpha);
-    };
+        LogActionThrottled(wxString::Format("op_%d", plotIndex),
+            wxString::Format("Opacity %d%% on %s", (int)(alpha * 100), PlotLoc(plotIndex)));
+       };
 
     m_controlPanel->onHistBinsChanged = [this](int plotIndex, int bins) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
         m_plotConfigs[plotIndex].histBins = bins;
         m_canvases[plotIndex]->SetHistBins(bins);
-    };
+        LogActionThrottled(wxString::Format("hb_%d", plotIndex),
+            wxString::Format("Hist bins %d on %s", bins, PlotLoc(plotIndex)));
+       };
 
     m_controlPanel->onTabSelected = [this](int plotIndex) {
         SetActivePlot(plotIndex);
@@ -469,47 +516,60 @@ void MainFrame::CreateLayout() {
         for (int i = 0; i < (int)m_canvases.size(); i++) {
             m_plotConfigs[i].pointSize = size;
             m_canvases[i]->SetPointSize(size);
-        }
-    };
+         }
+        LogActionThrottled("gptsz",
+            wxString::Format("Point size %.1f (all plots)", size));
+        };
 
 
-    m_controlPanel->onGlobalHistBinsChanged = [this](int bins) {
+     m_controlPanel->onGlobalHistBinsChanged = [this](int bins) {
         for (int i = 0; i < (int)m_canvases.size(); i++) {
             m_plotConfigs[i].histBins = bins;
             m_canvases[i]->SetHistBins(bins);
-        }
-    };
+         }
+        LogActionThrottled("ghb",
+            wxString::Format("Hist bins %d (all plots)", bins));
+        };
 
-    m_controlPanel->onColorMapChanged = [this](int colormap, int colorVar, bool reversed) {
+     m_controlPanel->onColorMapChanged = [this](int colormap, int colorVar, bool reversed) {
         m_colorMap = static_cast<ColorMapType>(colormap);
         m_colorVariable = colorVar;
         m_colorMapReversed = reversed;
         bool additive = (m_colorMap == ColorMapType::Default);
-        // Reset brush 0 to vertex/colormap mode so the colormap takes effect
+          // Reset brush 0 to vertex/colormap mode so the colormap takes effect
         m_brushColors[0].useVertexColor = true;
-        // Upload brush params FIRST (so useVertexColor flag is current)
+          // Upload brush params FIRST (so useVertexColor flag is current)
         for (auto* c : m_canvases) {
             c->SetBrushColors(m_brushColors);
             c->SetUseAdditiveBlending(additive);
             c->SetColorMap(colormap, colorVar, reversed);
-        }
-        // Then rebuild plots with colormap-colored vertex data
+         }
+          // Then rebuild plots with colormap-colored vertex data
         UpdateAllPlots();
-    };
+        wxString byVar = colorVar == 0 ? "density" : ColName(static_cast<size_t>(colorVar));
+        LogAction(wxString::Format("Colormap: %s, color by %s%s",
+            ColorMapName(static_cast<ColorMapType>(colormap)),
+            byVar, reversed ? ", reversed" : ""));
+        };
 
     m_controlPanel->onAdditiveSelectedChanged = [this](bool additive) {
         m_additiveSelected = additive;
         for (auto* c : m_canvases) c->SetAdditiveSelected(additive);
-    };
+        LogAction(wxString::Format("Additive blending (selected): %s",
+            additive ? "on" : "off"));
+        };
 
     m_controlPanel->onBackgroundChanged = [this](float brightness) {
         m_bgBrightness = brightness;
         for (auto* c : m_canvases) c->SetBackground(brightness);
-    };
+        LogActionThrottled("bg",
+            wxString::Format("Background brightness %.0f%%", brightness * 100));
+        };
 
     m_controlPanel->onDeferRedrawsChanged = [this](bool defer) {
         for (auto* c : m_canvases) c->SetDeferRedraws(defer);
-    };
+        LogAction(wxString::Format("Defer redraws: %s", defer ? "on" : "off"));
+        };
 
     m_controlPanel->onClearSelection = [this]() {
         ClearAllSelections();
@@ -528,27 +588,30 @@ void MainFrame::CreateLayout() {
     };
 
     m_controlPanel->onBrushChanged = [this](int brushIndex) {
-        // Brush 0 controls unselected appearance; brushes 1-7 are selection brushes
-        // Active brush for selection: brush 0 maps to 1 (can't select with brush 0)
+           // Brush 0 controls unselected appearance; brushes 1-7 are selection brushes
+           // Active brush for selection: brush 0 maps to 1 (can't select with brush 0)
         m_activeBrush = (brushIndex == 0) ? 1 : brushIndex;
-    };
+        LogAction(wxString::Format("Active brush: %d%s",
+            m_activeBrush, brushIndex == 0 ? " (unselected points)" : ""));
+         };
 
-    m_controlPanel->onBrushReset = [this](int brushIndex) {
+     m_controlPanel->onBrushReset = [this](int brushIndex) {
         if (brushIndex >= 0 && brushIndex < (int)m_brushColors.size()) {
             if (brushIndex == 0) {
-                // Reset brush 0 to vertex/colormap mode
+                 // Reset brush 0 to vertex/colormap mode
                 m_brushColors[0] = {0.15f, 0.4f, 1.0f, 1.0f, SYMBOL_CIRCLE, 0.0f, 0.0f, true};
-            } else {
-                // Reset selection brush to default
-                int di = brushIndex - 1;
-                m_brushColors[brushIndex] = {
-                    kDefaultBrushes[di].r, kDefaultBrushes[di].g, kDefaultBrushes[di].b,
-                    1.0f, di % SYMBOL_COUNT, 0.0f, 0.0f, false};
-            }
+              } else {
+                  // Reset selection brush to default
+                 int di = brushIndex - 1;
+                 m_brushColors[brushIndex] = {
+                     kDefaultBrushes[di].r, kDefaultBrushes[di].g, kDefaultBrushes[di].b,
+                     1.0f, di % SYMBOL_COUNT, 0.0f, 0.0f, false};
+              }
             for (auto* c : m_canvases)
                 c->SetBrushColors(m_brushColors);
-        }
-    };
+          }
+        LogAction(wxString::Format("Reset brush %d to default", brushIndex));
+      };
 
     m_controlPanel->onBrushColorEdited = [this](int brushIndex, float r, float g, float b, float a) {
         if (brushIndex >= 0 && brushIndex < (int)m_brushColors.size()) {
@@ -567,24 +630,30 @@ void MainFrame::CreateLayout() {
             m_brushColors[brushIndex].symbol = symbol;
             for (auto* c : m_canvases)
                 c->SetBrushColors(m_brushColors);
-        }
-    };
+         }
+        LogAction(wxString::Format("Brush %d symbol: %s", brushIndex,
+            SymbolName(symbol)));
+        };
 
     m_controlPanel->onBrushSizeOffsetChanged = [this](int brushIndex, float offset) {
         if (brushIndex >= 0 && brushIndex < (int)m_brushColors.size()) {
             m_brushColors[brushIndex].sizeOffset = offset;
             for (auto* c : m_canvases)
                 c->SetBrushColors(m_brushColors);
-        }
-    };
+         }
+        LogActionThrottled(wxString::Format("bsz_%d", brushIndex),
+            wxString::Format("Brush %d size offset %+.1f", brushIndex, offset));
+        };
 
     m_controlPanel->onBrushOpacityOffsetChanged = [this](int brushIndex, float offset) {
         if (brushIndex >= 0 && brushIndex < (int)m_brushColors.size()) {
             m_brushColors[brushIndex].opacityOffset = offset;
             for (auto* c : m_canvases)
                 c->SetBrushColors(m_brushColors);
-        }
-    };
+         }
+        LogActionThrottled(wxString::Format("bop_%d", brushIndex),
+            wxString::Format("Brush %d opacity offset %+.1f", brushIndex, offset));
+        };
 
     RebuildGrid();
 }
@@ -1545,12 +1614,14 @@ void MainFrame::PropagateSelection(const std::vector<int>& selection) {
 void MainFrame::ClearAllSelections() {
     m_selection.assign(m_selection.size(), 0);
     PropagateSelection(m_selection);
+    LogAction("Cleared selection");
 }
 
 void MainFrame::InvertAllSelections() {
     for (auto& s : m_selection)
         s = (s == 0) ? m_activeBrush : 0;
     PropagateSelection(m_selection);
+    LogAction("Inverted selection");
 }
 
 NormMode MainFrame::DefaultNormForColumn(size_t col) const {
@@ -1596,6 +1667,7 @@ void MainFrame::KillSelectedPoints() {
     m_dataStatusText = wxString::Format("%zu rows x %zu columns", ds.numRows, ds.numCols);
     SetStatusText(m_dataStatusText + wxString::Format("  |  Deleted %zu points, %zu remaining",
                                     removed, ds.numRows));
+    LogAction(wxString::Format("Killed %zu selected point(s)", removed));
 }
 
 void MainFrame::LoadFile(const std::string& path) {
@@ -1675,6 +1747,9 @@ void MainFrame::LoadFile(const std::string& path) {
     UpdateAllPlots();
 
     SetActivePlot(0);
+
+    LogAction(wxString::Format("Loaded '%s': %zu rows x %zu columns",
+        wxString(path).AfterLast('/'), ds.numRows, ds.numCols));
 }
 
 void MainFrame::OnOpen(wxCommandEvent& event) {
@@ -1734,9 +1809,12 @@ void MainFrame::OnSave(bool selectedOnly) {
 
         if (ok) {
             SetStatusText(m_dataStatusText + "  |  Saved: " + dialog.GetPath());
-        } else {
+            LogAction(wxString::Format("%s to '%s'",
+                     selectedOnly ? "Saved selected" : "Saved all",
+                     dialog.GetPath().AfterLast('/')));
+         } else {
             wxMessageBox("Failed to save file.", "Save Error", wxOK | wxICON_ERROR, this);
-        }
+         }
     }
 }
 
@@ -1901,25 +1979,29 @@ void MainFrame::OnAbout(wxCommandEvent& event) {
 void MainFrame::OnAddRow(wxCommandEvent& event) {
     m_gridRows++;
     RebuildGrid();
+    LogAction(wxString::Format("Grid resized to %d x %d", m_gridRows, m_gridCols));
 }
 
 void MainFrame::OnAddCol(wxCommandEvent& event) {
     m_gridCols++;
     RebuildGrid();
+    LogAction(wxString::Format("Grid resized to %d x %d", m_gridRows, m_gridCols));
 }
 
 void MainFrame::OnRemoveRow(wxCommandEvent& event) {
     if (m_gridRows > 1) {
         m_gridRows--;
         RebuildGrid();
-    }
+        LogAction(wxString::Format("Grid resized to %d x %d", m_gridRows, m_gridCols));
+      }
 }
 
 void MainFrame::OnRemoveCol(wxCommandEvent& event) {
     if (m_gridCols > 1) {
         m_gridCols--;
         RebuildGrid();
-    }
+        LogAction(wxString::Format("Grid resized to %d x %d", m_gridRows, m_gridCols));
+      }
 }
 
 wxString MainFrame::BuildTooltipText(int dataRow) {
@@ -2066,6 +2148,8 @@ MainFrame::DividerHit MainFrame::HitTestDivider(int mx, int my, int& hitCol, int
 
 void MainFrame::OnGridSize(wxSizeEvent& event) {
     LayoutGrid();
+    if (m_logSizer && m_logSizer->IsShown(m_logPanel))
+        m_logPanel->Refresh();
     event.Skip();
 }
 
@@ -2141,9 +2225,62 @@ void MainFrame::OnGridMouse(wxMouseEvent& event) {
             case DividerHit::Intersection:
                 m_gridPanel->SetCursor(wxCursor(wxCURSOR_SIZING));
                 break;
-            case DividerHit::None:
+        case DividerHit::None:
                 m_gridPanel->SetCursor(wxNullCursor);
                 break;
-        }
-    }
+          }
+      }
+}
+
+// ============================================================
+//  Action logging (output-only, Phase 1)
+// ============================================================
+
+void MainFrame::SetupLogThrottle() {
+    m_logThrottle = new LogThrottle();
+    m_logThrottle->SetEmit([this](const wxString& /*key*/, const wxString& text) {
+        LogAction(text);
+    });
+    m_logTimer.SetOwner(this);
+    Bind(wxEVT_TIMER, &MainFrame::OnLogTick, this, m_logTimer.GetId());
+    m_logTimer.Start(LOG_FLUSH_MS);
+}
+
+void MainFrame::OnLogTick(wxTimerEvent&) {
+    if (m_logThrottle)
+        m_logThrottle->Flush();
+}
+
+void MainFrame::LogAction(const wxString& line) {
+    if (!m_logPanel) return;
+    CallAfter([this, line]() {
+        if (m_logPanel) m_logPanel->Log(line);
+        });
+}
+
+void MainFrame::LogActionThrottled(const wxString& key, const wxString& text) {
+    if (!m_logThrottle) return;
+    m_logThrottle->Record(key, text);
+}
+
+wxString MainFrame::ColName(size_t col) const {
+    const auto& labels = m_dataManager.dataset().columnLabels;
+    if (col < labels.size())
+        return wxString::FromUTF8(labels[col]);
+    return wxString::Format("(col %zu)", col);
+}
+
+wxString MainFrame::PlotLoc(int plotIndex) const {
+    int r = plotIndex / m_gridCols + 1;
+    int c = plotIndex % m_gridCols + 1;
+    return wxString::Format("plot(%d,%d)", r, c);
+}
+
+void MainFrame::OnToggleLog(wxCommandEvent&) {
+    if (!m_logSizer || !m_logPanel) return;
+    bool shown = m_logSizer->IsShown(m_logPanel);
+    m_logSizer->Show(m_logPanel, !shown);
+    m_logSizer->Layout();
+    m_logPanel->Refresh();
+    LogAction(shown ? "Actions log hidden" : "Actions log shown");
 }

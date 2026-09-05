@@ -2,12 +2,14 @@
 #pragma once
 
 #include <wx/wx.h>
+#include <wx/timer.h>
 #include "DataManager.h"
 #include "WebGPUContext.h"
 #include "Normalize.h"
 #include "Brush.h"
 #include "ColorMap.h"
 #include "VerticalLabel.h"
+#include "ChatPanel.h"
 #include <vector>
 #include <array>
 #include <unordered_map>
@@ -65,6 +67,13 @@ private:
     void InvertAllSelections();
     NormMode DefaultNormForColumn(size_t col) const;
 
+      // Logging helpers (output-only action log).
+    void LogAction(const wxString& line);              // discrete actions (immediate)
+    void LogActionThrottled(const wxString& key, const wxString& text);   // continuous
+    wxString ColName(size_t col) const;                // dataset column name or "(col N)"
+    wxString PlotLoc(int plotIndex) const;             // "plot(r,c)" from plotIndex
+    void SetupLogThrottle();
+
     void OnOpen(wxCommandEvent& event);
     void OnSave(bool selectedOnly);
     void OnQuit(wxCommandEvent& event);
@@ -73,6 +82,7 @@ private:
     void OnAddCol(wxCommandEvent& event);
     void OnRemoveRow(wxCommandEvent& event);
     void OnRemoveCol(wxCommandEvent& event);
+    void OnToggleLog(wxCommandEvent& event);
 
     WebGPUContext m_gpuContext;
 
@@ -131,6 +141,12 @@ private:
     DividerHit HitTestDivider(int x, int y, int& col, int& row);
 
     ControlPanel* m_controlPanel = nullptr;
+    ChatPanel* m_logPanel = nullptr;
+    wxSizer* m_logSizer = nullptr;
+    LogThrottle* m_logThrottle = nullptr;
+    wxTimer m_logTimer;
+    static constexpr int LOG_FLUSH_MS = 150;
+    void OnLogTick(wxTimerEvent& event);
     DataManager m_dataManager;
     std::vector<int> m_selection;
     int m_activeBrush = 1;
@@ -185,5 +201,6 @@ private:
         ID_SaveSelected,
         ID_Shortcuts,
         ID_StdinSnapshot,
-    };
-};
+        ID_ToggleLog,
+     };
+ };
