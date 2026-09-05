@@ -288,10 +288,24 @@ void MainFrame::CreateLayout() {
     m_gridPanel->Bind(wxEVT_MOTION, &MainFrame::OnGridMouse, this);
     mainSizer->Add(m_gridPanel, 1, wxEXPAND);
 
-     // Output-only action log panel (Phase 1).  Starts hidden; toggle via the
-     // View menu.  Hidden via sizer so the grid reclaims the width.
-    m_logPanel = new ChatPanel(this, 360);
+    // Sash between plot grid and log — same 4px grey gap as plot dividers.
+    m_logSash = new wxPanel(this, wxID_ANY, wxDefaultPosition, wxSize(GRID_GAP, -1));
+    m_logSash->SetMinSize(wxSize(GRID_GAP, -1));
+    m_logSash->SetMaxSize(wxSize(GRID_GAP, -1));
+    m_logSash->SetBackgroundColour(wxColour(120, 120, 130));
+    m_logSash->SetCursor(wxCursor(wxCURSOR_SIZEWE));
+    m_logSash->Bind(wxEVT_LEFT_DOWN, &MainFrame::OnLogSashMouse, this);
+    m_logSash->Bind(wxEVT_LEFT_UP, &MainFrame::OnLogSashMouse, this);
+    m_logSash->Bind(wxEVT_MOTION, &MainFrame::OnLogSashMouse, this);
+    m_logSash->Bind(wxEVT_MOUSE_CAPTURE_LOST, &MainFrame::OnLogSashCaptureLost, this);
+    mainSizer->Add(m_logSash, 0, wxEXPAND);
+
+    // Output-only action log panel (Phase 1).  Starts hidden; toggle via the
+    // View menu.  Hidden via sizer so the grid reclaims the width.
+    m_logPanel = new ChatPanel(this, m_logWidth);
+    m_logPanel->SetMinSize(wxSize(m_logWidth, 120));
     mainSizer->Add(m_logPanel, 0, wxEXPAND);
+    mainSizer->Show(m_logSash, false);
     mainSizer->Show(m_logPanel, false);
     m_logSizer = mainSizer;   // keep a handle to toggle the log element
 
@@ -2226,6 +2240,7 @@ void MainFrame::OnGridMouse(wxMouseEvent& event) {
         }
 
         LayoutGrid();
+        LogPlotSashIfVisible();
     } else if (event.LeftUp()) {
         if (m_draggingDivider) {
             m_gridPanel->ReleaseMouse();
@@ -2285,6 +2300,33 @@ void MainFrame::LogActionThrottled(const wxString& key, const wxString& text) {
     m_logThrottle->Record(key, text);
 }
 
+bool MainFrame::LogIsVisible() const {
+    return m_logSizer && m_logPanel && m_logSizer->IsShown(m_logPanel);
+}
+
+void MainFrame::LogPlotSashIfVisible() {
+    if (!LogIsVisible()) return;
+
+    wxString msg;
+    if (m_dragCol >= 0 && m_dragCol + 1 < (int)m_colWidths.size()) {
+        msg += wxString::Format("columns %d|%d: %.0f%% / %.0f%%",
+            m_dragCol + 1, m_dragCol + 2,
+            m_colWidths[m_dragCol] * 100.0,
+            m_colWidths[m_dragCol + 1] * 100.0);
+    }
+    if (m_dragRow >= 0 && m_dragRow + 1 < (int)m_rowHeights.size()) {
+        if (!msg.empty())
+            msg += ", ";
+        msg += wxString::Format("rows %d|%d: %.0f%% / %.0f%%",
+            m_dragRow + 1, m_dragRow + 2,
+            m_rowHeights[m_dragRow] * 100.0,
+            m_rowHeights[m_dragRow + 1] * 100.0);
+    }
+    if (msg.empty()) return;
+
+    LogActionThrottled("plotsash", "Plot sash " + msg);
+}
+
 wxString MainFrame::ColName(size_t col) const {
     const auto& labels = m_dataManager.dataset().columnLabels;
     if (col < labels.size())
@@ -2320,7 +2362,56 @@ void MainFrame::OnToggleLog(wxCommandEvent&) {
     if (!m_logSizer || !m_logPanel) return;
     bool shown = m_logSizer->IsShown(m_logPanel);
     m_logSizer->Show(m_logPanel, !shown);
-    m_logSizer->Layout();
+    if (m_logSash)
+        m_logSizer->Show(m_logSash, !shown);
+    if (!shown)
+        ApplyLogWidth(m_logWidth);
+    else
+        m_logSizer->Layout();
     m_logPanel->Refresh();
     LogAction(shown ? "Actions log hidden" : "Actions log shown");
+}
+
+void MainFrame::ApplyLogWidth(int width) {
+    if (!m_logPanel || !m_logSizer) return;
+
+    int reserved = GRID_GAP + MIN_CELL_W;
+    if (m_controlPanel)
+        reserved += m_controlPanel->GetSize().GetWidth();
+    int maxW = GetClientSize().GetWidth() - reserved;
+    if (maxW < MIN_LOG_W)
+        maxW = MIN_LOG_W;
+
+    m_logWidth = std::max(MIN_LOG_W, std::min(width, maxW));
+    m_logPanel->SetMinSize(wxSize(m_logWidth, 120));
+    m_logSizer->Layout();
+}
+
+void MainFrame::EndLogSashDrag() {
+    if (m_draggingLogSash && m_logSash && m_logSash->HasCapture())
+        m_logSash->ReleaseMouse();
+    m_draggingLogSash = false;
+}
+
+void MainFrame::OnLogSashCaptureLost(wxMouseCaptureLostEvent&) {
+    m_draggingLogSash = false;
+}
+
+void MainFrame::OnLogSashMouse(wxMouseEvent& event) {
+    if (!m_logSash || !m_logPanel) return;
+
+    if (event.LeftDown()) {
+        m_draggingLogSash = true;
+        m_logSashDragStartScreenX = m_logSash->ClientToScreen(event.GetPosition()).x;
+        m_logWidthStart = m_logPanel->GetClientSize().GetWidth();
+        if (!m_logSash->HasCapture())
+            m_logSash->CaptureMouse();
+    } else if (event.Dragging() && m_draggingLogSash) {
+        int nowX = m_logSash->ClientToScreen(event.GetPosition()).x;
+        ApplyLogWidth(m_logWidthStart - (nowX - m_logSashDragStartScreenX));
+        LogActionThrottled("logw",
+            wxString::Format("Log panel width: %d", m_logWidth));
+    } else if (event.LeftUp()) {
+        EndLogSashDrag();
+    }
 }

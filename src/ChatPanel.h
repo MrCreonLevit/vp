@@ -10,11 +10,11 @@
 // ============================================================
 //  ChatPanel — scrollable, output-only action log.
 //
-//  A sizer element on the right of the main frame.  The frame toggles
-//  visibility with sizer->Show/Hide; when hidden the grid reclaims the
-//  space.  The view is a wxTextCtrl that retains all text across
-//  hide/show, so re-showing reveals the full scrollback — no separate
-//  buffer needed.
+//  A sizer element on the right of the main frame, separated from the
+//  plot grid by a draggable sash (same 4px grey gap as plot dividers).
+//  The frame toggles visibility with sizer->Show/Hide; when hidden the
+//  grid reclaims the space.  The view is a wxTextCtrl that retains all
+//  text across hide/show, so re-showing reveals the full scrollback.
 //
 //  Phase 1: output only.  A bottom text-input row is a later phase.
 // ============================================================

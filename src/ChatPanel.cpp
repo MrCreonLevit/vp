@@ -31,7 +31,8 @@ ChatPanel::ChatPanel(wxWindow* parent, int panelWidth)
           : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(panelWidth, -1))
           , m_panelWidth(panelWidth)
 {
-    SetMinSize(wxSize(panelWidth, 120));
+    SetMinSize(wxSize(160, 120));
+    SetSize(wxSize(panelWidth, -1));
     BuildUi();
     Log("Viewpoints logging started");
 }

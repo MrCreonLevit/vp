@@ -73,6 +73,8 @@ private:
     wxString ColName(size_t col) const;                 // dataset column name or "(col N)"
     wxString PlotLoc(int plotIndex) const;              // "plot(r,c)" from plotIndex
     wxString LogAxisRange(float lo, float hi, size_t col) const;  // "[lo - hi]" with categories
+    bool LogIsVisible() const;
+    void LogPlotSashIfVisible();
     void SetupLogThrottle();
 
     void OnOpen(wxCommandEvent& event);
@@ -141,9 +143,20 @@ private:
     void OnGridMouse(wxMouseEvent& event);
     DividerHit HitTestDivider(int x, int y, int& col, int& row);
 
+    void ApplyLogWidth(int width);
+    void OnLogSashMouse(wxMouseEvent& event);
+    void OnLogSashCaptureLost(wxMouseCaptureLostEvent& event);
+    void EndLogSashDrag();
+
     ControlPanel* m_controlPanel = nullptr;
     ChatPanel* m_logPanel = nullptr;
+    wxPanel* m_logSash = nullptr;
     wxSizer* m_logSizer = nullptr;
+    int m_logWidth = 360;
+    bool m_draggingLogSash = false;
+    int m_logSashDragStartScreenX = 0;
+    int m_logWidthStart = 0;
+    static constexpr int MIN_LOG_W = 160;
     LogThrottle* m_logThrottle = nullptr;
     wxTimer m_logTimer;
     static constexpr int LOG_FLUSH_MS = 150;
