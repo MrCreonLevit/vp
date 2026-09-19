@@ -14,7 +14,6 @@ constexpr size_t kMaxAsciiLineBytes = 1'000'000;
 constexpr size_t kMaxStdinSnapshotLines = 20'000'000;
 constexpr size_t kMaxStdinSnapshotBytes = 512ull * 1024 * 1024;
 constexpr size_t kMaxPngBlobBytes = 256 * 1024;
-constexpr size_t kMaxPngTotalBytes = 2ull * 1024 * 1024 * 1024;
 constexpr uint32_t kMaxPngDecodeDim = 1024;
 
 // True if bytes look like a PNG whose IHDR width/height are in (0, maxDim]
@@ -51,8 +50,8 @@ struct DataSet {
     // Get a column's min and max values
     void columnRange(size_t col, float& minVal, float& maxVal) const;
 
-    // Per-point PNG images extracted from a binary parquet column (one per row, may be empty)
-    std::vector<std::vector<uint8_t>> pointImages;
+    // Name of a parquet binary PNG column, if present. Bytes are not stored
+    // here — DataManager::readPointImage() loads one row on demand.
     std::string pointImageColumnName;
 };
 
@@ -68,6 +67,10 @@ public:
     const DataSet& dataset() const { return m_data; }
     const std::string& errorMessage() const { return m_error; }
     const std::string& filePath() const { return m_filePath; }
+
+    bool hasPointImages() const { return !m_pngFileRows.empty(); }
+    // Load the PNG for one dataset row from the source parquet (cached).
+    bool readPointImage(size_t row, std::vector<uint8_t>& out) const;
 
     // Remove rows where selection[row] > 0. Returns number of rows removed.
     size_t removeSelectedRows(const std::vector<int>& selection);
@@ -87,9 +90,16 @@ private:
     void appendRowIndexColumn();
     bool isCommentLine(const std::string& line) const;
     std::vector<std::string> splitTokens(const std::string& line, char delimiter) const;
+    void clearPointImageSource();
 
     DataSet m_data;
     std::string m_filePath;
     std::string m_error;
     char m_delimiter = ' ';  // whitespace by default
+
+    // Lazy PNG: parquet column index and per-dataset-row file row.
+    int m_pngParquetCol = -1;
+    std::vector<int64_t> m_pngFileRows;
+    mutable int64_t m_pngCacheFileRow = -1;
+    mutable std::vector<uint8_t> m_pngCache;
 };

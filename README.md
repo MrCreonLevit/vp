@@ -33,7 +33,7 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 - **Constant-column removal** — columns with a single value are automatically dropped on load
 - **Save All / Save Selected** — export data or just brushed points as Parquet or CSV
 - **10 normalization modes** — Min-Max, +only, Max |val|, Trim percentile, 3 Sigma, Log10, Arctan, Rank, Gaussianize (per-plot, per-axis, smart defaults)
-- **Large dataset subsampling** — datasets over 4M points are automatically subsampled per plot for GPU memory management. File load also caps rows (20M default), columns (4096), and embedded PNG size to bound memory.
+- **Large dataset subsampling** — datasets over 4M points are automatically subsampled per plot for GPU memory management. File load also caps rows (20M default) and columns (4096). Embedded per-point PNGs are decoded on hover, not copied into RAM at load.
 - **FAST** can render and re-render millions of points in all plots simultaneously at interactive speeds on a Mac with Apple Silicon. 
 
 ### Interaction

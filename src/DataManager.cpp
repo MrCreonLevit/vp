@@ -22,6 +22,14 @@ void DataSet::columnRange(size_t col, float& minVal, float& maxVal) const {
     }
 }
 
+void DataManager::clearPointImageSource() {
+    m_pngParquetCol = -1;
+    m_pngFileRows.clear();
+    m_pngCacheFileRow = -1;
+    m_pngCache.clear();
+    m_data.pointImageColumnName.clear();
+}
+
 void DataManager::appendRowIndexColumn() {
     size_t oldCols = m_data.numCols;
     size_t newCols = oldCols + 1;
@@ -88,6 +96,7 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
     m_filePath = path;
     m_error.clear();
     m_data = DataSet{};
+    clearPointImageSource();
 
     std::ifstream file(path);
     if (!file.is_open()) {
@@ -397,6 +406,7 @@ bool DataManager::replaceFromLines(const std::vector<std::string>& lines) {
     }
 
     m_data = DataSet{};
+    clearPointImageSource();
     m_delimiter = ' ';  // stdin protocol uses whitespace
 
     // First line is the header
@@ -459,15 +469,16 @@ size_t DataManager::removeSelectedRows(const std::vector<int>& selection) {
     m_data.numRows -= removed;
     m_data.data.shrink_to_fit();
 
-    // Keep pointImages in sync
-    if (!m_data.pointImages.empty()) {
-        std::vector<std::vector<uint8_t>> newImages;
-        newImages.reserve(m_data.numRows);
+    if (!m_pngFileRows.empty()) {
+        std::vector<int64_t> newRows;
+        newRows.reserve(m_data.numRows);
         for (size_t row = 0; row < selection.size(); row++) {
             if (selection[row] == 0)
-                newImages.push_back(std::move(m_data.pointImages[row]));
+                newRows.push_back(m_pngFileRows[row]);
         }
-        m_data.pointImages = std::move(newImages);
+        m_pngFileRows = std::move(newRows);
+        m_pngCacheFileRow = -1;
+        m_pngCache.clear();
     }
 
     fprintf(stderr, "Removed %zu selected rows, %zu rows remaining\n",
@@ -521,6 +532,92 @@ bool DataManager::saveAsCsv(const std::string& path, const std::vector<int>& sel
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/file_reader.h>
+#include <parquet/column_reader.h>
+#include <parquet/types.h>
+#include <numeric>
+
+static int FindPngParquetColumn(parquet::ParquetFileReader* pq) {
+    auto md = pq->metadata();
+    if (!md || md->num_row_groups() < 1)
+        return -1;
+    for (int c = 0; c < md->num_columns(); c++) {
+        const auto* descr = md->schema()->Column(c);
+        if (descr->physical_type() != parquet::Type::BYTE_ARRAY)
+            continue;
+        std::shared_ptr<parquet::ColumnReader> colReader = pq->RowGroup(0)->Column(c);
+        auto* br = dynamic_cast<parquet::ByteArrayReader*>(colReader.get());
+        if (!br)
+            continue;
+        const int16_t maxDef = descr->max_definition_level();
+        while (br->HasNext()) {
+            int16_t def = 0;
+            parquet::ByteArray ba{};
+            int64_t nread = 0;
+            br->ReadBatch(1, &def, nullptr, &ba, &nread);
+            if (nread != 1)
+                continue;
+            if (def < maxDef)
+                continue;
+            if (ba.len >= 8 && ba.ptr &&
+                ba.ptr[0] == 0x89 && ba.ptr[1] == 'P' &&
+                ba.ptr[2] == 'N' && ba.ptr[3] == 'G')
+                return c;
+            break;  // first non-null value is not a PNG
+        }
+    }
+    return -1;
+}
+
+static bool ReadPngAtParquetRow(const std::string& path, int col, int64_t fileRow,
+                                std::vector<uint8_t>& out) {
+    out.clear();
+    if (col < 0 || fileRow < 0)
+        return false;
+    std::unique_ptr<parquet::ParquetFileReader> file;
+    try {
+        file = parquet::ParquetFileReader::OpenFile(path, /*memory_map=*/true);
+    } catch (...) {
+        return false;
+    }
+    auto md = file->metadata();
+    if (!md || col >= md->num_columns() || fileRow >= md->num_rows())
+        return false;
+
+    int64_t left = fileRow;
+    int rg = 0;
+    for (; rg < md->num_row_groups(); ++rg) {
+        int64_t n = md->RowGroup(rg)->num_rows();
+        if (left < n)
+            break;
+        left -= n;
+    }
+    if (rg >= md->num_row_groups())
+        return false;
+
+    const auto* descr = md->schema()->Column(col);
+    if (descr->physical_type() != parquet::Type::BYTE_ARRAY)
+        return false;
+    auto colReader = file->RowGroup(rg)->Column(col);
+    auto* br = dynamic_cast<parquet::ByteArrayReader*>(colReader.get());
+    if (!br)
+        return false;
+    while (left > 0) {
+        int64_t skipped = br->Skip(left);
+        if (skipped <= 0)
+            return false;
+        left -= skipped;
+    }
+    int16_t def = 0;
+    parquet::ByteArray ba{};
+    int64_t nread = 0;
+    br->ReadBatch(1, &def, nullptr, &ba, &nread);
+    if (nread != 1 || def < descr->max_definition_level())
+        return false;
+    if (!ba.ptr || !pngIhdrWithinLimits(ba.ptr, static_cast<size_t>(ba.len)))
+        return false;
+    out.assign(ba.ptr, ba.ptr + ba.len);
+    return true;
+}
 #endif
 
 bool DataManager::saveAsParquet(const std::string& path, const std::vector<int>& selection) const {
@@ -633,6 +730,7 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
     m_filePath = path;
     m_error.clear();
     m_data = DataSet{};
+    clearPointImageSource();
 
     // Open file
     auto result = arrow::io::ReadableFile::Open(path);
@@ -657,13 +755,25 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
         ? std::min(fileRows, static_cast<int64_t>(maxRows))
         : fileRows;
 
+    int pngColIdx = FindPngParquetColumn(reader->parquet_reader());
+    std::vector<int> readCols;
+    readCols.reserve(static_cast<size_t>(md->num_columns()));
+    for (int c = 0; c < md->num_columns(); c++) {
+        if (c != pngColIdx)
+            readCols.push_back(c);
+    }
+    if (readCols.empty()) {
+        m_error = "Parquet file has no non-image columns";
+        return false;
+    }
+
     std::shared_ptr<arrow::Table> table;
     if (maxRows > 0 && fileRows > static_cast<int64_t>(maxRows)) {
         std::vector<std::shared_ptr<arrow::Table>> parts;
         int64_t got = 0;
         for (int rg = 0; rg < md->num_row_groups() && got < wantRows; ++rg) {
             std::shared_ptr<arrow::Table> t;
-            auto rst = reader->ReadRowGroup(rg, &t);
+            auto rst = reader->ReadRowGroup(rg, readCols, &t);
             if (!rst.ok()) {
                 m_error = "Failed to read parquet row group: " + rst.ToString();
                 return false;
@@ -683,7 +793,7 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
                 static_cast<long long>(table->num_rows()),
                 static_cast<long long>(fileRows), table->num_columns());
     } else {
-        auto st = reader->ReadTable(&table);
+        auto st = reader->ReadTable(readCols, &table);
         if (!st.ok()) {
             m_error = "Failed to read parquet table: " + st.ToString();
             return false;
@@ -695,98 +805,16 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
     int numCols = table->num_columns();
     int64_t numRows = table->num_rows();
 
-    // Detect a binary column containing PNG images (first one wins)
-    int pngColIdx = -1;
-    for (int c = 0; c < numCols; c++) {
-        auto typeId = table->column(c)->type()->id();
-        if (typeId != arrow::Type::BINARY && typeId != arrow::Type::LARGE_BINARY)
-            continue;
-        // Check first non-null value for PNG magic bytes (\x89PNG)
-        auto chunked = table->column(c);
-        bool foundPng = false;
-        for (int chunk = 0; chunk < chunked->num_chunks() && !foundPng; chunk++) {
-            auto arr = chunked->chunk(chunk);
-            for (int64_t r = 0; r < arr->length(); r++) {
-                if (arr->IsNull(r)) continue;
-                const uint8_t* val = nullptr;
-                int32_t len = 0;
-                if (typeId == arrow::Type::BINARY) {
-                    auto binArr = std::static_pointer_cast<arrow::BinaryArray>(arr);
-                    val = binArr->GetValue(r, &len);
-                } else {
-                    auto binArr = std::static_pointer_cast<arrow::LargeBinaryArray>(arr);
-                    int64_t len64 = 0;
-                    val = binArr->GetValue(r, &len64);
-                    len = static_cast<int32_t>(std::min(len64, (int64_t)INT32_MAX));
-                }
-                if (len >= 8 && val[0] == 0x89 && val[1] == 'P' && val[2] == 'N' && val[3] == 'G') {
-                    pngColIdx = c;
-                    foundPng = true;
-                }
-                break; // only check first non-null value
-            }
-        }
-        if (pngColIdx >= 0) break;
-    }
-
-    // Extract PNG images if found, with per-blob and total memory caps
     if (pngColIdx >= 0) {
-        m_data.pointImageColumnName = table->field(pngColIdx)->name();
-        m_data.pointImages.resize(static_cast<size_t>(numRows));
-        auto chunked = table->column(pngColIdx);
-        auto typeId = chunked->type()->id();
-        size_t rowOffset = 0;
-        size_t storedBytes = 0;
-        size_t stored = 0, skipSize = 0, skipIhdr = 0, skipBudget = 0;
-        bool budgetExhausted = false;
-        for (int chunk = 0; chunk < chunked->num_chunks(); chunk++) {
-            auto arr = chunked->chunk(chunk);
-            for (int64_t r = 0; r < arr->length(); r++) {
-                if (arr->IsNull(r)) continue;
-                const uint8_t* val = nullptr;
-                int64_t len = 0;
-                if (typeId == arrow::Type::BINARY) {
-                    auto binArr = std::static_pointer_cast<arrow::BinaryArray>(arr);
-                    int32_t len32 = 0;
-                    val = binArr->GetValue(r, &len32);
-                    len = len32;
-                } else {
-                    auto binArr = std::static_pointer_cast<arrow::LargeBinaryArray>(arr);
-                    val = binArr->GetValue(r, &len);
-                }
-                if (len <= 0 || static_cast<size_t>(len) > kMaxPngBlobBytes) {
-                    skipSize++;
-                    continue;
-                }
-                if (budgetExhausted ||
-                    storedBytes + static_cast<size_t>(len) > kMaxPngTotalBytes) {
-                    skipBudget++;
-                    budgetExhausted = true;
-                    continue;
-                }
-                if (!pngIhdrWithinLimits(val, static_cast<size_t>(len))) {
-                    skipIhdr++;
-                    continue;
-                }
-                m_data.pointImages[rowOffset + r].assign(val, val + len);
-                storedBytes += static_cast<size_t>(len);
-                stored++;
-            }
-            rowOffset += arr->length();
-        }
-        fprintf(stderr,
-                "  Extracted PNG images from column '%s': %zu stored (%.1f MB), "
-                "%zu skipped (size=%zu ihdr=%zu budget=%zu)\n",
-                m_data.pointImageColumnName.c_str(), stored,
-                storedBytes / (1024.0 * 1024.0),
-                skipSize + skipIhdr + skipBudget, skipSize, skipIhdr, skipBudget);
+        m_data.pointImageColumnName = md->schema()->Column(pngColIdx)->name();
+        fprintf(stderr, "  PNG column '%s' will be decoded on hover\n",
+                m_data.pointImageColumnName.c_str());
     }
 
-    // Identify accepted columns (numeric + string types, skip PNG column)
+    // Identify accepted columns (numeric + string types; PNG column was not read)
     std::vector<int> acceptedCols;
     std::vector<bool> isStringCol;
     for (int c = 0; c < numCols; c++) {
-        if (c == pngColIdx) continue;
         auto type = table->column(c)->type();
         if (type->id() == arrow::Type::DOUBLE || type->id() == arrow::Type::FLOAT ||
             type->id() == arrow::Type::INT8 || type->id() == arrow::Type::INT16 ||
@@ -1033,6 +1061,34 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
 
     m_data.data.shrink_to_fit();
     appendRowIndexColumn();
+
+    if (pngColIdx >= 0) {
+        m_pngParquetCol = pngColIdx;
+        m_pngFileRows.resize(m_data.numRows);
+        std::iota(m_pngFileRows.begin(), m_pngFileRows.end(), int64_t{0});
+    }
     return true;
 #endif // HAS_PARQUET
+}
+
+bool DataManager::readPointImage(size_t row, std::vector<uint8_t>& out) const {
+    out.clear();
+    if (row >= m_pngFileRows.size() || m_pngParquetCol < 0)
+        return false;
+    const int64_t fileRow = m_pngFileRows[row];
+    if (fileRow < 0)
+        return false;
+    if (fileRow == m_pngCacheFileRow && !m_pngCache.empty()) {
+        out = m_pngCache;
+        return true;
+    }
+#ifndef HAS_PARQUET
+    return false;
+#else
+    if (!ReadPngAtParquetRow(m_filePath, m_pngParquetCol, fileRow, out))
+        return false;
+    m_pngCacheFileRow = fileRow;
+    m_pngCache = out;
+    return true;
+#endif
 }
