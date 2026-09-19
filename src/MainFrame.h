@@ -73,6 +73,7 @@ private:
     wxString ColName(size_t col) const;                 // dataset column name or "(col N)"
     wxString PlotLoc(int plotIndex) const;              // "plot(r,c)" from plotIndex
     wxString LogAxisRange(float lo, float hi, size_t col) const;  // "[lo - hi]" with categories
+    void LogViewChange(int plotIndex, const char* op, bool throttled);
     bool LogIsVisible() const;
     void LogPlotSashIfVisible();
     void SetupLogThrottle();

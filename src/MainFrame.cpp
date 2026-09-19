@@ -271,6 +271,7 @@ void MainFrame::CreateMenuBar() {
             mat3Identity(m_plotConfigs[m_activePlot].rotMatrix);
             m_controlPanel->StopSpinRock(m_activePlot);
             m_controlPanel->SetPlotConfig(m_activePlot, m_plotConfigs[m_activePlot]);
+            LogViewChange(m_activePlot, "Reset view", false);
         }
     }, ID_ResetViews);
 }
@@ -885,9 +886,18 @@ void MainFrame::RebuildGrid() {
          };
 
         // Linked axis view: propagate pan/zoom to plots sharing locked variables
-        canvas->onViewChanged = [this](int pi, float panX, float panY, float zoomX, float zoomY) {
+        canvas->onViewChanged = [this](int pi, ViewChangeKind kind,
+                                       float panX, float panY, float zoomX, float zoomY) {
             if (pi < 0 || pi >= (int)m_plotConfigs.size()) return;
             SetActivePlot(pi);
+            const char* op = "Pan";
+            switch (kind) {
+                case ViewChangeKind::Zoom:   op = "Zoom"; break;
+                case ViewChangeKind::ScaleX: op = "Scale X"; break;
+                case ViewChangeKind::ScaleY: op = "Scale Y"; break;
+                case ViewChangeKind::Pan:    op = "Pan"; break;
+            }
+            LogViewChange(pi, op, true);
             auto& srcCfg = m_plotConfigs[pi];
 
             for (int j = 0; j < (int)m_canvases.size(); j++) {
@@ -971,6 +981,7 @@ void MainFrame::RebuildGrid() {
             mat3Identity(m_plotConfigs[i].rotMatrix);
             m_controlPanel->StopSpinRock(i);
             m_controlPanel->SetPlotConfig(i, m_plotConfigs[i]);
+            LogViewChange(i, "Reset view", false);
         };
         canvas->onResetAllViewsRequested = [this]() {
             for (int j = 0; j < (int)m_canvases.size(); j++) {
@@ -982,6 +993,7 @@ void MainFrame::RebuildGrid() {
                 m_controlPanel->StopSpinRock(j);
                 m_controlPanel->SetPlotConfig(j, m_plotConfigs[j]);
             }
+            LogAction("Reset all views");
         };
 
         // Create tooltip popup for this canvas
@@ -993,6 +1005,7 @@ void MainFrame::RebuildGrid() {
                 c->SetShowTooltip(show);
             m_controlPanel->SetGlobalTooltip(show);
             if (!show) HideAllTooltips();
+            LogAction(wxString::Format("Hover details: %s", show ? "on" : "off"));
         };
 
         // Tooltip hover callback
@@ -1008,10 +1021,9 @@ void MainFrame::RebuildGrid() {
             wxString text = BuildTooltipText(dataRow);
 
             const std::vector<uint8_t>* pngData = nullptr;
-            if (dataRow >= 0 && dataRow < (int)ds.pointImages.size() &&
-                !ds.pointImages[dataRow].empty()) {
-                pngData = &ds.pointImages[dataRow];
-            }
+            std::vector<uint8_t> pngBuf;
+            if (m_dataManager.readPointImage(static_cast<size_t>(dataRow), pngBuf))
+                pngData = &pngBuf;
 
             if (pi >= 0 && pi < (int)m_tooltips.size()) {
                 wxPoint screenPos = m_canvases[pi]->ClientToScreen(wxPoint(sx, sy));
@@ -2360,6 +2372,43 @@ wxString MainFrame::PlotLoc(int plotIndex) const {
 
 // Format a [lo,hi] data-space range for one axis, showing category names
 // for categorical columns (mirrors the onSelectionDrag status bar formatting).
+void MainFrame::LogViewChange(int plotIndex, const char* op, bool throttled) {
+    if (plotIndex < 0 || plotIndex >= (int)m_canvases.size() ||
+        plotIndex >= (int)m_plotConfigs.size())
+        return;
+    const auto& ds = m_dataManager.dataset();
+    const auto& cfg = m_plotConfigs[plotIndex];
+    auto* canvas = m_canvases[plotIndex];
+    float zoomX = canvas->GetZoomX();
+    float zoomY = canvas->GetZoomY();
+    if (zoomX <= 0.0f) zoomX = 1.0f;
+    if (zoomY <= 0.0f) zoomY = 1.0f;
+    float x0 = canvas->GetPanX() - 1.0f / zoomX;
+    float x1 = canvas->GetPanX() + 1.0f / zoomX;
+    float y0 = canvas->GetPanY() - 1.0f / zoomY;
+    float y1 = canvas->GetPanY() + 1.0f / zoomY;
+
+    auto toDataRange = [&](float lo, float hi, size_t col) -> wxString {
+        if (ds.numCols == 0 || col >= ds.numCols)
+            return wxString::Format("%.4g - %.4g", lo, hi);
+        float mn, mx;
+        ds.columnRange(col, mn, mx);
+        float span = mx - mn;
+        if (span == 0.0f) span = 1.0f;
+        float loD = mn + ((std::min(lo, hi) + 0.9f) / 1.8f) * span;
+        float hiD = mn + ((std::max(lo, hi) + 0.9f) / 1.8f) * span;
+        return LogAxisRange(loD, hiD, col);
+    };
+
+    wxString msg = wxString::Format("%s on %s: X [%s] Y [%s]",
+        wxString(op), PlotLoc(plotIndex),
+        toDataRange(x0, x1, cfg.xCol), toDataRange(y0, y1, cfg.yCol));
+    if (throttled)
+        LogActionThrottled(wxString::Format("view_%d", plotIndex), msg);
+    else
+        LogAction(msg);
+}
+
 wxString MainFrame::LogAxisRange(float lo, float hi, size_t col) const {
     const auto& ds = m_dataManager.dataset();
     auto fmtVal = [&](float val) -> wxString {

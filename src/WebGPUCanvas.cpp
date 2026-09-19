@@ -1748,7 +1748,8 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
             m_panY += dy * 2.0f / m_zoomY;
             m_lastMouse = pos;
             m_viewDirty = true;
-            if (onViewChanged) onViewChanged(m_plotIndex, m_panX, m_panY, m_zoomX, m_zoomY);
+            if (onViewChanged) onViewChanged(m_plotIndex, ViewChangeKind::Pan,
+                                             m_panX, m_panY, m_zoomX, m_zoomY);
             Refresh();
         } else if (m_translating && m_hasLastRect) {
             // Option+drag: translate the existing selection rect
@@ -1836,6 +1837,7 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
         if (m_showTooltip && onPointHover)
             onPointHover(m_plotIndex, -1, 0, 0);
 
+        ViewChangeKind kind = ViewChangeKind::Pan;
         if (event.AltDown()) {
             // Option+scroll: zoom a single axis (vertical scroll → Y, horizontal → X)
             // centered on the mouse cursor
@@ -1854,10 +1856,12 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
                 float newZoomY = std::max(0.1f, std::min(m_zoomY * factor, 100.0f));
                 m_panY = wy - ndcY / newZoomY;
                 m_zoomY = newZoomY;
+                kind = ViewChangeKind::ScaleY;
             } else {
                 float newZoomX = std::max(0.1f, std::min(m_zoomX * factor, 100.0f));
                 m_panX = wx - ndcX / newZoomX;
                 m_zoomX = newZoomX;
+                kind = ViewChangeKind::ScaleX;
             }
         } else {
             // Two-finger scroll: pan the view
@@ -1872,7 +1876,7 @@ void WebGPUCanvas::OnMouse(wxMouseEvent& event) {
         }
 
         m_viewDirty = true;
-        if (onViewChanged) onViewChanged(m_plotIndex, m_panX, m_panY, m_zoomX, m_zoomY);
+        if (onViewChanged) onViewChanged(m_plotIndex, kind, m_panX, m_panY, m_zoomX, m_zoomY);
         ThrottledDensityRecompute();
         Refresh();
     } else if (m_showTooltip && event.Moving()) {
@@ -1922,7 +1926,8 @@ void WebGPUCanvas::OnMagnify(wxMouseEvent& event) {
     m_zoomY = newZoomY;
     m_viewDirty = true;
 
-    if (onViewChanged) onViewChanged(m_plotIndex, m_panX, m_panY, m_zoomX, m_zoomY);
+    if (onViewChanged) onViewChanged(m_plotIndex, ViewChangeKind::Zoom,
+                                     m_panX, m_panY, m_zoomX, m_zoomY);
     ThrottledDensityRecompute();
     Refresh();
 }

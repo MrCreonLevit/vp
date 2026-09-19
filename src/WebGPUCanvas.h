@@ -10,6 +10,8 @@
 
 class WebGPUContext;
 
+enum class ViewChangeKind { Pan, Zoom, ScaleX, ScaleY };
+
 struct PointVertex {
     float x, y, z;    // 3D position (z=0 for 2D mode)
     float r, g, b, a;
@@ -103,8 +105,9 @@ public:
     std::function<void(int plotIndex, float x0, float y0, float x1, float y1, int brushMode)> onBrushRect;
     std::function<void()> onClearRequested;
     std::function<void()> onKillRequested;
-    // Called when user pans or zooms this plot
-    std::function<void(int plotIndex, float panX, float panY, float zoomX, float zoomY)> onViewChanged;
+    // Called when user pans, zooms, or axis-scales this plot
+    std::function<void(int plotIndex, ViewChangeKind kind,
+                       float panX, float panY, float zoomX, float zoomY)> onViewChanged;
     // Called during selection drag with world-space box coordinates
     std::function<void(int plotIndex, float x0, float y0, float x1, float y1)> onSelectionDrag;
     std::function<void()> onInvertRequested;
