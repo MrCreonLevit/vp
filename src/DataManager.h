@@ -7,6 +7,31 @@
 #include <cstddef>
 #include <cstdint>
 
+// Load safety limits. maxRows 0 still means unlimited (CLI `-n 0`).
+constexpr size_t kDefaultMaxRows = 20'000'000;
+constexpr size_t kMaxColumns = 4096;
+constexpr size_t kMaxAsciiLineBytes = 1'000'000;
+constexpr size_t kMaxStdinSnapshotLines = 20'000'000;
+constexpr size_t kMaxStdinSnapshotBytes = 512ull * 1024 * 1024;
+constexpr size_t kMaxPngBlobBytes = 256 * 1024;
+constexpr size_t kMaxPngTotalBytes = 2ull * 1024 * 1024 * 1024;
+constexpr uint32_t kMaxPngDecodeDim = 1024;
+
+// True if bytes look like a PNG whose IHDR width/height are in (0, maxDim]
+// and whose size is at most maxBytes. Used before wxImage decode.
+inline bool pngIhdrWithinLimits(const uint8_t* p, size_t len,
+                                size_t maxBytes = kMaxPngBlobBytes,
+                                uint32_t maxDim = kMaxPngDecodeDim) {
+    if (!p || len < 24 || len > maxBytes) return false;
+    if (p[0] != 0x89 || p[1] != 'P' || p[2] != 'N' || p[3] != 'G') return false;
+    if (p[12] != 'I' || p[13] != 'H' || p[14] != 'D' || p[15] != 'R') return false;
+    uint32_t w = (uint32_t(p[16]) << 24) | (uint32_t(p[17]) << 16) |
+                 (uint32_t(p[18]) << 8) | uint32_t(p[19]);
+    uint32_t h = (uint32_t(p[20]) << 24) | (uint32_t(p[21]) << 16) |
+                 (uint32_t(p[22]) << 8) | uint32_t(p[23]);
+    return w > 0 && h > 0 && w <= maxDim && h <= maxDim;
+}
+
 struct ColumnMeta {
     bool isCategorical = false;
     std::vector<std::string> categories; // sorted alphabetically; index = float value stored in data

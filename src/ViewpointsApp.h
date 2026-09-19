@@ -11,6 +11,7 @@ public:
 
 private:
     wxString m_inputFile;
-    long m_maxRows = 0;  // 0 = no limit
+    long m_maxRows = 0;  // 0 = unlimited; applied only if -n was given
+    bool m_maxRowsSpecified = false;
     bool m_stdinMode = false;
 };

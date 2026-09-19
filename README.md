@@ -27,13 +27,13 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 ### Data Handling
 - **ASCII/CSV/TSV** file loading with progress bar
 - **Apache Parquet** file loading via Arrow C++ (optional dependency)
-- **Command-line loading** — `vp -i data.csv` or `vp data.parquet`
+- **Command-line loading** — `vp -i data.csv` or `vp data.parquet`. `-n N` caps rows (default 20 million; `-n 0` is unlimited)
 - **Categorical/string columns** — columns containing non-numeric strings are automatically detected and encoded as integers (alphabetically sorted). Category names appear in axis tick labels, selection coordinates, and hover details. Saved files restore the original strings.
 - **Row index column** — a synthetic "Index" column (0, 1, 2, ...) is appended on load, useful for single-column datasets or as a time proxy
 - **Constant-column removal** — columns with a single value are automatically dropped on load
 - **Save All / Save Selected** — export data or just brushed points as Parquet or CSV
 - **10 normalization modes** — Min-Max, +only, Max |val|, Trim percentile, 3 Sigma, Log10, Arctan, Rank, Gaussianize (per-plot, per-axis, smart defaults)
-- **Large dataset subsampling** — datasets over 4M points are automatically subsampled per plot for GPU memory management
+- **Large dataset subsampling** — datasets over 4M points are automatically subsampled per plot for GPU memory management. File load also caps rows (20M default), columns (4096), and embedded PNG size to bound memory.
 - **FAST** can render and re-render millions of points in all plots simultaneously at interactive speeds on a Mac with Apple Silicon. 
 
 ### Interaction
@@ -82,7 +82,7 @@ Originally developed by Creon Levit and Paul Gazis at NASA, Viewpoints has been 
 
 1. Download and open the DMG
 2. Drag `vp.app` to Applications
-3. Clear the quarantine flag (required for unsigned apps):
+3. The DMG is **ad-hoc signed, not notarized**. macOS Gatekeeper will block it until you strip the quarantine flag. That command disables a real OS integrity check — only do this for a build you trust, or **build from source** below instead:
    ```bash
    xattr -cr /Applications/vp.app
    ```

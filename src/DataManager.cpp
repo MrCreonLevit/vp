@@ -139,6 +139,11 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
     }
 
     // Determine if the first non-comment line is labels or data
+    if (line.size() > kMaxAsciiLineBytes) {
+        m_error = "Line exceeds maximum length";
+        return false;
+    }
+
     auto tokens = splitTokens(line, m_delimiter);
     if (tokens.empty()) {
         m_error = "No data found in file";
@@ -184,6 +189,11 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
 
         m_data.numCols = m_data.columnLabels.size();
         firstDataLine = line;  // This line is data, not labels
+    }
+
+    if (m_data.numCols > kMaxColumns) {
+        m_error = "Too many columns (max " + std::to_string(kMaxColumns) + ")";
+        return false;
     }
 
     // Phase 2: Read data rows
@@ -258,6 +268,9 @@ bool DataManager::loadAsciiFile(const std::string& path, ProgressCallback progre
 
         if (!line.empty() && line.back() == '\r')
             line.pop_back();
+
+        if (line.size() > kMaxAsciiLineBytes)
+            continue;
 
         if (isCommentLine(line))
             continue;
@@ -393,6 +406,10 @@ bool DataManager::replaceFromLines(const std::vector<std::string>& lines) {
         m_error = "Empty header line";
         return false;
     }
+    if (m_data.numCols > kMaxColumns) {
+        m_error = "Too many columns (max " + std::to_string(kMaxColumns) + ")";
+        return false;
+    }
 
     m_data.data.reserve(m_data.numCols * (lines.size() - 1));
 
@@ -497,6 +514,7 @@ bool DataManager::saveAsCsv(const std::string& path, const std::vector<int>& sel
 }
 
 #ifdef HAS_PARQUET
+#include <arrow/table.h>
 // Parquet I/O via Apache Arrow
 #include <arrow/api.h>
 #include <arrow/io/file.h>
@@ -633,26 +651,49 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
     }
     auto reader = std::move(*readerResult);
 
-    // Read entire table
+    auto md = reader->parquet_reader()->metadata();
+    int64_t fileRows = md->num_rows();
+    int64_t wantRows = (maxRows > 0)
+        ? std::min(fileRows, static_cast<int64_t>(maxRows))
+        : fileRows;
+
     std::shared_ptr<arrow::Table> table;
-    auto st = reader->ReadTable(&table);
-    if (!st.ok()) {
-        m_error = "Failed to read parquet table: " + st.ToString();
-        return false;
+    if (maxRows > 0 && fileRows > static_cast<int64_t>(maxRows)) {
+        std::vector<std::shared_ptr<arrow::Table>> parts;
+        int64_t got = 0;
+        for (int rg = 0; rg < md->num_row_groups() && got < wantRows; ++rg) {
+            std::shared_ptr<arrow::Table> t;
+            auto rst = reader->ReadRowGroup(rg, &t);
+            if (!rst.ok()) {
+                m_error = "Failed to read parquet row group: " + rst.ToString();
+                return false;
+            }
+            if (got + t->num_rows() > wantRows)
+                t = t->Slice(0, wantRows - got);
+            got += t->num_rows();
+            parts.push_back(std::move(t));
+        }
+        auto cat = arrow::ConcatenateTables(parts);
+        if (!cat.ok()) {
+            m_error = "Failed to concatenate parquet row groups: " + cat.status().ToString();
+            return false;
+        }
+        table = *cat;
+        fprintf(stderr, "Parquet: limited to %lld rows (of %lld) x %d columns\n",
+                static_cast<long long>(table->num_rows()),
+                static_cast<long long>(fileRows), table->num_columns());
+    } else {
+        auto st = reader->ReadTable(&table);
+        if (!st.ok()) {
+            m_error = "Failed to read parquet table: " + st.ToString();
+            return false;
+        }
+        fprintf(stderr, "Parquet: %lld rows x %d columns\n",
+                static_cast<long long>(table->num_rows()), table->num_columns());
     }
 
     int numCols = table->num_columns();
     int64_t numRows = table->num_rows();
-
-    // Apply row limit
-    if (maxRows > 0 && numRows > static_cast<int64_t>(maxRows)) {
-        table = table->Slice(0, maxRows);
-        numRows = maxRows;
-        fprintf(stderr, "Parquet: limited to %lld rows (of %lld) x %d columns\n",
-                numRows, table->num_rows(), numCols);
-    } else {
-        fprintf(stderr, "Parquet: %lld rows x %d columns\n", numRows, numCols);
-    }
 
     // Detect a binary column containing PNG images (first one wins)
     int pngColIdx = -1;
@@ -688,35 +729,57 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
         if (pngColIdx >= 0) break;
     }
 
-    // Extract PNG images if found
+    // Extract PNG images if found, with per-blob and total memory caps
     if (pngColIdx >= 0) {
         m_data.pointImageColumnName = table->field(pngColIdx)->name();
         m_data.pointImages.resize(static_cast<size_t>(numRows));
         auto chunked = table->column(pngColIdx);
         auto typeId = chunked->type()->id();
         size_t rowOffset = 0;
+        size_t storedBytes = 0;
+        size_t stored = 0, skipSize = 0, skipIhdr = 0, skipBudget = 0;
+        bool budgetExhausted = false;
         for (int chunk = 0; chunk < chunked->num_chunks(); chunk++) {
             auto arr = chunked->chunk(chunk);
             for (int64_t r = 0; r < arr->length(); r++) {
-                if (!arr->IsNull(r)) {
-                    const uint8_t* val = nullptr;
-                    int64_t len = 0;
-                    if (typeId == arrow::Type::BINARY) {
-                        auto binArr = std::static_pointer_cast<arrow::BinaryArray>(arr);
-                        int32_t len32 = 0;
-                        val = binArr->GetValue(r, &len32);
-                        len = len32;
-                    } else {
-                        auto binArr = std::static_pointer_cast<arrow::LargeBinaryArray>(arr);
-                        val = binArr->GetValue(r, &len);
-                    }
-                    m_data.pointImages[rowOffset + r].assign(val, val + len);
+                if (arr->IsNull(r)) continue;
+                const uint8_t* val = nullptr;
+                int64_t len = 0;
+                if (typeId == arrow::Type::BINARY) {
+                    auto binArr = std::static_pointer_cast<arrow::BinaryArray>(arr);
+                    int32_t len32 = 0;
+                    val = binArr->GetValue(r, &len32);
+                    len = len32;
+                } else {
+                    auto binArr = std::static_pointer_cast<arrow::LargeBinaryArray>(arr);
+                    val = binArr->GetValue(r, &len);
                 }
+                if (len <= 0 || static_cast<size_t>(len) > kMaxPngBlobBytes) {
+                    skipSize++;
+                    continue;
+                }
+                if (budgetExhausted ||
+                    storedBytes + static_cast<size_t>(len) > kMaxPngTotalBytes) {
+                    skipBudget++;
+                    budgetExhausted = true;
+                    continue;
+                }
+                if (!pngIhdrWithinLimits(val, static_cast<size_t>(len))) {
+                    skipIhdr++;
+                    continue;
+                }
+                m_data.pointImages[rowOffset + r].assign(val, val + len);
+                storedBytes += static_cast<size_t>(len);
+                stored++;
             }
             rowOffset += arr->length();
         }
-        fprintf(stderr, "  Extracted PNG images from column '%s' (%zu rows)\n",
-                m_data.pointImageColumnName.c_str(), m_data.pointImages.size());
+        fprintf(stderr,
+                "  Extracted PNG images from column '%s': %zu stored (%.1f MB), "
+                "%zu skipped (size=%zu ihdr=%zu budget=%zu)\n",
+                m_data.pointImageColumnName.c_str(), stored,
+                storedBytes / (1024.0 * 1024.0),
+                skipSize + skipIhdr + skipBudget, skipSize, skipIhdr, skipBudget);
     }
 
     // Identify accepted columns (numeric + string types, skip PNG column)
@@ -736,6 +799,12 @@ bool DataManager::loadParquetFile(const std::string& path, ProgressCallback prog
             acceptedCols.push_back(c);
             isStringCol.push_back(true);
         }
+    }
+    if (acceptedCols.size() > kMaxColumns) {
+        fprintf(stderr, "  Truncating to %zu columns (file has %zu usable)\n",
+                kMaxColumns, acceptedCols.size());
+        acceptedCols.resize(kMaxColumns);
+        isStringCol.resize(kMaxColumns);
     }
 
     if (acceptedCols.empty()) {

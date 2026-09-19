@@ -87,7 +87,8 @@ public:
                 const std::vector<uint8_t>* pngData = nullptr) {
         m_text->SetLabel(content);
 
-        if (pngData && !pngData->empty()) {
+        if (pngData && !pngData->empty() &&
+            pngIhdrWithinLimits(pngData->data(), pngData->size())) {
             wxMemoryInputStream stream(pngData->data(), pngData->size());
             wxImage img(stream, wxBITMAP_TYPE_PNG);
             if (img.IsOk()) {
@@ -1875,6 +1876,8 @@ void MainFrame::StartStdinReader(const std::string& header) {
     m_stdinThread = std::thread([this]() {
         std::string line;
         std::vector<std::string> currentSnapshot;
+        size_t snapshotBytes = 0;
+        bool overflow = false;
 
         while (m_stdinRunning && std::getline(std::cin, line)) {
             // Strip trailing \r
@@ -1882,19 +1885,34 @@ void MainFrame::StartStdinReader(const std::string& header) {
                 line.pop_back();
 
             if (line == "---") {
-                // Snapshot complete — post to main thread
-                if (!currentSnapshot.empty()) {
+                if (overflow) {
+                    fprintf(stderr, "stdin snapshot exceeded limits; skipped\n");
+                    currentSnapshot.clear();
+                    snapshotBytes = 0;
+                    overflow = false;
+                } else if (!currentSnapshot.empty()) {
                     {
                         std::lock_guard<std::mutex> lock(m_stdinMutex);
                         m_stdinSnapshot = std::move(currentSnapshot);
                     }
                     currentSnapshot.clear();
+                    snapshotBytes = 0;
 
-                    // Post event to main thread
                     auto* evt = new wxCommandEvent(wxEVT_COMMAND_MENU_SELECTED, ID_StdinSnapshot);
                     wxQueueEvent(this, evt);
                 }
             } else if (!line.empty()) {
+                if (overflow)
+                    continue;
+                if (line.size() > kMaxAsciiLineBytes ||
+                    currentSnapshot.size() >= kMaxStdinSnapshotLines ||
+                    snapshotBytes + line.size() > kMaxStdinSnapshotBytes) {
+                    overflow = true;
+                    currentSnapshot.clear();
+                    snapshotBytes = 0;
+                    continue;
+                }
+                snapshotBytes += line.size();
                 currentSnapshot.push_back(line);
             }
         }
