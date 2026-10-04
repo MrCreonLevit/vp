@@ -33,10 +33,13 @@ public:
     std::function<void(int plotIndex, int bins)> onHistBinsChanged;
     std::function<void(int plotIndex, bool xLock, bool yLock)> onAxisLockChanged;
     std::function<void(int plotIndex, int zCol, int zNorm)> onZAxisChanged;
-    std::function<void(int plotIndex, float angle)> onRotationChanged;
-    std::function<void(int plotIndex, float angle)> onRotationXChanged;
-    std::function<void(int plotIndex, float angle)> onRotationZChanged;
+    std::function<void(int plotIndex, float angle, bool animated)> onRotationChanged;
+    std::function<void(int plotIndex, float angle, bool animated)> onRotationXChanged;
+    std::function<void(int plotIndex, float angle, bool animated)> onRotationZChanged;
     std::function<void(int plotIndex, bool zeroY, bool zeroX, bool zeroZ)> onRotationZeroed;
+
+    std::function<void(int plotIndex, int axis, bool spinning, bool rocking)> onSpinRockChanged;
+
     std::function<void()> onClearSelection;
     std::function<void()> onInvertSelection;
     std::function<void()> onKillSelected;
@@ -114,10 +117,11 @@ public:
     std::function<void(int plotIndex, bool xLock, bool yLock)> onAxisLockChanged;
     std::function<void(int plotIndex, int xNorm, int yNorm)> onNormChanged;
     std::function<void(int plotIndex, int zCol, int zNorm)> onZAxisChanged;
-    std::function<void(int plotIndex, float angle)> onRotationChanged;
-    std::function<void(int plotIndex, float angle)> onRotationXChanged;
-    std::function<void(int plotIndex, float angle)> onRotationZChanged;
+    std::function<void(int plotIndex, float angle, bool animated)> onRotationChanged;
+    std::function<void(int plotIndex, float angle, bool animated)> onRotationXChanged;
+    std::function<void(int plotIndex, float angle, bool animated)> onRotationZChanged;
     std::function<void(int plotIndex, bool zeroY, bool zeroX, bool zeroZ)> onRotationZeroed;
+    std::function<void(int plotIndex, int axis, bool spinning, bool rocking)> onSpinRockChanged;
     std::function<void(int plotIndex, bool show)> onShowUnselectedChanged;
     std::function<void(int plotIndex, bool show)> onGridLinesChanged;
     std::function<void(int plotIndex, bool show)> onShowHistogramsChanged;

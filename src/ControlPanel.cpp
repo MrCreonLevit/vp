@@ -259,14 +259,14 @@ void PlotTab::CreateControls(int row, int col) {
         float angle = static_cast<float>(m_rotationSlider->GetValue());
         m_spinAngle = angle;
         m_rotationLabel->SetLabel(wxString::Format("screen y: %d\u00B0", (int)angle));
-        if (onRotationChanged) onRotationChanged(m_plotIndex, angle);
+        if (onRotationChanged) onRotationChanged(m_plotIndex, angle, false);
     });
     m_rotationXSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         if (m_suppress) return;
         float angle = static_cast<float>(m_rotationXSlider->GetValue());
         m_spinXAngle = angle;
         m_rotationXLabel->SetLabel(wxString::Format("screen x: %d\u00B0", (int)angle));
-        if (onRotationXChanged) onRotationXChanged(m_plotIndex, angle);
+        if (onRotationXChanged) onRotationXChanged(m_plotIndex, angle, false);
     });
     m_spinButton->Bind(wxEVT_TOGGLEBUTTON, [this](wxCommandEvent&) {
         m_spinning = m_spinButton->GetValue();
@@ -275,6 +275,7 @@ void PlotTab::CreateControls(int row, int col) {
             m_rocking = false;
             m_rockButton->SetValue(false);
         }
+        if (onSpinRockChanged) onSpinRockChanged(m_plotIndex, 0, m_spinning, false);
     });
     m_rockButton->Bind(wxEVT_TOGGLEBUTTON, [this](wxCommandEvent&) {
         m_rocking = m_rockButton->GetValue();
@@ -285,6 +286,7 @@ void PlotTab::CreateControls(int row, int col) {
             m_spinning = false;
             m_spinButton->SetValue(false);
         }
+        if (onSpinRockChanged) onSpinRockChanged(m_plotIndex, 0, false, m_rocking);
     });
     zeroYBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         m_spinning = false; m_rocking = false;
@@ -301,6 +303,7 @@ void PlotTab::CreateControls(int row, int col) {
             m_rockingX = false;
             m_rockXButton->SetValue(false);
         }
+        if (onSpinRockChanged) onSpinRockChanged(m_plotIndex, 1, m_spinningX, false);
     });
     m_rockXButton->Bind(wxEVT_TOGGLEBUTTON, [this](wxCommandEvent&) {
         m_rockingX = m_rockXButton->GetValue();
@@ -311,6 +314,7 @@ void PlotTab::CreateControls(int row, int col) {
             m_spinningX = false;
             m_spinXButton->SetValue(false);
         }
+        if (onSpinRockChanged) onSpinRockChanged(m_plotIndex, 1, false, m_rockingX);
     });
     zeroXBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         m_spinningX = false; m_rockingX = false;
@@ -325,7 +329,7 @@ void PlotTab::CreateControls(int row, int col) {
         float angle = static_cast<float>(m_rotationZSlider->GetValue());
         m_spinZAngle = angle;
         m_rotationZLabel->SetLabel(wxString::Format("screen z: %d\u00B0", (int)angle));
-        if (onRotationZChanged) onRotationZChanged(m_plotIndex, angle);
+        if (onRotationZChanged) onRotationZChanged(m_plotIndex, angle, false);
     });
     m_spinZButton->Bind(wxEVT_TOGGLEBUTTON, [this](wxCommandEvent&) {
         m_spinningZ = m_spinZButton->GetValue();
@@ -334,6 +338,7 @@ void PlotTab::CreateControls(int row, int col) {
             m_rockingZ = false;
             m_rockZButton->SetValue(false);
         }
+        if (onSpinRockChanged) onSpinRockChanged(m_plotIndex, 2, m_spinningZ, false);
     });
     m_rockZButton->Bind(wxEVT_TOGGLEBUTTON, [this](wxCommandEvent&) {
         m_rockingZ = m_rockZButton->GetValue();
@@ -344,6 +349,7 @@ void PlotTab::CreateControls(int row, int col) {
             m_spinningZ = false;
             m_spinZButton->SetValue(false);
         }
+        if (onSpinRockChanged) onSpinRockChanged(m_plotIndex, 2, false, m_rockingZ);
     });
     zeroZBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         m_spinningZ = false; m_rockingZ = false;
@@ -505,7 +511,7 @@ void ControlPanel::OnSpinTimer(wxTimerEvent&) {
         if (tab->m_spinning || tab->m_rocking) {
             tab->m_rotationSlider->SetValue(static_cast<int>(tab->m_spinAngle));
             tab->m_rotationLabel->SetLabel(wxString::Format("screen y: %d\u00B0", (int)tab->m_spinAngle));
-            if (onRotationChanged) onRotationChanged(tab->m_plotIndex, tab->m_spinAngle);
+            if (onRotationChanged) onRotationChanged(tab->m_plotIndex, tab->m_spinAngle, true);
         }
         // Screen X spin/rock
         if (tab->m_spinningX) {
@@ -520,7 +526,7 @@ void ControlPanel::OnSpinTimer(wxTimerEvent&) {
         if (tab->m_spinningX || tab->m_rockingX) {
             tab->m_rotationXSlider->SetValue(static_cast<int>(tab->m_spinXAngle));
             tab->m_rotationXLabel->SetLabel(wxString::Format("screen x: %d\u00B0", (int)tab->m_spinXAngle));
-            if (onRotationXChanged) onRotationXChanged(tab->m_plotIndex, tab->m_spinXAngle);
+            if (onRotationXChanged) onRotationXChanged(tab->m_plotIndex, tab->m_spinXAngle, true);
         }
         // Screen Z spin/rock
         if (tab->m_spinningZ) {
@@ -535,7 +541,7 @@ void ControlPanel::OnSpinTimer(wxTimerEvent&) {
         if (tab->m_spinningZ || tab->m_rockingZ) {
             tab->m_rotationZSlider->SetValue(static_cast<int>(tab->m_spinZAngle));
             tab->m_rotationZLabel->SetLabel(wxString::Format("screen z: %d\u00B0", (int)tab->m_spinZAngle));
-            if (onRotationZChanged) onRotationZChanged(tab->m_plotIndex, tab->m_spinZAngle);
+            if (onRotationZChanged) onRotationZChanged(tab->m_plotIndex, tab->m_spinZAngle, true);
         }
     }
 }
@@ -602,17 +608,20 @@ void ControlPanel::RebuildTabs(int rows, int cols) {
             ResetAllAxisDropdowns(false, false, true);
             if (onZAxisChanged) onZAxisChanged(pi, zCol, zNorm);
         };
-        tab->onRotationChanged = [this](int pi, float angle) {
-            if (onRotationChanged) onRotationChanged(pi, angle);
+        tab->onRotationChanged = [this](int pi, float angle, bool animated) {
+            if (onRotationChanged) onRotationChanged(pi, angle, animated);
         };
-        tab->onRotationXChanged = [this](int pi, float angle) {
-            if (onRotationXChanged) onRotationXChanged(pi, angle);
+        tab->onRotationXChanged = [this](int pi, float angle, bool animated) {
+            if (onRotationXChanged) onRotationXChanged(pi, angle, animated);
         };
-        tab->onRotationZChanged = [this](int pi, float angle) {
-            if (onRotationZChanged) onRotationZChanged(pi, angle);
+        tab->onRotationZChanged = [this](int pi, float angle, bool animated) {
+            if (onRotationZChanged) onRotationZChanged(pi, angle, animated);
         };
         tab->onRotationZeroed = [this](int pi, bool zeroY, bool zeroX, bool zeroZ) {
             if (onRotationZeroed) onRotationZeroed(pi, zeroY, zeroX, zeroZ);
+        };
+        tab->onSpinRockChanged = [this](int pi, int axis, bool spinning, bool rocking) {
+            if (onSpinRockChanged) onSpinRockChanged(pi, axis, spinning, rocking);
         };
         tab->onShowUnselectedChanged = [this](int pi, bool show) {
             if (onShowUnselectedChanged) onShowUnselectedChanged(pi, show);
@@ -1123,7 +1132,7 @@ void ControlPanel::CreateAllPlotsSubPage() {
             tab->m_spinAngle = angle;
             tab->m_rotationSlider->SetValue((int)angle);
             tab->m_rotationLabel->SetLabel(wxString::Format("screen y: %d\u00B0", (int)angle));
-            if (onRotationChanged) onRotationChanged(tab->m_plotIndex, angle);
+            if (onRotationChanged) onRotationChanged(tab->m_plotIndex, angle, false);
         }
     });
     allRotXSlider->Bind(wxEVT_SLIDER, [this, allRotXSlider, allRotXLabel](wxCommandEvent&) {
@@ -1135,12 +1144,13 @@ void ControlPanel::CreateAllPlotsSubPage() {
             tab->m_spinXAngle = angle;
             tab->m_rotationXSlider->SetValue((int)angle);
             tab->m_rotationXLabel->SetLabel(wxString::Format("screen x: %d\u00B0", (int)angle));
-            if (onRotationXChanged) onRotationXChanged(tab->m_plotIndex, angle);
+            if (onRotationXChanged) onRotationXChanged(tab->m_plotIndex, angle, false);
         }
     });
     allSpinBtn->Bind(wxEVT_TOGGLEBUTTON, [this, allSpinBtn, allRockBtn, allRotSlider](wxCommandEvent&) {
         bool spinning = allSpinBtn->GetValue();
         if (spinning) allRockBtn->SetValue(false);
+        if (onSpinRockChanged) onSpinRockChanged(-1, 0, spinning, false);
         for (auto* tab : m_plotTabs) {
             tab->m_spinning = spinning;
             tab->m_spinButton->SetValue(spinning);
@@ -1154,6 +1164,7 @@ void ControlPanel::CreateAllPlotsSubPage() {
     allRockBtn->Bind(wxEVT_TOGGLEBUTTON, [this, allSpinBtn, allRockBtn, allRotSlider](wxCommandEvent&) {
         bool rocking = allRockBtn->GetValue();
         if (rocking) allSpinBtn->SetValue(false);
+        if (onSpinRockChanged) onSpinRockChanged(-1, 0, false, rocking);
         for (auto* tab : m_plotTabs) {
             tab->m_rocking = rocking;
             tab->m_rockButton->SetValue(rocking);
@@ -1182,6 +1193,7 @@ void ControlPanel::CreateAllPlotsSubPage() {
     allSpinXBtn->Bind(wxEVT_TOGGLEBUTTON, [this, allSpinXBtn, allRockXBtn, allRotXSlider](wxCommandEvent&) {
         bool spinning = allSpinXBtn->GetValue();
         if (spinning) allRockXBtn->SetValue(false);
+        if (onSpinRockChanged) onSpinRockChanged(-1, 1, spinning, false);
         for (auto* tab : m_plotTabs) {
             tab->m_spinningX = spinning;
             tab->m_spinXButton->SetValue(spinning);
@@ -1195,6 +1207,7 @@ void ControlPanel::CreateAllPlotsSubPage() {
     allRockXBtn->Bind(wxEVT_TOGGLEBUTTON, [this, allSpinXBtn, allRockXBtn, allRotXSlider](wxCommandEvent&) {
         bool rocking = allRockXBtn->GetValue();
         if (rocking) allSpinXBtn->SetValue(false);
+        if (onSpinRockChanged) onSpinRockChanged(-1, 1, false, rocking);
         for (auto* tab : m_plotTabs) {
             tab->m_rockingX = rocking;
             tab->m_rockXButton->SetValue(rocking);
@@ -1229,12 +1242,13 @@ void ControlPanel::CreateAllPlotsSubPage() {
             tab->m_spinZAngle = angle;
             tab->m_rotationZSlider->SetValue((int)angle);
             tab->m_rotationZLabel->SetLabel(wxString::Format("screen z: %d\u00B0", (int)angle));
-            if (onRotationZChanged) onRotationZChanged(tab->m_plotIndex, angle);
+            if (onRotationZChanged) onRotationZChanged(tab->m_plotIndex, angle, false);
         }
     });
     allSpinZBtn->Bind(wxEVT_TOGGLEBUTTON, [this, allSpinZBtn, allRockZBtn, allRotZSlider](wxCommandEvent&) {
         bool spinning = allSpinZBtn->GetValue();
         if (spinning) allRockZBtn->SetValue(false);
+        if (onSpinRockChanged) onSpinRockChanged(-1, 2, spinning, false);
         for (auto* tab : m_plotTabs) {
             tab->m_spinningZ = spinning;
             tab->m_spinZButton->SetValue(spinning);
@@ -1248,6 +1262,7 @@ void ControlPanel::CreateAllPlotsSubPage() {
     allRockZBtn->Bind(wxEVT_TOGGLEBUTTON, [this, allSpinZBtn, allRockZBtn, allRotZSlider](wxCommandEvent&) {
         bool rocking = allRockZBtn->GetValue();
         if (rocking) allSpinZBtn->SetValue(false);
+        if (onSpinRockChanged) onSpinRockChanged(-1, 2, false, rocking);
         for (auto* tab : m_plotTabs) {
             tab->m_rockingZ = rocking;
             tab->m_rockZButton->SetValue(rocking);

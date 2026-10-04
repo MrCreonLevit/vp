@@ -413,36 +413,36 @@ void MainFrame::CreateLayout() {
             PlotLoc(plotIndex), zAxis, NormModeName(static_cast<NormMode>(zNorm))));
        };
 
-    m_controlPanel->onRotationChanged = [this](int plotIndex, float angle) {
+    m_controlPanel->onRotationChanged = [this](int plotIndex, float angle, bool animated) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
         auto& cfg = m_plotConfigs[plotIndex];
         float delta = angleDelta(angle, cfg.rotationY);
         cfg.rotationY = angle;
         mat3PreRotateY(cfg.rotMatrix, delta);
         m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
-        LogActionThrottled(wxString::Format("rotY_%d", plotIndex),
+        if (!animated) LogActionThrottled(wxString::Format("rotY_%d", plotIndex),
             wxString::Format("Rotate Y %d° on %s", (int)angle, PlotLoc(plotIndex)));
       };
 
-    m_controlPanel->onRotationXChanged = [this](int plotIndex, float angle) {
+    m_controlPanel->onRotationXChanged = [this](int plotIndex, float angle, bool animated) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
         auto& cfg = m_plotConfigs[plotIndex];
         float delta = angleDelta(angle, cfg.rotationX);
         cfg.rotationX = angle;
         mat3PreRotateX(cfg.rotMatrix, delta);
         m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
-        LogActionThrottled(wxString::Format("rotX_%d", plotIndex),
+        if (!animated) LogActionThrottled(wxString::Format("rotX_%d", plotIndex),
             wxString::Format("Rotate X %d° on %s", (int)angle, PlotLoc(plotIndex)));
       };
 
-    m_controlPanel->onRotationZChanged = [this](int plotIndex, float angle) {
+    m_controlPanel->onRotationZChanged = [this](int plotIndex, float angle, bool animated) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
         auto& cfg = m_plotConfigs[plotIndex];
         float delta = angleDelta(angle, cfg.rotationZ);
         cfg.rotationZ = angle;
         mat3PreRotateZ(cfg.rotMatrix, delta);
         m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
-        LogActionThrottled(wxString::Format("rotZ_%d", plotIndex),
+        if (!animated) LogActionThrottled(wxString::Format("rotZ_%d", plotIndex),
             wxString::Format("Rotate Z %d° on %s", (int)angle, PlotLoc(plotIndex)));
       };
 
@@ -461,7 +461,15 @@ void MainFrame::CreateLayout() {
         m_controlPanel->SetPlotConfig(plotIndex, cfg);
         LogAction(wxString::Format("Reset rotation on %s", PlotLoc(plotIndex)));
       };
-
+    m_controlPanel->onSpinRockChanged = [this](int plotIndex, int axis, bool spinning, bool rocking) {
+        const char* ax = (axis == 1) ? "X" : (axis == 2) ? "Z" : "Y";
+        wxString loc = (plotIndex < 0) ? " (all plots)" : PlotLoc(plotIndex);
+        if (spinning || rocking) {
+            LogAction(wxString::FromUTF8(ax) + " rotation " + (rocking ? "rock on" : "spin on") + loc);
+         } else {
+            LogAction(wxString::FromUTF8(ax) + " rotation stopped" + loc);
+         }
+     };
     m_controlPanel->onShowUnselectedChanged = [this](int plotIndex, bool show) {
         if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
         m_plotConfigs[plotIndex].showUnselected = show;
@@ -521,10 +529,13 @@ void MainFrame::CreateLayout() {
 
     m_controlPanel->onTabSelected = [this](int plotIndex) {
         SetActivePlot(plotIndex);
+        if (plotIndex >= 0 && plotIndex < (int)m_plotConfigs.size())
+            LogAction(wxString::Format("Active plot: %s", PlotLoc(plotIndex)));
     };
 
     m_controlPanel->onAllSelected = [this]() {
         HighlightAllPlots();
+        LogAction("All plots highlighted");
     };
 
     // Global callbacks (from "All" tab) — apply to all plots and update configs
@@ -639,6 +650,8 @@ void MainFrame::CreateLayout() {
             for (auto* c : m_canvases)
                 c->SetBrushColors(m_brushColors);
         }
+        LogAction(wxString::Format("Brush %d color: (%.2f, %.2f, %.2f, %.2f)",
+            brushIndex, r, g, b, a));
     };
 
     m_controlPanel->onBrushSymbolChanged = [this](int brushIndex, int symbol) {
@@ -2028,6 +2041,10 @@ void MainFrame::OnStdinSnapshot(wxCommandEvent& event) {
     float pct = ds.numRows > 0 ? (100.0f * selCount / ds.numRows) : 0;
     SetStatusText(m_dataStatusText + wxString::Format("  |  Selected: %d / %zu (%.1f%%)", selCount, ds.numRows, pct));
     UpdateAllPlots();
+      // Throttled: streaming snapshots can arrive faster than the log flush
+      // interval, so coalesce to one per-frame-sized line carrying the latest count.
+    LogActionThrottled("stdin",
+        wxString::Format("Loaded %zu rows x %zu columns (streaming)", ds.numRows, ds.numCols));
 }
 
 void MainFrame::OnQuit(wxCommandEvent& event) { Close(true); }
