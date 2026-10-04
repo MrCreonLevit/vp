@@ -863,8 +863,7 @@ void ControlPanel::CreateAllPlotsSubPage() {
                                   wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
     pSizer->Add(randBtn, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
     randBtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
-        for (int i = 0; i < (int)m_plotTabs.size(); i++)
-            if (onRandomizeAxes) onRandomizeAxes(i);
+        if (onRandomizeAxes) onRandomizeAxes(kAllPlots);
         ResetAllAxisDropdowns();
     });
 
@@ -1043,58 +1042,40 @@ void ControlPanel::CreateAllPlotsSubPage() {
         if (xSel == 0) return;  // "(no change)"
         int xCol = xSel - 1;
         int ySel = m_allYAxis->GetSelection();
-        std::vector<int> yCols(m_plotTabs.size());
-        for (int i = 0; i < (int)m_plotTabs.size(); i++)
-            yCols[i] = (ySel == 0) ? m_plotTabs[i]->m_yAxis->GetSelection() : ySel - 1;
-        for (int i = 0; i < (int)m_plotTabs.size(); i++)
-            if (onAxisChanged) onAxisChanged(i, xCol, yCols[i]);
+        int yCol = (ySel == 0) ? kLeaveField : ySel - 1;
+        if (onAxisChanged) onAxisChanged(kAllPlots, xCol, yCol);
     });
     m_allYAxis->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
         int ySel = m_allYAxis->GetSelection();
         if (ySel == 0) return;
         int yCol = ySel - 1;
         int xSel = m_allXAxis->GetSelection();
-        std::vector<int> xCols(m_plotTabs.size());
-        for (int i = 0; i < (int)m_plotTabs.size(); i++)
-            xCols[i] = (xSel == 0) ? m_plotTabs[i]->m_xAxis->GetSelection() : xSel - 1;
-        for (int i = 0; i < (int)m_plotTabs.size(); i++)
-            if (onAxisChanged) onAxisChanged(i, xCols[i], yCol);
+        int xCol = (xSel == 0) ? kLeaveField : xSel - 1;
+        if (onAxisChanged) onAxisChanged(kAllPlots, xCol, yCol);
     });
     m_allXNorm->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
         int xnSel = m_allXNorm->GetSelection();
         if (xnSel == 0) return;
         int xNorm = xnSel - 1;
         int ynSel = m_allYNorm->GetSelection();
-        std::vector<int> yNorms(m_plotTabs.size());
-        for (int i = 0; i < (int)m_plotTabs.size(); i++)
-            yNorms[i] = (ynSel == 0) ? m_plotTabs[i]->m_yNorm->GetSelection() : ynSel - 1;
-        for (int i = 0; i < (int)m_plotTabs.size(); i++)
-            if (onNormChanged) onNormChanged(i, xNorm, yNorms[i]);
+        int yNorm = (ynSel == 0) ? kLeaveField : ynSel - 1;
+        if (onNormChanged) onNormChanged(kAllPlots, xNorm, yNorm);
     });
     m_allYNorm->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
         int ynSel = m_allYNorm->GetSelection();
         if (ynSel == 0) return;
         int yNorm = ynSel - 1;
         int xnSel = m_allXNorm->GetSelection();
-        std::vector<int> xNorms(m_plotTabs.size());
-        for (int i = 0; i < (int)m_plotTabs.size(); i++)
-            xNorms[i] = (xnSel == 0) ? m_plotTabs[i]->m_xNorm->GetSelection() : xnSel - 1;
-        for (int i = 0; i < (int)m_plotTabs.size(); i++)
-            if (onNormChanged) onNormChanged(i, xNorms[i], yNorm);
+        int xNorm = (xnSel == 0) ? kLeaveField : xnSel - 1;
+        if (onNormChanged) onNormChanged(kAllPlots, xNorm, yNorm);
     });
     allXLock->Bind(wxEVT_CHECKBOX, [this, allXLock](wxCommandEvent&) {
-        bool xLock = allXLock->GetValue();
-        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
-            bool yLock = m_plotTabs[i]->m_yLock->GetValue();
-            if (onAxisLockChanged) onAxisLockChanged(i, xLock, yLock);
-        }
+        if (onAxisLockChanged)
+            onAxisLockChanged(kAllPlots, allXLock->GetValue() ? 1 : 0, kLeaveField);
     });
     allYLock->Bind(wxEVT_CHECKBOX, [this, allYLock](wxCommandEvent&) {
-        bool yLock = allYLock->GetValue();
-        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
-            bool xLock = m_plotTabs[i]->m_xLock->GetValue();
-            if (onAxisLockChanged) onAxisLockChanged(i, xLock, yLock);
-        }
+        if (onAxisLockChanged)
+            onAxisLockChanged(kAllPlots, kLeaveField, allYLock->GetValue() ? 1 : 0);
     });
     m_allZAxis->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
         int zSel = m_allZAxis->GetSelection();
@@ -1102,26 +1083,16 @@ void ControlPanel::CreateAllPlotsSubPage() {
         // 1="(None)", 2+=column index
         int zCol = (zSel == 1) ? -1 : zSel - 2;
         int znSel = m_allZNorm->GetSelection();
-        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
-            int zNorm = (znSel == 0) ? m_plotTabs[i]->m_zNorm->GetSelection() : znSel - 1;
-            if (onZAxisChanged) onZAxisChanged(i, zCol, zNorm);
-        }
+        int zNorm = (znSel == 0) ? kLeaveField : znSel - 1;
+        if (onZAxisChanged) onZAxisChanged(kAllPlots, zCol, zNorm);
     });
     m_allZNorm->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
         int znSel = m_allZNorm->GetSelection();
         if (znSel == 0) return;
         int zNorm = znSel - 1;
         int zSel = m_allZAxis->GetSelection();
-        for (int i = 0; i < (int)m_plotTabs.size(); i++) {
-            int zCol;
-            if (zSel == 0) {  // Z axis is "(no change)" — preserve per-plot
-                int plotZSel = m_plotTabs[i]->m_zAxis->GetSelection();
-                zCol = (plotZSel == 0) ? -1 : plotZSel - 1;
-            } else {
-                zCol = (zSel == 1) ? -1 : zSel - 2;
-            }
-            if (onZAxisChanged) onZAxisChanged(i, zCol, zNorm);
-        }
+        int zCol = (zSel == 0) ? kLeaveZ : ((zSel == 1) ? -1 : zSel - 2);
+        if (onZAxisChanged) onZAxisChanged(kAllPlots, zCol, zNorm);
     });
     allRotSlider->Bind(wxEVT_SLIDER, [this, allRotSlider, allRotLabel](wxCommandEvent&) {
         float angle = static_cast<float>(allRotSlider->GetValue());
@@ -1132,8 +1103,8 @@ void ControlPanel::CreateAllPlotsSubPage() {
             tab->m_spinAngle = angle;
             tab->m_rotationSlider->SetValue((int)angle);
             tab->m_rotationLabel->SetLabel(wxString::Format("screen y: %d\u00B0", (int)angle));
-            if (onRotationChanged) onRotationChanged(tab->m_plotIndex, angle, false);
         }
+        if (onRotationChanged) onRotationChanged(kAllPlots, angle, false);
     });
     allRotXSlider->Bind(wxEVT_SLIDER, [this, allRotXSlider, allRotXLabel](wxCommandEvent&) {
         float angle = static_cast<float>(allRotXSlider->GetValue());
@@ -1144,8 +1115,8 @@ void ControlPanel::CreateAllPlotsSubPage() {
             tab->m_spinXAngle = angle;
             tab->m_rotationXSlider->SetValue((int)angle);
             tab->m_rotationXLabel->SetLabel(wxString::Format("screen x: %d\u00B0", (int)angle));
-            if (onRotationXChanged) onRotationXChanged(tab->m_plotIndex, angle, false);
         }
+        if (onRotationXChanged) onRotationXChanged(kAllPlots, angle, false);
     });
     allSpinBtn->Bind(wxEVT_TOGGLEBUTTON, [this, allSpinBtn, allRockBtn, allRotSlider](wxCommandEvent&) {
         bool spinning = allSpinBtn->GetValue();
@@ -1187,8 +1158,8 @@ void ControlPanel::CreateAllPlotsSubPage() {
             tab->m_spinAngle = 0.0f;
             tab->m_rotationSlider->SetValue(0);
             tab->m_rotationLabel->SetLabel("screen y: 0\u00B0");
-            if (onRotationZeroed) onRotationZeroed(tab->m_plotIndex, true, false, false);
         }
+        if (onRotationZeroed) onRotationZeroed(kAllPlots, true, false, false);
     });
     allSpinXBtn->Bind(wxEVT_TOGGLEBUTTON, [this, allSpinXBtn, allRockXBtn, allRotXSlider](wxCommandEvent&) {
         bool spinning = allSpinXBtn->GetValue();
@@ -1230,8 +1201,8 @@ void ControlPanel::CreateAllPlotsSubPage() {
             tab->m_spinXAngle = 0.0f;
             tab->m_rotationXSlider->SetValue(0);
             tab->m_rotationXLabel->SetLabel("screen x: 0\u00B0");
-            if (onRotationZeroed) onRotationZeroed(tab->m_plotIndex, false, true, false);
         }
+        if (onRotationZeroed) onRotationZeroed(kAllPlots, false, true, false);
     });
     allRotZSlider->Bind(wxEVT_SLIDER, [this, allRotZSlider, allRotZLabel](wxCommandEvent&) {
         float angle = static_cast<float>(allRotZSlider->GetValue());
@@ -1242,8 +1213,8 @@ void ControlPanel::CreateAllPlotsSubPage() {
             tab->m_spinZAngle = angle;
             tab->m_rotationZSlider->SetValue((int)angle);
             tab->m_rotationZLabel->SetLabel(wxString::Format("screen z: %d\u00B0", (int)angle));
-            if (onRotationZChanged) onRotationZChanged(tab->m_plotIndex, angle, false);
         }
+        if (onRotationZChanged) onRotationZChanged(kAllPlots, angle, false);
     });
     allSpinZBtn->Bind(wxEVT_TOGGLEBUTTON, [this, allSpinZBtn, allRockZBtn, allRotZSlider](wxCommandEvent&) {
         bool spinning = allSpinZBtn->GetValue();
@@ -1285,23 +1256,20 @@ void ControlPanel::CreateAllPlotsSubPage() {
             tab->m_spinZAngle = 0.0f;
             tab->m_rotationZSlider->SetValue(0);
             tab->m_rotationZLabel->SetLabel("screen z: 0\u00B0");
-            if (onRotationZeroed) onRotationZeroed(tab->m_plotIndex, false, false, true);
         }
+        if (onRotationZeroed) onRotationZeroed(kAllPlots, false, false, true);
     });
     allShowUnselected->Bind(wxEVT_CHECKBOX, [this, allShowUnselected](wxCommandEvent&) {
-        bool show = allShowUnselected->GetValue();
-        for (int i = 0; i < (int)m_plotTabs.size(); i++)
-            if (onShowUnselectedChanged) onShowUnselectedChanged(i, show);
+        if (onShowUnselectedChanged)
+            onShowUnselectedChanged(kAllPlots, allShowUnselected->GetValue());
     });
     allGridLines->Bind(wxEVT_CHECKBOX, [this, allGridLines](wxCommandEvent&) {
-        bool show = allGridLines->GetValue();
-        for (int i = 0; i < (int)m_plotTabs.size(); i++)
-            if (onGridLinesChanged) onGridLinesChanged(i, show);
+        if (onGridLinesChanged)
+            onGridLinesChanged(kAllPlots, allGridLines->GetValue());
     });
     allHistograms->Bind(wxEVT_CHECKBOX, [this, allHistograms](wxCommandEvent&) {
-        bool show = allHistograms->GetValue();
-        for (int i = 0; i < (int)m_plotTabs.size(); i++)
-            if (onShowHistogramsChanged) onShowHistogramsChanged(i, show);
+        if (onShowHistogramsChanged)
+            onShowHistogramsChanged(kAllPlots, allHistograms->GetValue());
     });
     m_pointSizeSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         float val = m_pointSizeSlider->GetValue() / 10.0f;
@@ -1312,8 +1280,7 @@ void ControlPanel::CreateAllPlotsSubPage() {
         int val = allOpacitySlider->GetValue();
         allOpacityLabel->SetLabel(wxString::Format("Opacity: %d%%", val));
         float alpha = static_cast<float>(val) / 100.0f;
-        for (int i = 0; i < (int)m_plotTabs.size(); i++)
-            if (onOpacityChanged) onOpacityChanged(i, alpha);
+        if (onOpacityChanged) onOpacityChanged(kAllPlots, alpha);
     });
     m_histBinsSlider->Bind(wxEVT_SLIDER, [this](wxCommandEvent&) {
         int val = m_histBinsSlider->GetValue();

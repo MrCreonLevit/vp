@@ -316,154 +316,305 @@ void MainFrame::CreateLayout() {
     // Wire control panel callbacks — per-plot (carry plotIndex)
     m_controlPanel->onRandomizeAxes = [this](int plotIndex) {
         const auto& ds = m_dataManager.dataset();
-        if (ds.numCols < 2 || plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size())
-            return;
-        auto& cfg = m_plotConfigs[plotIndex];
-        std::random_device rd;
-        std::mt19937 rng(rd());
-        std::uniform_int_distribution<size_t> dist(0, ds.numCols - 1);
-        // Only randomize unlocked axes
-        if (!cfg.xLocked) {
-            cfg.xCol = dist(rng);
-            cfg.xNorm = DefaultNormForColumn(cfg.xCol);
-        }
-        if (!cfg.yLocked) {
-            cfg.yCol = dist(rng);
-            while (cfg.yCol == cfg.xCol && ds.numCols > 1)
+        if (ds.numCols < 2) return;
+        auto randomizeOne = [&](int i) {
+            if (i < 0 || i >= (int)m_plotConfigs.size()) return;
+            auto& cfg = m_plotConfigs[i];
+            std::random_device rd;
+            std::mt19937 rng(rd());
+            std::uniform_int_distribution<size_t> dist(0, ds.numCols - 1);
+            // Only randomize unlocked axes
+            if (!cfg.xLocked) {
+                cfg.xCol = dist(rng);
+                cfg.xNorm = DefaultNormForColumn(cfg.xCol);
+            }
+            if (!cfg.yLocked) {
                 cfg.yCol = dist(rng);
-            cfg.yNorm = DefaultNormForColumn(cfg.yCol);
+                while (cfg.yCol == cfg.xCol && ds.numCols > 1)
+                    cfg.yCol = dist(rng);
+                cfg.yNorm = DefaultNormForColumn(cfg.yCol);
+            }
+            m_controlPanel->SetPlotConfig(i, cfg);
+            UpdatePlot(i);
+        };
+        if (plotIndex < 0) {
+            for (int i = 0; i < (int)m_plotConfigs.size(); i++)
+                randomizeOne(i);
+            LogAction("Randomized axes on (all plots)");
+            return;
         }
-        m_controlPanel->SetPlotConfig(plotIndex, cfg);
-        UpdatePlot(plotIndex);
+        randomizeOne(plotIndex);
         LogAction(wxString::Format("Randomized axes on %s", PlotLoc(plotIndex)));
      };
 
     m_controlPanel->onAxisChanged = [this](int plotIndex, int xCol, int yCol) {
-        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
-        auto& cfg = m_plotConfigs[plotIndex];
-        bool xChanged = (cfg.xCol != static_cast<size_t>(xCol));
-        bool yChanged = (cfg.yCol != static_cast<size_t>(yCol));
-        cfg.xCol = static_cast<size_t>(xCol);
-        cfg.yCol = static_cast<size_t>(yCol);
-        if (xChanged) cfg.xNorm = DefaultNormForColumn(cfg.xCol);
-        if (yChanged) cfg.yNorm = DefaultNormForColumn(cfg.yCol);
-        m_controlPanel->SetPlotConfig(plotIndex, cfg);
-        UpdatePlot(plotIndex);
+        auto applyOne = [&](int i, int xc, int yc) {
+            if (i < 0 || i >= (int)m_plotConfigs.size()) return;
+            auto& cfg = m_plotConfigs[i];
+            bool xChanged = xc >= 0 && cfg.xCol != static_cast<size_t>(xc);
+            bool yChanged = yc >= 0 && cfg.yCol != static_cast<size_t>(yc);
+            if (xc >= 0) cfg.xCol = static_cast<size_t>(xc);
+            if (yc >= 0) cfg.yCol = static_cast<size_t>(yc);
+            if (xChanged) cfg.xNorm = DefaultNormForColumn(cfg.xCol);
+            if (yChanged) cfg.yNorm = DefaultNormForColumn(cfg.yCol);
+            m_controlPanel->SetPlotConfig(i, cfg);
+            UpdatePlot(i);
+        };
+        if (plotIndex < 0) {
+            if (xCol < 0 && yCol < 0) return;
+            for (int i = 0; i < (int)m_plotConfigs.size(); i++)
+                applyOne(i, xCol, yCol);
+            wxString msg = "Axis on (all plots):";
+            if (xCol >= 0)
+                msg += " x=" + ColName(static_cast<size_t>(xCol));
+            if (yCol >= 0)
+                msg += wxString(xCol >= 0 ? ", y=" : " y=") + ColName(static_cast<size_t>(yCol));
+            LogAction(msg);
+            return;
+        }
+        if (plotIndex >= (int)m_plotConfigs.size()) return;
+        applyOne(plotIndex, xCol, yCol);
         LogAction(wxString::Format("Axis on %s: x=%s, y=%s",
             PlotLoc(plotIndex), ColName(static_cast<size_t>(xCol)),
             ColName(static_cast<size_t>(yCol))));
      };
 
-    m_controlPanel->onAxisLockChanged = [this](int plotIndex, bool xLock, bool yLock) {
-        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
-        auto& cfg = m_plotConfigs[plotIndex];
-        bool xChanged = (xLock != cfg.xLocked);
-        bool yChanged = (yLock != cfg.yLocked);
-        cfg.xLocked = xLock;
-        cfg.yLocked = yLock;
+    m_controlPanel->onAxisLockChanged = [this](int plotIndex, int xLock, int yLock) {
+        auto applyOne = [&](int i) -> bool {
+            if (i < 0 || i >= (int)m_plotConfigs.size()) return false;
+            auto& cfg = m_plotConfigs[i];
+            bool xChanged = xLock >= 0 && ((xLock != 0) != cfg.xLocked);
+            bool yChanged = yLock >= 0 && ((yLock != 0) != cfg.yLocked);
+            if (xLock >= 0) cfg.xLocked = xLock != 0;
+            if (yLock >= 0) cfg.yLocked = yLock != 0;
+            if (!xChanged && !yChanged) return false;
 
-        // Propagate: link/unlink the same variable across all plots
-        for (int j = 0; j < (int)m_plotConfigs.size(); j++) {
-            if (j == plotIndex) continue;
-            auto& other = m_plotConfigs[j];
-            bool changed = false;
-            if (xChanged) {
-                size_t col = cfg.xCol;
-                if (other.xCol == col) { other.xLocked = xLock; changed = true; }
-                if (other.yCol == col) { other.yLocked = xLock; changed = true; }
+            // Propagate: link/unlink the same variable across all plots
+            for (int j = 0; j < (int)m_plotConfigs.size(); j++) {
+                if (j == i) continue;
+                auto& other = m_plotConfigs[j];
+                bool changed = false;
+                if (xChanged) {
+                    size_t col = cfg.xCol;
+                    if (other.xCol == col) { other.xLocked = cfg.xLocked; changed = true; }
+                    if (other.yCol == col) { other.yLocked = cfg.xLocked; changed = true; }
+                }
+                if (yChanged) {
+                    size_t col = cfg.yCol;
+                    if (other.xCol == col) { other.xLocked = cfg.yLocked; changed = true; }
+                    if (other.yCol == col) { other.yLocked = cfg.yLocked; changed = true; }
+                }
+                if (changed)
+                    m_controlPanel->SetPlotConfig(j, other);
             }
-            if (yChanged) {
-                size_t col = cfg.yCol;
-                if (other.xCol == col) { other.xLocked = yLock; changed = true; }
-                if (other.yCol == col) { other.yLocked = yLock; changed = true; }
-            }
-            if (changed)
-                 m_controlPanel->SetPlotConfig(j, other);
-             }
-        if (xChanged || yChanged)
-            LogAction(wxString::Format("Axis lock on %s: x=%s y=%s",
-                PlotLoc(plotIndex), xLock ? "locked" : "unlocked",
-                yLock ? "locked" : "unlocked"));
+            m_controlPanel->SetPlotConfig(i, cfg);
+            return true;
+        };
+        if (plotIndex < 0) {
+            bool any = false;
+            for (int i = 0; i < (int)m_plotConfigs.size(); i++)
+                any = applyOne(i) || any;
+            if (!any) return;
+            wxString msg = "Axis lock on (all plots):";
+            if (xLock >= 0)
+                msg += wxString::Format(" x=%s", xLock ? "locked" : "unlocked");
+            if (yLock >= 0)
+                msg += wxString::Format(" y=%s", yLock ? "locked" : "unlocked");
+            LogAction(msg);
+            return;
+        }
+        if (!applyOne(plotIndex)) return;
+        auto& cfg = m_plotConfigs[plotIndex];
+        LogAction(wxString::Format("Axis lock on %s: x=%s y=%s",
+            PlotLoc(plotIndex), cfg.xLocked ? "locked" : "unlocked",
+            cfg.yLocked ? "locked" : "unlocked"));
       };
 
     // Axis lock callback is also wired per-canvas below in RebuildGrid
 
     m_controlPanel->onNormChanged = [this](int plotIndex, int xNorm, int yNorm) {
-        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
-        m_plotConfigs[plotIndex].xNorm = static_cast<NormMode>(xNorm);
-        m_plotConfigs[plotIndex].yNorm = static_cast<NormMode>(yNorm);
-        m_controlPanel->SetPlotConfig(plotIndex, m_plotConfigs[plotIndex]);
-        UpdatePlot(plotIndex);
+        auto applyOne = [&](int i) {
+            if (i < 0 || i >= (int)m_plotConfigs.size()) return;
+            if (xNorm >= 0)
+                m_plotConfigs[i].xNorm = static_cast<NormMode>(xNorm);
+            if (yNorm >= 0)
+                m_plotConfigs[i].yNorm = static_cast<NormMode>(yNorm);
+            m_controlPanel->SetPlotConfig(i, m_plotConfigs[i]);
+            UpdatePlot(i);
+        };
+        if (plotIndex < 0) {
+            if (xNorm < 0 && yNorm < 0) return;
+            for (int i = 0; i < (int)m_plotConfigs.size(); i++)
+                applyOne(i);
+            wxString msg = "Normalization on (all plots):";
+            if (xNorm >= 0)
+                msg += wxString::Format(" x=%s", NormModeName(static_cast<NormMode>(xNorm)));
+            if (yNorm >= 0)
+                msg += wxString::Format("%s y=%s", xNorm >= 0 ? "," : "",
+                    NormModeName(static_cast<NormMode>(yNorm)));
+            LogAction(msg);
+            return;
+        }
+        if (plotIndex >= (int)m_plotConfigs.size()) return;
+        applyOne(plotIndex);
         LogAction(wxString::Format("Normalization on %s: x=%s, y=%s",
             PlotLoc(plotIndex), NormModeName(static_cast<NormMode>(xNorm)),
             NormModeName(static_cast<NormMode>(yNorm))));
       };
 
     m_controlPanel->onZAxisChanged = [this](int plotIndex, int zCol, int zNorm) {
-        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
-        auto& cfg = m_plotConfigs[plotIndex];
-        bool newColumn = (zCol != cfg.zCol && zCol >= 0);
-        cfg.zCol = zCol;
-        cfg.zNorm = newColumn ? DefaultNormForColumn(static_cast<size_t>(zCol))
-                               : static_cast<NormMode>(zNorm);
-        UpdatePlot(plotIndex);
-        m_controlPanel->SetPlotConfig(plotIndex, cfg);
+        auto applyOne = [&](int i, int col, int norm) {
+            if (i < 0 || i >= (int)m_plotConfigs.size()) return;
+            auto& cfg = m_plotConfigs[i];
+            bool newColumn = (col != cfg.zCol && col >= 0);
+            cfg.zCol = col;
+            if (newColumn)
+                cfg.zNorm = DefaultNormForColumn(static_cast<size_t>(col));
+            else if (norm >= 0)
+                cfg.zNorm = static_cast<NormMode>(norm);
+            UpdatePlot(i);
+            m_controlPanel->SetPlotConfig(i, cfg);
+        };
+        if (plotIndex < 0) {
+            bool setCol = zCol != kLeaveZ;
+            bool setNorm = zNorm >= 0;
+            if (!setCol && !setNorm) return;
+            for (int i = 0; i < (int)m_plotConfigs.size(); i++) {
+                auto& cfg = m_plotConfigs[i];
+                int col = setCol ? zCol : cfg.zCol;
+                bool newColumn = setCol && col >= 0 && col != cfg.zCol;
+                cfg.zCol = col;
+                // An explicit all-plots norm wins. A column-only change uses the
+                // column's default norm when that plot's column actually changes.
+                if (setNorm)
+                    cfg.zNorm = static_cast<NormMode>(zNorm);
+                else if (newColumn)
+                    cfg.zNorm = DefaultNormForColumn(static_cast<size_t>(col));
+                UpdatePlot(i);
+                m_controlPanel->SetPlotConfig(i, cfg);
+            }
+            wxString msg = "Z-axis on (all plots):";
+            if (setCol)
+                msg += " " + (zCol < 0 ? wxString("none") : ColName(static_cast<size_t>(zCol)));
+            if (setNorm) {
+                msg += wxString::Format("%s norm=%s", setCol ? "," : "",
+                    NormModeName(static_cast<NormMode>(zNorm)));
+            } else if (setCol && zCol >= 0 && !m_plotConfigs.empty()) {
+                bool same = true;
+                NormMode n0 = m_plotConfigs[0].zNorm;
+                for (int i = 1; i < (int)m_plotConfigs.size(); i++)
+                    if (m_plotConfigs[i].zNorm != n0) { same = false; break; }
+                if (same)
+                    msg += ", norm=" + wxString(NormModeName(n0));
+            }
+            LogAction(msg);
+            return;
+        }
+        if (plotIndex >= (int)m_plotConfigs.size()) return;
+        applyOne(plotIndex, zCol, zNorm);
         wxString zAxis = zCol < 0 ? "none" : ColName(static_cast<size_t>(zCol));
         LogAction(wxString::Format("Z-axis on %s: %s, norm=%s",
-            PlotLoc(plotIndex), zAxis, NormModeName(static_cast<NormMode>(zNorm))));
+            PlotLoc(plotIndex), zAxis,
+            NormModeName(m_plotConfigs[plotIndex].zNorm)));
        };
 
     m_controlPanel->onRotationChanged = [this](int plotIndex, float angle, bool animated) {
-        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
-        auto& cfg = m_plotConfigs[plotIndex];
-        float delta = angleDelta(angle, cfg.rotationY);
-        cfg.rotationY = angle;
-        mat3PreRotateY(cfg.rotMatrix, delta);
-        m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
+        auto applyOne = [&](int i) {
+            if (i < 0 || i >= (int)m_plotConfigs.size() || i >= (int)m_canvases.size()) return;
+            auto& cfg = m_plotConfigs[i];
+            float delta = angleDelta(angle, cfg.rotationY);
+            cfg.rotationY = angle;
+            mat3PreRotateY(cfg.rotMatrix, delta);
+            m_canvases[i]->SetRotationMatrix(cfg.rotMatrix);
+        };
+        if (plotIndex < 0) {
+            for (int i = 0; i < (int)m_plotConfigs.size(); i++)
+                applyOne(i);
+            if (!animated)
+                LogActionThrottled("rotY_all",
+                    wxString::Format("Rotate Y %d° on (all plots)", (int)angle));
+            return;
+        }
+        if (plotIndex >= (int)m_plotConfigs.size()) return;
+        applyOne(plotIndex);
         if (!animated) LogActionThrottled(wxString::Format("rotY_%d", plotIndex),
             wxString::Format("Rotate Y %d° on %s", (int)angle, PlotLoc(plotIndex)));
       };
 
     m_controlPanel->onRotationXChanged = [this](int plotIndex, float angle, bool animated) {
-        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
-        auto& cfg = m_plotConfigs[plotIndex];
-        float delta = angleDelta(angle, cfg.rotationX);
-        cfg.rotationX = angle;
-        mat3PreRotateX(cfg.rotMatrix, delta);
-        m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
+        auto applyOne = [&](int i) {
+            if (i < 0 || i >= (int)m_plotConfigs.size() || i >= (int)m_canvases.size()) return;
+            auto& cfg = m_plotConfigs[i];
+            float delta = angleDelta(angle, cfg.rotationX);
+            cfg.rotationX = angle;
+            mat3PreRotateX(cfg.rotMatrix, delta);
+            m_canvases[i]->SetRotationMatrix(cfg.rotMatrix);
+        };
+        if (plotIndex < 0) {
+            for (int i = 0; i < (int)m_plotConfigs.size(); i++)
+                applyOne(i);
+            if (!animated)
+                LogActionThrottled("rotX_all",
+                    wxString::Format("Rotate X %d° on (all plots)", (int)angle));
+            return;
+        }
+        if (plotIndex >= (int)m_plotConfigs.size()) return;
+        applyOne(plotIndex);
         if (!animated) LogActionThrottled(wxString::Format("rotX_%d", plotIndex),
             wxString::Format("Rotate X %d° on %s", (int)angle, PlotLoc(plotIndex)));
       };
 
     m_controlPanel->onRotationZChanged = [this](int plotIndex, float angle, bool animated) {
-        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
-        auto& cfg = m_plotConfigs[plotIndex];
-        float delta = angleDelta(angle, cfg.rotationZ);
-        cfg.rotationZ = angle;
-        mat3PreRotateZ(cfg.rotMatrix, delta);
-        m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
+        auto applyOne = [&](int i) {
+            if (i < 0 || i >= (int)m_plotConfigs.size() || i >= (int)m_canvases.size()) return;
+            auto& cfg = m_plotConfigs[i];
+            float delta = angleDelta(angle, cfg.rotationZ);
+            cfg.rotationZ = angle;
+            mat3PreRotateZ(cfg.rotMatrix, delta);
+            m_canvases[i]->SetRotationMatrix(cfg.rotMatrix);
+        };
+        if (plotIndex < 0) {
+            for (int i = 0; i < (int)m_plotConfigs.size(); i++)
+                applyOne(i);
+            if (!animated)
+                LogActionThrottled("rotZ_all",
+                    wxString::Format("Rotate Z %d° on (all plots)", (int)angle));
+            return;
+        }
+        if (plotIndex >= (int)m_plotConfigs.size()) return;
+        applyOne(plotIndex);
         if (!animated) LogActionThrottled(wxString::Format("rotZ_%d", plotIndex),
             wxString::Format("Rotate Z %d° on %s", (int)angle, PlotLoc(plotIndex)));
       };
 
     m_controlPanel->onRotationZeroed = [this](int plotIndex, bool zeroY, bool zeroX, bool zeroZ) {
-        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
-        auto& cfg = m_plotConfigs[plotIndex];
-        if (zeroY) cfg.rotationY = 0.0f;
-        if (zeroX) cfg.rotationX = 0.0f;
-        if (zeroZ) cfg.rotationZ = 0.0f;
-          // Rebuild matrix from remaining axis value(s)
-        mat3Identity(cfg.rotMatrix);
-        if (cfg.rotationZ != 0.0f) mat3PreRotateZ(cfg.rotMatrix, cfg.rotationZ);
-        if (cfg.rotationX != 0.0f) mat3PreRotateX(cfg.rotMatrix, cfg.rotationX);
-        if (cfg.rotationY != 0.0f) mat3PreRotateY(cfg.rotMatrix, cfg.rotationY);
-        m_canvases[plotIndex]->SetRotationMatrix(cfg.rotMatrix);
-        m_controlPanel->SetPlotConfig(plotIndex, cfg);
+        auto applyOne = [&](int i) {
+            if (i < 0 || i >= (int)m_plotConfigs.size() || i >= (int)m_canvases.size()) return;
+            auto& cfg = m_plotConfigs[i];
+            if (zeroY) cfg.rotationY = 0.0f;
+            if (zeroX) cfg.rotationX = 0.0f;
+            if (zeroZ) cfg.rotationZ = 0.0f;
+              // Rebuild matrix from remaining axis value(s)
+            mat3Identity(cfg.rotMatrix);
+            if (cfg.rotationZ != 0.0f) mat3PreRotateZ(cfg.rotMatrix, cfg.rotationZ);
+            if (cfg.rotationX != 0.0f) mat3PreRotateX(cfg.rotMatrix, cfg.rotationX);
+            if (cfg.rotationY != 0.0f) mat3PreRotateY(cfg.rotMatrix, cfg.rotationY);
+            m_canvases[i]->SetRotationMatrix(cfg.rotMatrix);
+            m_controlPanel->SetPlotConfig(i, cfg);
+        };
+        if (plotIndex < 0) {
+            for (int i = 0; i < (int)m_plotConfigs.size(); i++)
+                applyOne(i);
+            LogAction("Reset rotation on (all plots)");
+            return;
+        }
+        if (plotIndex >= (int)m_plotConfigs.size()) return;
+        applyOne(plotIndex);
         LogAction(wxString::Format("Reset rotation on %s", PlotLoc(plotIndex)));
       };
     m_controlPanel->onSpinRockChanged = [this](int plotIndex, int axis, bool spinning, bool rocking) {
         const char* ax = (axis == 1) ? "X" : (axis == 2) ? "Z" : "Y";
-        wxString loc = (plotIndex < 0) ? " (all plots)" : PlotLoc(plotIndex);
+        wxString loc = (plotIndex < 0) ? " (all plots)" : (" " + PlotLoc(plotIndex));
         if (spinning || rocking) {
             LogAction(wxString::FromUTF8(ax) + " rotation " + (rocking ? "rock on" : "spin on") + loc);
          } else {
@@ -471,25 +622,61 @@ void MainFrame::CreateLayout() {
          }
      };
     m_controlPanel->onShowUnselectedChanged = [this](int plotIndex, bool show) {
-        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
-        m_plotConfigs[plotIndex].showUnselected = show;
-        m_canvases[plotIndex]->SetShowUnselected(show);
+        auto applyOne = [&](int i) {
+            if (i < 0 || i >= (int)m_plotConfigs.size() || i >= (int)m_canvases.size()) return;
+            m_plotConfigs[i].showUnselected = show;
+            m_canvases[i]->SetShowUnselected(show);
+        };
+        if (plotIndex < 0) {
+            for (int i = 0; i < (int)m_plotConfigs.size(); i++) {
+                applyOne(i);
+                m_controlPanel->SetPlotConfig(i, m_plotConfigs[i]);
+            }
+            LogAction(wxString::Format("Show unselected on (all plots): %s", show ? "on" : "off"));
+            return;
+        }
+        if (plotIndex >= (int)m_plotConfigs.size()) return;
+        applyOne(plotIndex);
         LogAction(wxString::Format("Show unselected on %s: %s",
             PlotLoc(plotIndex), show ? "on" : "off"));
        };
 
     m_controlPanel->onGridLinesChanged = [this](int plotIndex, bool show) {
-        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
-        m_plotConfigs[plotIndex].showGridLines = show;
-        m_canvases[plotIndex]->SetShowGridLines(show);
+        auto applyOne = [&](int i) {
+            if (i < 0 || i >= (int)m_plotConfigs.size() || i >= (int)m_canvases.size()) return;
+            m_plotConfigs[i].showGridLines = show;
+            m_canvases[i]->SetShowGridLines(show);
+        };
+        if (plotIndex < 0) {
+            for (int i = 0; i < (int)m_plotConfigs.size(); i++) {
+                applyOne(i);
+                m_controlPanel->SetPlotConfig(i, m_plotConfigs[i]);
+            }
+            LogAction(wxString::Format("Grid lines on (all plots): %s", show ? "on" : "off"));
+            return;
+        }
+        if (plotIndex >= (int)m_plotConfigs.size()) return;
+        applyOne(plotIndex);
         LogAction(wxString::Format("Grid lines on %s: %s",
             PlotLoc(plotIndex), show ? "on" : "off"));
        };
 
     m_controlPanel->onShowHistogramsChanged = [this](int plotIndex, bool show) {
-        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
-        m_plotConfigs[plotIndex].showHistograms = show;
-        m_canvases[plotIndex]->SetShowHistograms(show);
+        auto applyOne = [&](int i) {
+            if (i < 0 || i >= (int)m_plotConfigs.size() || i >= (int)m_canvases.size()) return;
+            m_plotConfigs[i].showHistograms = show;
+            m_canvases[i]->SetShowHistograms(show);
+        };
+        if (plotIndex < 0) {
+            for (int i = 0; i < (int)m_plotConfigs.size(); i++) {
+                applyOne(i);
+                m_controlPanel->SetPlotConfig(i, m_plotConfigs[i]);
+            }
+            LogAction(wxString::Format("Histograms on (all plots): %s", show ? "on" : "off"));
+            return;
+        }
+        if (plotIndex >= (int)m_plotConfigs.size()) return;
+        applyOne(plotIndex);
         LogAction(wxString::Format("Histograms on %s: %s",
             PlotLoc(plotIndex), show ? "on" : "off"));
        };
@@ -512,9 +699,22 @@ void MainFrame::CreateLayout() {
        };
 
     m_controlPanel->onOpacityChanged = [this](int plotIndex, float alpha) {
-        if (plotIndex < 0 || plotIndex >= (int)m_plotConfigs.size()) return;
-        m_plotConfigs[plotIndex].opacity = alpha;
-        m_canvases[plotIndex]->SetOpacity(alpha);
+        auto applyOne = [&](int i) {
+            if (i < 0 || i >= (int)m_plotConfigs.size() || i >= (int)m_canvases.size()) return;
+            m_plotConfigs[i].opacity = alpha;
+            m_canvases[i]->SetOpacity(alpha);
+        };
+        if (plotIndex < 0) {
+            for (int i = 0; i < (int)m_plotConfigs.size(); i++) {
+                applyOne(i);
+                m_controlPanel->SetPlotConfig(i, m_plotConfigs[i]);
+            }
+            LogActionThrottled("op_all",
+                wxString::Format("Opacity %d%% on (all plots)", (int)(alpha * 100)));
+            return;
+        }
+        if (plotIndex >= (int)m_plotConfigs.size()) return;
+        applyOne(plotIndex);
         LogActionThrottled(wxString::Format("op_%d", plotIndex),
             wxString::Format("Opacity %d%% on %s", (int)(alpha * 100), PlotLoc(plotIndex)));
        };

@@ -14,6 +14,14 @@ struct PlotConfig;
 
 constexpr int CP_NUM_BRUSHES = 8;  // brush 0 (unselected) + brushes 1-7
 
+// plotIndex < 0 applies a control-panel action to every plot. The frame logs
+// that once as "(all plots)" instead of once per plot. kLeaveField in a
+// column, norm, or lock argument means that field is not part of the action.
+// Z column uses kLeaveZ because -1 already means "(None)".
+constexpr int kAllPlots = -1;
+constexpr int kLeaveField = -1;
+constexpr int kLeaveZ = -2;
+
 // Per-plot settings page
 class PlotTab : public wxScrolledWindow {
 public:
@@ -111,10 +119,12 @@ public:
     void SetPlotConfig(int plotIndex, const PlotConfig& cfg);
     void StopSpinRock(int plotIndex);
 
-    // Per-plot callbacks
+    // Per-plot callbacks. plotIndex == kAllPlots applies the action to every
+    // plot; kLeaveField / kLeaveZ mark fields the all-plots control did not set.
     std::function<void(int plotIndex)> onRandomizeAxes;
     std::function<void(int plotIndex, int xCol, int yCol)> onAxisChanged;
-    std::function<void(int plotIndex, bool xLock, bool yLock)> onAxisLockChanged;
+    // Locks are 0 or 1. kLeaveField leaves that axis unchanged (all-plots only).
+    std::function<void(int plotIndex, int xLock, int yLock)> onAxisLockChanged;
     std::function<void(int plotIndex, int xNorm, int yNorm)> onNormChanged;
     std::function<void(int plotIndex, int zCol, int zNorm)> onZAxisChanged;
     std::function<void(int plotIndex, float angle, bool animated)> onRotationChanged;
