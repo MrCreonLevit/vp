@@ -11,7 +11,10 @@
 #include <random>
 #include <queue>
 #include <unordered_set>
+#include <cctype>
 #include <cstring>
+#include <cstdlib>
+#include <fstream>
 #include <iostream>
 
 // Pre-multiply a row-major 3x3 rotation matrix by Ry(deg) or Rx(deg).
@@ -2537,7 +2540,156 @@ void MainFrame::OnLogTick(wxTimerEvent&) {
         m_logThrottle->Flush();
 }
 
+static void TrimEnds(std::string& s) {
+    size_t a = 0;
+    while (a < s.size() && std::isspace(static_cast<unsigned char>(s[a]))) a++;
+    size_t b = s.size();
+    while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1]))) b--;
+    s = s.substr(a, b - a);
+}
+
+static bool ParseFullFloat(const std::string& s, float& v) {
+    if (s.empty()) return false;
+    char* end = nullptr;
+    v = std::strtof(s.c_str(), &end);
+    if (end == s.c_str()) return false;
+    while (*end && std::isspace(static_cast<unsigned char>(*end))) end++;
+    return *end == '\0';
+}
+
+// "lo, hi", or the older "lo - hi" still accepted from lines already in the log.
+static void CollectRangeSplits(const std::string& s, const char* sep,
+                               std::vector<std::pair<std::string, std::string>>& out) {
+    const size_t n = std::strlen(sep);
+    size_t start = 0;
+    while (start < s.size()) {
+        auto pos = s.find(sep, start);
+        if (pos == std::string::npos) break;
+        std::string lo = s.substr(0, pos);
+        std::string hi = s.substr(pos + n);
+        TrimEnds(lo);
+        TrimEnds(hi);
+        if (!lo.empty() && !hi.empty())
+            out.emplace_back(std::move(lo), std::move(hi));
+        start = pos + n;
+    }
+}
+
+static int FindCategory(const DataSet& ds, size_t col, const std::string& name) {
+    if (col >= ds.columnMeta.size()) return -1;
+    wxString want = wxString::FromUTF8(name);
+    const auto& cats = ds.columnMeta[col].categories;
+    for (int i = 0; i < (int)cats.size(); ++i) {
+        if (wxString::FromUTF8(cats[i]).CmpNoCase(want) == 0)
+            return i;
+    }
+    return -1;
+}
+
+// Inverse of the brush-log mapping: data = mn + ((norm + 0.9) / 1.8) * span.
+static float DataToNorm(float data, float mn, float mx) {
+    float span = mx - mn;
+    if (span == 0.0f) span = 1.0f;
+    return (data - mn) / span * 1.8f - 0.9f;
+}
+
+static bool RangeToNorm(const DataSet& ds, size_t col, const std::string& text,
+                        float& n0, float& n1) {
+    if (col >= ds.numCols) return false;
+    std::vector<std::pair<std::string, std::string>> splits;
+    CollectRangeSplits(text, ", ", splits);
+    CollectRangeSplits(text, ",", splits);
+    CollectRangeSplits(text, " - ", splits);
+
+    float d0 = 0.f, d1 = 0.f;
+    bool found = false;
+    bool cat = col < ds.columnMeta.size() && ds.columnMeta[col].isCategorical;
+    for (const auto& [a, b] : splits) {
+        if (cat) {
+            int i0 = FindCategory(ds, col, a);
+            int i1 = FindCategory(ds, col, b);
+            if (i0 < 0 || i1 < 0) continue;
+            d0 = static_cast<float>(std::min(i0, i1)) - 0.5f;
+            d1 = static_cast<float>(std::max(i0, i1)) + 0.5f;
+        } else {
+            if (!ParseFullFloat(a, d0) || !ParseFullFloat(b, d1)) continue;
+            if (d0 > d1) std::swap(d0, d1);
+        }
+        found = true;
+        break;
+    }
+    if (!found) return false;
+    float mn, mx;
+    ds.columnRange(col, mn, mx);
+    n0 = DataToNorm(d0, mn, mx);
+    n1 = DataToNorm(d1, mn, mx);
+    return true;
+}
+
+static std::string ExpandUserPath(const std::string& path) {
+    if (path != "~" && path.rfind("~/", 0) != 0)
+        return path;
+    wxString home = wxGetHomeDir();
+    const auto utf = home.ToUTF8();
+    std::string h(utf.data() ? utf.data() : "", utf.length());
+    if (h.empty()) return path;
+    if (path == "~") return h;
+    return h + path.substr(1);
+}
+
+bool MainFrame::RunCommandFile(const std::string& path) {
+    if (m_macroDepth >= kMaxMacroDepth) {
+        LogAction("Not a command: command file nested too deeply");
+        m_commandFailed = true;
+        return false;
+    }
+    std::ifstream in(ExpandUserPath(path));
+    if (!in) {
+        LogAction("Not a command: cannot read " + wxString::FromUTF8(path));
+        m_commandFailed = true;
+        return false;
+    }
+    ++m_macroDepth;
+    std::string raw;
+    int count = 0;
+    bool ok = true;
+    while (std::getline(in, raw)) {
+        if (!raw.empty() && raw.back() == '\r')
+            raw.pop_back();
+        wxString line = wxString::FromUTF8(raw.data(), raw.size());
+        if (line.empty() && !raw.empty()) {
+            LogAction("Not a command: file line is not valid text");
+            ok = false;
+            break;
+        }
+        line.Trim(true).Trim(false);
+        if (line.empty())
+            continue;
+        if (++count > kMaxMacroLines) {
+            LogAction(wxString::Format("Not a command: command file longer than %d lines",
+                                       kMaxMacroLines));
+            ok = false;
+            break;
+        }
+        ExecuteCommand(line);
+        if (m_commandFailed) {
+            ok = false;
+            break;
+        }
+    }
+    --m_macroDepth;
+    m_commandFailed = !ok;
+    return ok;
+}
+
 void MainFrame::ExecuteCommand(const wxString& line) {
+    m_commandFailed = false;
+    if (line.length() > kMaxCommandChars) {
+        LogAction(wxString::Format("Not a command: line longer than %zu characters",
+                                   kMaxCommandChars));
+        m_commandFailed = true;
+        return;
+    }
     wxString shown = line;
     shown.Trim(true).Trim(false);
     const auto utf = shown.ToUTF8();
@@ -2545,6 +2697,7 @@ void MainFrame::ExecuteCommand(const wxString& line) {
     auto parsed = ParseCommand(text);
     if (!parsed) {
         LogAction("Not a command: " + shown);
+        m_commandFailed = true;
         return;
     }
     if (parsed->kind == CommandKind::Ignore)
@@ -2553,6 +2706,7 @@ void MainFrame::ExecuteCommand(const wxString& line) {
 
     auto reject = [&](const wxString& why) {
         LogAction("Not a command: " + why);
+        m_commandFailed = true;
     };
     auto findCol = [&](const std::string& name) -> int {
         const auto& labels = m_dataManager.dataset().columnLabels;
@@ -2629,6 +2783,9 @@ void MainFrame::ExecuteCommand(const wxString& line) {
 
     switch (cmd.kind) {
     case CommandKind::Ignore:
+        return;
+    case CommandKind::RunFile:
+        RunCommandFile(cmd.xName);
         return;
     case CommandKind::GridLines:
         if (!resolvePlot()) return;
@@ -2908,6 +3065,28 @@ void MainFrame::ExecuteCommand(const wxString& line) {
         }
         return;
     }
+    case CommandKind::BrushRect: {
+        if (cmd.scope == CommandScope::All) { reject(shown); return; }
+        if (!resolvePlot()) return;
+        const auto& ds = m_dataManager.dataset();
+        if (ds.numRows == 0 || plot < 0 || plot >= (int)m_plotConfigs.size()) {
+            reject(shown);
+            return;
+        }
+        if (cmd.brush < 1 || cmd.brush >= CP_NUM_BRUSHES) { reject(shown); return; }
+        const auto& cfg = m_plotConfigs[plot];
+        float x0, x1, y0, y1;
+        if (!RangeToNorm(ds, cfg.xCol, cmd.xName, x0, x1) ||
+            !RangeToNorm(ds, cfg.yCol, cmd.yName, y0, y1)) {
+            reject(shown);
+            return;
+        }
+        if (m_activeBrush != cmd.brush)
+            m_controlPanel->SelectBrush(cmd.brush);
+        SetActivePlot(plot);
+        HandleBrushRect(plot, x0, y0, x1, y1, cmd.axis);
+        return;
+    }
     case CommandKind::ClearSelection:
         if (m_controlPanel->onClearSelection)
             m_controlPanel->onClearSelection();
@@ -2991,7 +3170,7 @@ void MainFrame::LogViewChange(int plotIndex, const char* op, bool throttled) {
 
     auto toDataRange = [&](float lo, float hi, size_t col) -> wxString {
         if (ds.numCols == 0 || col >= ds.numCols)
-            return wxString::Format("%.4g - %.4g", lo, hi);
+            return wxString::Format("%.4g, %.4g", lo, hi);
         float mn, mx;
         ds.columnRange(col, mn, mx);
         float span = mx - mn;
@@ -3023,7 +3202,7 @@ wxString MainFrame::LogAxisRange(float lo, float hi, size_t col) const {
          }
         return wxString::Format("%.4g", val);
      };
-    return fmtVal(lo) + " - " + fmtVal(hi);
+    return fmtVal(lo) + ", " + fmtVal(hi);
 }
 
 void MainFrame::OnToggleLog(wxCommandEvent&) {

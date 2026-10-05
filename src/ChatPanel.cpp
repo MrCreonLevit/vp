@@ -1,5 +1,6 @@
 // Viewpoints (MIT License) - See LICENSE file
 #include "ChatPanel.h"
+#include "CommandParser.h"
 #include <wx/statline.h>
 #include <ctime>
 #include <cstdio>
@@ -64,7 +65,15 @@ void ChatPanel::BuildUi() {
                              wxTE_PROCESS_ENTER);
     m_input->SetFont(tf);
     m_input->SetHint("Command");
+    m_input->SetMaxLength(kMaxCommandChars);   // no-op on macOS; the handler below is the real cap
     sizer->Add(m_input, 0, wxEXPAND | wxALL, 4);
+    m_input->Bind(wxEVT_TEXT, [this](wxCommandEvent&) {
+        wxString v = m_input->GetValue();
+        if (v.length() <= kMaxCommandChars) return;
+        m_input->ChangeValue(v.Left(kMaxCommandChars));
+        m_input->SetInsertionPointEnd();
+        Log(wxString::Format("Command truncated to %zu characters", kMaxCommandChars));
+    });
     m_input->Bind(wxEVT_TEXT_ENTER, [this](wxCommandEvent&) { SubmitInput(); });
     m_input->Bind(wxEVT_KEY_DOWN, [this](wxKeyEvent& e) {
         int key = e.GetKeyCode();
@@ -82,6 +91,12 @@ void ChatPanel::SubmitInput() {
     wxString line = m_input->GetValue();
     line.Trim(true).Trim(false);
     if (line.empty()) return;
+    if (line.length() > kMaxCommandChars) {
+        m_input->ChangeValue(line.Left(kMaxCommandChars));
+        m_input->SetInsertionPointEnd();
+        Log(wxString::Format("Command truncated to %zu characters", kMaxCommandChars));
+        return;
+    }
     m_history.push_back(line);
     m_historyPos = static_cast<int>(m_history.size());
     m_historyDraft.clear();
@@ -107,9 +122,22 @@ void ChatPanel::RecallHistory(int direction) {
 
 ChatPanel::~ChatPanel() = default;
 
+// True when the line is a command the parser would run. Comments and
+// rejections are not, so the log marks them and a saved log can be replayed.
+static bool IsExecutableCommand(const wxString& line) {
+    const auto utf = line.ToUTF8();
+    std::string text(utf.data() ? utf.data() : "", utf.length());
+    auto cmd = ParseCommand(text);
+    return cmd && cmd->kind != CommandKind::Ignore;
+}
+
 void ChatPanel::Log(const wxString& line) {
     if (!m_text) return;
-    m_text->AppendText(Timestamp() + " " + line + "\n");
+    wxString body = line;
+    body.Trim(true).Trim(false);
+    if (!body.empty() && !body.StartsWith("#") && !IsExecutableCommand(body))
+        body = "# " + body;
+    m_text->AppendText(Timestamp() + " " + body + "\n");
     m_text->ShowPosition(m_text->GetLastPosition());
 }
 

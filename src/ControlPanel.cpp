@@ -12,6 +12,8 @@
 #endif
 #include <cmath>
 
+static void ChooseQuiet(bool& suppress, wxChoice* ch, int sel);
+
 // ============================================================
 // PlotTab
 // ============================================================
@@ -1423,9 +1425,10 @@ void ControlPanel::CreateBrushesSubPage() {
     });
     bSizer->Add(m_allBrushButton, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
-    // Initialize per-brush defaults
+    // Every brush is drawn as a circle until its symbol is set. The menu
+    // must show that, not a per-brush shape that was never applied.
     for (int i = 0; i < CP_NUM_BRUSHES; i++) {
-        m_brushSymbols[i] = (i == 0) ? SYMBOL_CIRCLE : (i - 1) % SYMBOL_COUNT;
+        m_brushSymbols[i] = SYMBOL_CIRCLE;
         m_brushSizeOffsets[i] = 0.0f;
     }
     SelectBrush(0);
@@ -1589,7 +1592,7 @@ void ControlPanel::SelectBrush(int index) {
     // Show values from the last individually selected brush
     int displayBrush = (index >= 0) ? index : m_lastIndividualBrush;
     if (m_brushSymbolChoice)
-        m_brushSymbolChoice->SetSelection(m_brushSymbols[displayBrush]);
+        ChooseQuiet(m_uiSuppress, m_brushSymbolChoice, m_brushSymbols[displayBrush]);
     if (m_brushSizeSlider) {
         m_brushSizeSlider->SetValue(static_cast<int>(m_brushSizeOffsets[displayBrush] * 100));
         if (m_brushSizeLabel)

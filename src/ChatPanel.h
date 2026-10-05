@@ -18,6 +18,8 @@
 //  text across hide/show, so re-showing reveals the full scrollback.
 //
 //  Enter in the bottom field submits onCommand. Up/down recalls history.
+//  A line starting with '#' is a comment. Log text that is not a command
+//  is written with that prefix so a copied log can be run as a command file.
 // ============================================================
 class ChatPanel : public wxPanel {
 public:

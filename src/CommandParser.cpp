@@ -346,6 +346,45 @@ bool ParseSpin(Scan& sc, Command& cmd) {
     return false;
 }
 
+bool ReadBracket(Scan& sc, std::string& out) {
+    if (!sc.Eat("[")) return false;
+    size_t start = sc.i;
+    size_t end = sc.s.find(']', start);
+    if (end == std::string::npos) return false;
+    out = sc.s.substr(start, end - start);
+    Trim(out);
+    sc.i = end + 1;
+    return !out.empty();
+}
+
+// "Select on plot(1,1): X [a, b] Y [c, d], brush 1, 1420 / 10000 selected"
+// The trailing count is the result of the drag; it is accepted and ignored.
+bool ParseBrushRect(Scan& sc, Command& cmd) {
+    int mode = -1;
+    if (sc.Eat("select")) mode = 0;
+    else if (sc.Eat("extend")) mode = 1;
+    else if (sc.Eat("erase")) mode = 2;
+    else return false;
+    sc.Eat("on");
+    if (!sc.Eat(":")) return false;
+    if (!sc.Eat("x") || !ReadBracket(sc, cmd.xName)) return false;
+    if (!sc.Eat("y") || !ReadBracket(sc, cmd.yName)) return false;
+    int brush = 1;
+    if (!sc.Eof()) {
+        if (!sc.Eat(",") || !sc.Eat("brush") || !sc.Int(brush)) return false;
+        if (!sc.Eof()) {
+            int n1 = 0, n2 = 0;
+            if (!sc.Eat(",") || !sc.Int(n1) || !sc.Eat("/") || !sc.Int(n2) ||
+                !sc.Eat("selected") || !sc.Eof())
+                return false;
+        }
+    }
+    cmd.kind = CommandKind::BrushRect;
+    cmd.axis = mode;
+    cmd.brush = brush;
+    return true;
+}
+
 bool ParseBrushTail(Scan& sc, Command& cmd) {
     if (!sc.Eat("brush")) return false;
     if (!sc.Int(cmd.intVal)) return false;
@@ -389,6 +428,12 @@ std::optional<Command> ParseCommand(const std::string& lineIn) {
     StripTimestamp(s);
     if (s.empty()) return std::nullopt;
 
+    if (s[0] == '#') {
+        Command c;
+        c.kind = CommandKind::Ignore;
+        return c;
+    }
+
     std::string low = Lower(s);
     if (low.rfind("not a command", 0) == 0) {
         Command c;
@@ -398,6 +443,16 @@ std::optional<Command> ParseCommand(const std::string& lineIn) {
     if (low == "all plots highlighted") {
         Command c;
         c.kind = CommandKind::AllPlotsHighlighted;
+        return c;
+    }
+    // @path or @ path. Checked before location stripping so a path may contain "plot(".
+    if (s[0] == '@') {
+        std::string path = s.substr(1);
+        Trim(path);
+        if (path.empty()) return std::nullopt;
+        Command c;
+        c.kind = CommandKind::RunFile;
+        c.xName = path;
         return c;
     }
 
@@ -417,6 +472,10 @@ std::optional<Command> ParseCommand(const std::string& lineIn) {
         return true;
     };
 
+    {
+        Scan t = sc;
+        if (ParseBrushRect(t, cmd)) return cmd;
+    }
     if (flag("grid", "lines", CommandKind::GridLines)) return cmd;
     if (flag("show", "unselected", CommandKind::ShowUnselected)) return cmd;
     if (flag("hover", "details", CommandKind::HoverDetails)) return cmd;

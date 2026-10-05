@@ -69,11 +69,16 @@ private:
 
       // Logging helpers. ExecuteCommand runs a parsed action-log sentence.
     void ExecuteCommand(const wxString& line);
+    bool RunCommandFile(const std::string& path);
+    static constexpr int kMaxMacroDepth = 8;
+    static constexpr int kMaxMacroLines = 10000;
+    int m_macroDepth = 0;
+    bool m_commandFailed = false;
     void LogAction(const wxString& line);              // discrete actions (immediate)
     void LogActionThrottled(const wxString& key, const wxString& text);   // continuous
     wxString ColName(size_t col) const;                 // dataset column name or "(col N)"
     wxString PlotLoc(int plotIndex) const;              // "plot(r,c)" from plotIndex
-    wxString LogAxisRange(float lo, float hi, size_t col) const;  // "[lo - hi]" with categories
+    wxString LogAxisRange(float lo, float hi, size_t col) const;  // "lo, hi" with categories
     void LogViewChange(int plotIndex, const char* op, bool throttled);
     bool LogIsVisible() const;
     void LogPlotSashIfVisible();
