@@ -46,6 +46,7 @@ set(VIEWPOINTS_SOURCES
     src/Normalize.cpp
     src/ColorMap.cpp
     src/ChatPanel.cpp
+    src/CommandParser.cpp
       $<$<PLATFORM_ID:Darwin>:src/ColorPanelHelper.mm>
 )
 

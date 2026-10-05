@@ -162,16 +162,40 @@ public:
 
     float GetPointSize() const;
     void SetGlobalPointSize(float size);
+    void SetGlobalHistBins(int bins);
     void SetGlobalTooltip(bool on);
     void ApplyBrushColor(int brushIndex, float r, float g, float b, float a);
     void ShowBrushControls(int brushIndex = -1);
     void SelectBrush(int index);
+    void ShowAllPlotsPage();
+    void ResetAllAxisDropdowns(bool axes = true, bool norms = true, bool z = true);
+
+    // Push command results into widgets the plot-config sync does not own.
+    // SetValue / SetSelection here must not re-fire the control callbacks.
+    void SetAllShowUnselected(bool on);
+    void SetAllGridLines(bool on);
+    void SetAllHistograms(bool on);
+    void SetAllLock(bool setX, int xLock, bool setY, int yLock);
+    void SetAllAxisColumn(bool setX, int xCol, bool setY, int yCol);
+    void SetAllNorm(bool setX, int xNorm, bool setY, int yNorm);
+    void SetAllZ(bool setCol, int zCol, bool setNorm, int zNorm);
+    void SetAllOpacityPercent(int percent);
+    void SetAllRotation(int axis, int degrees);
+    void SetAllSpinRock(int axis, bool spinning, bool rocking);
+    void SetPlotSpinRock(int plotIndex, int axis, bool spinning, bool rocking);
+    void SetDeferRedrawsUi(bool on);
+    void SetAdditiveUi(bool on);
+    void SetBackgroundUi(int percent);
+    void SetColorMapUi(int mapIndex, int varIndex, bool reversed);
+    void SetBrushSymbolUi(int brush, int symbol);
+    void SetBrushSizeUi(int brush, float offset);
+    void SetBrushOpacityUi(int brush, float offset);
+    void SetBrushButtonColor(int brush, float r, float g, float b);
 
 private:
     void CreateAllPage();
     void CreateAllPlotsSubPage();
     void CreateBrushesSubPage();
-    void ResetAllAxisDropdowns(bool axes = true, bool norms = true, bool z = true);
     void SelectPage(int pageIndex);  // 0..N-1 = plot, N = "All"
     void SelectAllSubPage(int idx);  // 0 = All Plots, 1 = Brushes & Colormaps
     void RebuildSelectorGrid();
@@ -230,4 +254,20 @@ private:
     std::array<float, CP_NUM_BRUSHES> m_brushOpacityOffsets = {};
     wxCheckBox* m_globalTooltipCheck = nullptr;
     wxCheckBox* m_additiveSelectedCheck = nullptr;
+    wxCheckBox* m_deferRedrawsCheck = nullptr;
+    wxCheckBox* m_allShowUnselected = nullptr;
+    wxCheckBox* m_allGridLines = nullptr;
+    wxCheckBox* m_allHistograms = nullptr;
+    wxCheckBox* m_allXLock = nullptr;
+    wxCheckBox* m_allYLock = nullptr;
+    wxSlider* m_allOpacitySlider = nullptr;
+    wxStaticText* m_allOpacityLabel = nullptr;
+    std::array<wxSlider*, 3> m_allRotSlider = {};
+    std::array<wxStaticText*, 3> m_allRotLabel = {};
+    std::array<wxToggleButton*, 3> m_allSpinBtn = {};
+    std::array<wxToggleButton*, 3> m_allRockBtn = {};
+    wxChoice* m_colorMapChoice = nullptr;
+    wxToggleButton* m_colorMapReversed = nullptr;
+    wxSlider* m_bgSlider = nullptr;
+    bool m_uiSuppress = false;
 };

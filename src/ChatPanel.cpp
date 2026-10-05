@@ -58,8 +58,51 @@ void ChatPanel::BuildUi() {
     m_text->SetFont(tf);
     sizer->Add(m_text, 1, wxEXPAND | wxALL, 2);
 
+    sizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT, 2);
+    m_input = new wxTextCtrl(this, wxID_ANY, wxEmptyString,
+                             wxDefaultPosition, wxDefaultSize,
+                             wxTE_PROCESS_ENTER);
+    m_input->SetFont(tf);
+    m_input->SetHint("Command");
+    sizer->Add(m_input, 0, wxEXPAND | wxALL, 4);
+    m_input->Bind(wxEVT_TEXT_ENTER, [this](wxCommandEvent&) { SubmitInput(); });
+    m_input->Bind(wxEVT_KEY_DOWN, [this](wxKeyEvent& e) {
+        int key = e.GetKeyCode();
+        if (key == WXK_UP) RecallHistory(-1);
+        else if (key == WXK_DOWN) RecallHistory(+1);
+        else e.Skip();
+    });
+
     SetSizer(sizer);
     Layout();
+}
+
+void ChatPanel::SubmitInput() {
+    if (!m_input) return;
+    wxString line = m_input->GetValue();
+    line.Trim(true).Trim(false);
+    if (line.empty()) return;
+    m_history.push_back(line);
+    m_historyPos = static_cast<int>(m_history.size());
+    m_historyDraft.clear();
+    m_input->Clear();
+    if (onCommand) onCommand(line);
+}
+
+void ChatPanel::RecallHistory(int direction) {
+    if (!m_input || m_history.empty()) return;
+    int n = static_cast<int>(m_history.size());
+    if (m_historyPos == n)
+        m_historyDraft = m_input->GetValue();
+    int next = m_historyPos + direction;
+    if (next < 0) next = 0;
+    if (next > n) next = n;
+    m_historyPos = next;
+    if (m_historyPos == n)
+        m_input->ChangeValue(m_historyDraft);
+    else
+        m_input->ChangeValue(m_history[m_historyPos]);
+    m_input->SetInsertionPointEnd();
 }
 
 ChatPanel::~ChatPanel() = default;

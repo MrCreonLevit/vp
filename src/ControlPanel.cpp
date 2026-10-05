@@ -1031,6 +1031,27 @@ void ControlPanel::CreateAllPlotsSubPage() {
     saveSizer->Add(saveSelBtn, 1);
     pSizer->Add(saveSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
+    m_allXLock = allXLock;
+    m_allYLock = allYLock;
+    m_allShowUnselected = allShowUnselected;
+    m_allGridLines = allGridLines;
+    m_allHistograms = allHistograms;
+    m_allOpacitySlider = allOpacitySlider;
+    m_allOpacityLabel = allOpacityLabel;
+    m_allRotSlider[0] = allRotSlider;
+    m_allRotLabel[0] = allRotLabel;
+    m_allSpinBtn[0] = allSpinBtn;
+    m_allRockBtn[0] = allRockBtn;
+    m_allRotSlider[1] = allRotXSlider;
+    m_allRotLabel[1] = allRotXLabel;
+    m_allSpinBtn[1] = allSpinXBtn;
+    m_allRockBtn[1] = allRockXBtn;
+    m_allRotSlider[2] = allRotZSlider;
+    m_allRotLabel[2] = allRotZLabel;
+    m_allSpinBtn[2] = allSpinZBtn;
+    m_allRockBtn[2] = allRockZBtn;
+    m_deferRedrawsCheck = deferRedraws;
+
     // --- Event bindings for All Plots page ---
     // Axis/norm dropdowns have "(no change)" at index 0; skip if unspecified,
     // and preserve each plot's current value for the paired control.
@@ -1038,6 +1059,7 @@ void ControlPanel::CreateAllPlotsSubPage() {
     // so that callbacks (which may call SetPlotConfig/SyncFromConfig)
     // can't alter other tabs' dropdown state mid-iteration.
     m_allXAxis->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        if (m_uiSuppress) return;
         int xSel = m_allXAxis->GetSelection();
         if (xSel == 0) return;  // "(no change)"
         int xCol = xSel - 1;
@@ -1046,6 +1068,7 @@ void ControlPanel::CreateAllPlotsSubPage() {
         if (onAxisChanged) onAxisChanged(kAllPlots, xCol, yCol);
     });
     m_allYAxis->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        if (m_uiSuppress) return;
         int ySel = m_allYAxis->GetSelection();
         if (ySel == 0) return;
         int yCol = ySel - 1;
@@ -1054,6 +1077,7 @@ void ControlPanel::CreateAllPlotsSubPage() {
         if (onAxisChanged) onAxisChanged(kAllPlots, xCol, yCol);
     });
     m_allXNorm->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        if (m_uiSuppress) return;
         int xnSel = m_allXNorm->GetSelection();
         if (xnSel == 0) return;
         int xNorm = xnSel - 1;
@@ -1062,6 +1086,7 @@ void ControlPanel::CreateAllPlotsSubPage() {
         if (onNormChanged) onNormChanged(kAllPlots, xNorm, yNorm);
     });
     m_allYNorm->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        if (m_uiSuppress) return;
         int ynSel = m_allYNorm->GetSelection();
         if (ynSel == 0) return;
         int yNorm = ynSel - 1;
@@ -1078,6 +1103,7 @@ void ControlPanel::CreateAllPlotsSubPage() {
             onAxisLockChanged(kAllPlots, kLeaveField, allYLock->GetValue() ? 1 : 0);
     });
     m_allZAxis->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        if (m_uiSuppress) return;
         int zSel = m_allZAxis->GetSelection();
         if (zSel == 0) return;  // "(no change)"
         // 1="(None)", 2+=column index
@@ -1087,6 +1113,7 @@ void ControlPanel::CreateAllPlotsSubPage() {
         if (onZAxisChanged) onZAxisChanged(kAllPlots, zCol, zNorm);
     });
     m_allZNorm->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        if (m_uiSuppress) return;
         int znSel = m_allZNorm->GetSelection();
         if (znSel == 0) return;
         int zNorm = znSel - 1;
@@ -1411,6 +1438,7 @@ void ControlPanel::CreateBrushesSubPage() {
     m_brushSymbolChoice->SetSelection(0);
     bSizer->Add(m_brushSymbolChoice, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
     m_brushSymbolChoice->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+        if (m_uiSuppress) return;
         int sym = m_brushSymbolChoice->GetSelection();
         if (m_activeBrush == -1) {
             for (int i = 0; i < CP_NUM_BRUSHES; i++) {
@@ -1481,10 +1509,12 @@ void ControlPanel::CreateBrushesSubPage() {
     for (const auto& name : AllColorMapNames())
         colorMapChoice->Append(name);
     colorMapChoice->SetSelection(0);
+    m_colorMapChoice = colorMapChoice;
     mapRow->Add(colorMapChoice, 1, wxRIGHT, 4);
     auto* reversedBtn = new wxToggleButton(brushPage, wxID_ANY, "\u00B1");
     int btnH = colorMapChoice->GetBestSize().GetHeight();
     reversedBtn->SetMinSize(wxSize(btnH, btnH));
+    m_colorMapReversed = reversedBtn;
     mapRow->Add(reversedBtn, 0, wxALIGN_CENTER_VERTICAL);
     bSizer->Add(mapRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
@@ -1496,6 +1526,7 @@ void ControlPanel::CreateBrushesSubPage() {
 
     bSizer->Add(new wxStaticText(brushPage, wxID_ANY, "Background"), 0, wxLEFT | wxTOP, 8);
     auto* bgSlider = new wxSlider(brushPage, wxID_ANY, 0, 0, 50);
+    m_bgSlider = bgSlider;
     bSizer->Add(bgSlider, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
     auto fireColorMapChanged = [this, colorMapChoice, reversedBtn]() {
@@ -1504,13 +1535,16 @@ void ControlPanel::CreateBrushesSubPage() {
                               m_colorVarChoice->GetSelection(),
                               reversedBtn->GetValue());
     };
-    colorMapChoice->Bind(wxEVT_CHOICE, [fireColorMapChanged](wxCommandEvent&) {
+    colorMapChoice->Bind(wxEVT_CHOICE, [this, fireColorMapChanged](wxCommandEvent&) {
+        if (m_uiSuppress) return;
         fireColorMapChanged();
     });
-    m_colorVarChoice->Bind(wxEVT_CHOICE, [fireColorMapChanged](wxCommandEvent&) {
+    m_colorVarChoice->Bind(wxEVT_CHOICE, [this, fireColorMapChanged](wxCommandEvent&) {
+        if (m_uiSuppress) return;
         fireColorMapChanged();
     });
-    reversedBtn->Bind(wxEVT_TOGGLEBUTTON, [fireColorMapChanged](wxCommandEvent&) {
+    reversedBtn->Bind(wxEVT_TOGGLEBUTTON, [this, fireColorMapChanged](wxCommandEvent&) {
+        if (m_uiSuppress) return;
         fireColorMapChanged();
     });
     bgSlider->Bind(wxEVT_SLIDER, [this, bgSlider](wxCommandEvent&) {
@@ -1597,4 +1631,158 @@ void ControlPanel::ApplyBrushColor(int brushIndex, float r, float g, float b, fl
     m_brushButtons[brushIndex]->Refresh();
     if (onBrushColorEdited)
         onBrushColorEdited(brushIndex, r, g, b, a);
+}
+
+void ControlPanel::SetGlobalHistBins(int bins) {
+    if (m_histBinsSlider) m_histBinsSlider->SetValue(bins);
+    if (m_histBinsLabel) m_histBinsLabel->SetLabel(wxString::Format("Hist Bins: %d", bins));
+}
+
+void ControlPanel::ShowAllPlotsPage() {
+    int allIdx = static_cast<int>(m_plotTabs.size());
+    SelectPage(allIdx);
+    SelectAllSubPage(0);
+}
+
+static void ChooseQuiet(bool& suppress, wxChoice* ch, int sel) {
+    if (!ch || sel < 0 || sel >= static_cast<int>(ch->GetCount())) return;
+    suppress = true;
+    if (ch->GetSelection() != sel)
+        ch->SetSelection(sel);
+    suppress = false;
+}
+
+void ControlPanel::SetAllShowUnselected(bool on) {
+    if (m_allShowUnselected) m_allShowUnselected->SetValue(on);
+}
+void ControlPanel::SetAllGridLines(bool on) {
+    if (m_allGridLines) m_allGridLines->SetValue(on);
+}
+void ControlPanel::SetAllHistograms(bool on) {
+    if (m_allHistograms) m_allHistograms->SetValue(on);
+}
+
+void ControlPanel::SetAllLock(bool setX, int xLock, bool setY, int yLock) {
+    if (setX && m_allXLock) m_allXLock->SetValue(xLock != 0);
+    if (setY && m_allYLock) m_allYLock->SetValue(yLock != 0);
+}
+
+void ControlPanel::SetAllAxisColumn(bool setX, int xCol, bool setY, int yCol) {
+    if (setX) ChooseQuiet(m_uiSuppress, m_allXAxis, xCol < 0 ? 0 : xCol + 1);
+    if (setY) ChooseQuiet(m_uiSuppress, m_allYAxis, yCol < 0 ? 0 : yCol + 1);
+}
+
+void ControlPanel::SetAllNorm(bool setX, int xNorm, bool setY, int yNorm) {
+    if (setX) ChooseQuiet(m_uiSuppress, m_allXNorm, xNorm < 0 ? 0 : xNorm + 1);
+    if (setY) ChooseQuiet(m_uiSuppress, m_allYNorm, yNorm < 0 ? 0 : yNorm + 1);
+}
+
+void ControlPanel::SetAllZ(bool setCol, int zCol, bool setNorm, int zNorm) {
+    if (setCol) {
+        int sel = zCol < 0 ? 1 : zCol + 2;   // 1 = (None), 2+ = column
+        ChooseQuiet(m_uiSuppress, m_allZAxis, sel);
+    }
+    if (setNorm)
+        ChooseQuiet(m_uiSuppress, m_allZNorm, zNorm < 0 ? 0 : zNorm + 1);
+}
+
+void ControlPanel::SetAllOpacityPercent(int percent) {
+    if (m_allOpacitySlider) m_allOpacitySlider->SetValue(percent);
+    if (m_allOpacityLabel)
+        m_allOpacityLabel->SetLabel(wxString::Format("Opacity: %d%%", percent));
+}
+
+void ControlPanel::SetAllRotation(int axis, int degrees) {
+    if (axis < 0 || axis > 2) return;
+    const char* name = (axis == 1) ? "x" : (axis == 2) ? "z" : "y";
+    if (m_allRotSlider[axis]) m_allRotSlider[axis]->SetValue(degrees);
+    if (m_allRotLabel[axis])
+        m_allRotLabel[axis]->SetLabel(wxString::Format("screen %s: %d\u00B0", name, degrees));
+    if (m_allSpinBtn[axis]) m_allSpinBtn[axis]->SetValue(false);
+    if (m_allRockBtn[axis]) m_allRockBtn[axis]->SetValue(false);
+}
+
+void ControlPanel::SetAllSpinRock(int axis, bool spinning, bool rocking) {
+    if (axis < 0 || axis > 2) return;
+    if (m_allSpinBtn[axis]) m_allSpinBtn[axis]->SetValue(spinning);
+    if (m_allRockBtn[axis]) m_allRockBtn[axis]->SetValue(rocking);
+}
+
+void ControlPanel::SetPlotSpinRock(int plotIndex, int axis, bool spinning, bool rocking) {
+    auto apply = [&](PlotTab* tab) {
+        auto arm = [&](bool& spinFlag, bool& rockFlag, wxToggleButton* spinBtn, wxToggleButton* rockBtn,
+                       float& angle, float& center, float& phase) {
+            spinFlag = spinning;
+            rockFlag = rocking;
+            if (spinBtn) spinBtn->SetValue(spinning);
+            if (rockBtn) rockBtn->SetValue(rocking);
+            if (rocking) { center = angle; phase = 0.0f; }
+        };
+        if (axis == 1)
+            arm(tab->m_spinningX, tab->m_rockingX, tab->m_spinXButton, tab->m_rockXButton,
+                tab->m_spinXAngle, tab->m_rockXCenter, tab->m_rockXPhase);
+        else if (axis == 2)
+            arm(tab->m_spinningZ, tab->m_rockingZ, tab->m_spinZButton, tab->m_rockZButton,
+                tab->m_spinZAngle, tab->m_rockZCenter, tab->m_rockZPhase);
+        else
+            arm(tab->m_spinning, tab->m_rocking, tab->m_spinButton, tab->m_rockButton,
+                tab->m_spinAngle, tab->m_rockCenter, tab->m_rockPhase);
+    };
+    if (plotIndex < 0) {
+        for (auto* tab : m_plotTabs) apply(tab);
+    } else if (plotIndex < (int)m_plotTabs.size()) {
+        apply(m_plotTabs[plotIndex]);
+    }
+}
+
+void ControlPanel::SetDeferRedrawsUi(bool on) {
+    if (m_deferRedrawsCheck) m_deferRedrawsCheck->SetValue(on);
+}
+void ControlPanel::SetAdditiveUi(bool on) {
+    if (m_additiveSelectedCheck) m_additiveSelectedCheck->SetValue(on);
+}
+void ControlPanel::SetBackgroundUi(int percent) {
+    if (m_bgSlider) m_bgSlider->SetValue(percent);
+}
+
+void ControlPanel::SetColorMapUi(int mapIndex, int varIndex, bool reversed) {
+    ChooseQuiet(m_uiSuppress, m_colorMapChoice, mapIndex);
+    ChooseQuiet(m_uiSuppress, m_colorVarChoice, varIndex);
+    if (m_colorMapReversed) m_colorMapReversed->SetValue(reversed);
+}
+
+void ControlPanel::SetBrushSymbolUi(int brush, int symbol) {
+    if (brush < 0 || brush >= CP_NUM_BRUSHES) return;
+    m_brushSymbols[brush] = symbol;
+    int display = (m_activeBrush >= 0) ? m_activeBrush : m_lastIndividualBrush;
+    if (brush == display)
+        ChooseQuiet(m_uiSuppress, m_brushSymbolChoice, symbol);
+}
+
+void ControlPanel::SetBrushSizeUi(int brush, float offset) {
+    if (brush < 0 || brush >= CP_NUM_BRUSHES) return;
+    m_brushSizeOffsets[brush] = offset;
+    int display = (m_activeBrush >= 0) ? m_activeBrush : m_lastIndividualBrush;
+    if (brush == display && m_brushSizeSlider) {
+        m_brushSizeSlider->SetValue(static_cast<int>(offset * 100));
+        if (m_brushSizeLabel)
+            m_brushSizeLabel->SetLabel(wxString::Format("Brush Size +/-: %.2f", offset));
+    }
+}
+
+void ControlPanel::SetBrushOpacityUi(int brush, float offset) {
+    if (brush < 0 || brush >= CP_NUM_BRUSHES) return;
+    m_brushOpacityOffsets[brush] = offset;
+    int display = (m_activeBrush >= 0) ? m_activeBrush : m_lastIndividualBrush;
+    if (brush == display && m_brushOpacitySlider)
+        m_brushOpacitySlider->SetValue(static_cast<int>(offset));
+}
+
+void ControlPanel::SetBrushButtonColor(int brush, float r, float g, float b) {
+    if (brush < 0 || brush >= CP_NUM_BRUSHES || !m_brushButtons[brush]) return;
+    m_brushButtons[brush]->SetBackgroundColour(
+        wxColour(static_cast<unsigned char>(r * 255),
+                 static_cast<unsigned char>(g * 255),
+                 static_cast<unsigned char>(b * 255)));
+    m_brushButtons[brush]->Refresh();
 }

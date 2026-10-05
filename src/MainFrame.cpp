@@ -2,6 +2,7 @@
 #include "MainFrame.h"
 #include "WebGPUCanvas.h"
 #include "ControlPanel.h"
+#include "CommandParser.h"
 #include <wx/popupwin.h>
 #include <wx/progdlg.h>
 #include <wx/mstream.h>
@@ -302,10 +303,11 @@ void MainFrame::CreateLayout() {
     m_logSash->Bind(wxEVT_MOUSE_CAPTURE_LOST, &MainFrame::OnLogSashCaptureLost, this);
     mainSizer->Add(m_logSash, 0, wxEXPAND);
 
-    // Output-only action log panel (Phase 1).  Starts hidden; toggle via the
-    // View menu.  Hidden via sizer so the grid reclaims the width.
+    // Action log with a command line. Starts hidden; toggle via the View menu.
+    // Hidden via sizer so the grid reclaims the width.
     m_logPanel = new ChatPanel(this, m_logWidth);
     m_logPanel->SetMinSize(wxSize(m_logWidth, 120));
+    m_logPanel->onCommand = [this](const wxString& line) { ExecuteCommand(line); };
     mainSizer->Add(m_logPanel, 0, wxEXPAND);
     mainSizer->Show(m_logSash, false);
     mainSizer->Show(m_logPanel, false);
@@ -2533,6 +2535,388 @@ void MainFrame::SetupLogThrottle() {
 void MainFrame::OnLogTick(wxTimerEvent&) {
     if (m_logThrottle)
         m_logThrottle->Flush();
+}
+
+void MainFrame::ExecuteCommand(const wxString& line) {
+    wxString shown = line;
+    shown.Trim(true).Trim(false);
+    const auto utf = shown.ToUTF8();
+    std::string text(utf.data() ? utf.data() : "", utf.length());
+    auto parsed = ParseCommand(text);
+    if (!parsed) {
+        LogAction("Not a command: " + shown);
+        return;
+    }
+    if (parsed->kind == CommandKind::Ignore)
+        return;
+    const Command& cmd = *parsed;
+
+    auto reject = [&](const wxString& why) {
+        LogAction("Not a command: " + why);
+    };
+    auto findCol = [&](const std::string& name) -> int {
+        const auto& labels = m_dataManager.dataset().columnLabels;
+        wxString want = wxString::FromUTF8(name);
+        for (size_t i = 0; i < labels.size(); ++i) {
+            if (wxString::FromUTF8(labels[i]).CmpNoCase(want) == 0)
+                return static_cast<int>(i);
+        }
+        return -1;
+    };
+    auto findNorm = [&](const std::string& name) -> int {
+        wxString want = wxString::FromUTF8(name);
+        for (int i = 0; i < static_cast<int>(NormMode::COUNT); ++i) {
+            if (wxString(NormModeName(static_cast<NormMode>(i))).CmpNoCase(want) == 0)
+                return i;
+        }
+        return -1;
+    };
+    auto findMap = [&](const std::string& name) -> int {
+        wxString want = wxString::FromUTF8(name);
+        for (int i = 0; i < static_cast<int>(ColorMapType::COUNT); ++i) {
+            if (wxString(ColorMapName(static_cast<ColorMapType>(i))).CmpNoCase(want) == 0)
+                return i;
+        }
+        return -1;
+    };
+    auto findSymbol = [&](const std::string& name) -> int {
+        wxString want = wxString::FromUTF8(name);
+        for (int i = 0; i < SYMBOL_COUNT; ++i) {
+            if (wxString(SymbolName(i)).CmpNoCase(want) == 0)
+                return i;
+        }
+        return -1;
+    };
+    auto syncPlots = [&](int plotIndex) {
+        if (!m_controlPanel) return;
+        if (plotIndex < 0) {
+            for (int i = 0; i < (int)m_plotConfigs.size(); ++i)
+                m_controlPanel->SetPlotConfig(i, m_plotConfigs[i]);
+        } else if (plotIndex < (int)m_plotConfigs.size()) {
+            m_controlPanel->SetPlotConfig(plotIndex, m_plotConfigs[plotIndex]);
+        }
+    };
+
+    int plot = 0;
+    bool all = false;
+    auto resolvePlot = [&]() -> bool {
+        if (cmd.scope == CommandScope::All ||
+            (cmd.scope == CommandScope::Unspecified && m_activePlot < 0)) {
+            if (m_plotConfigs.empty()) {
+                reject(shown);
+                return false;
+            }
+            plot = kAllPlots;
+            all = true;
+            return true;
+        }
+        int idx = m_activePlot;
+        if (cmd.scope == CommandScope::Plot) {
+            if (cmd.row < 1 || cmd.col < 1 || cmd.col > m_gridCols || cmd.row > m_gridRows) {
+                reject(shown);
+                return false;
+            }
+            idx = (cmd.row - 1) * m_gridCols + (cmd.col - 1);
+        }
+        if (idx < 0 || idx >= (int)m_plotConfigs.size()) {
+            reject(shown);
+            return false;
+        }
+        plot = idx;
+        all = false;
+        return true;
+    };
+
+    switch (cmd.kind) {
+    case CommandKind::Ignore:
+        return;
+    case CommandKind::GridLines:
+        if (!resolvePlot()) return;
+        if (m_controlPanel->onGridLinesChanged)
+            m_controlPanel->onGridLinesChanged(plot, cmd.on);
+        if (all) m_controlPanel->SetAllGridLines(cmd.on);
+        else syncPlots(plot);
+        return;
+    case CommandKind::ShowUnselected:
+        if (!resolvePlot()) return;
+        if (m_controlPanel->onShowUnselectedChanged)
+            m_controlPanel->onShowUnselectedChanged(plot, cmd.on);
+        if (all) m_controlPanel->SetAllShowUnselected(cmd.on);
+        else syncPlots(plot);
+        return;
+    case CommandKind::Histograms:
+        if (!resolvePlot()) return;
+        if (m_controlPanel->onShowHistogramsChanged)
+            m_controlPanel->onShowHistogramsChanged(plot, cmd.on);
+        if (all) m_controlPanel->SetAllHistograms(cmd.on);
+        else syncPlots(plot);
+        return;
+    case CommandKind::HoverDetails:
+        m_controlPanel->SetGlobalTooltip(cmd.on);
+        if (m_controlPanel->onGlobalTooltipChanged)
+            m_controlPanel->onGlobalTooltipChanged(cmd.on);
+        return;
+    case CommandKind::DeferRedraws:
+        m_controlPanel->SetDeferRedrawsUi(cmd.on);
+        if (m_controlPanel->onDeferRedrawsChanged)
+            m_controlPanel->onDeferRedrawsChanged(cmd.on);
+        return;
+    case CommandKind::RandomizeAxes:
+        if (!resolvePlot()) return;
+        if (m_controlPanel->onRandomizeAxes)
+            m_controlPanel->onRandomizeAxes(plot);
+        if (all) m_controlPanel->ResetAllAxisDropdowns();
+        return;
+    case CommandKind::ResetRotation:
+        if (!resolvePlot()) return;
+        for (int ax = 0; ax < 3; ++ax)
+            m_controlPanel->SetPlotSpinRock(plot, ax, false, false);
+        if (all) {
+            for (int ax = 0; ax < 3; ++ax) {
+                m_controlPanel->SetAllRotation(ax, 0);
+                m_controlPanel->SetAllSpinRock(ax, false, false);
+            }
+        }
+        if (m_controlPanel->onRotationZeroed)
+            m_controlPanel->onRotationZeroed(plot, true, true, true);
+        return;
+    case CommandKind::Rotate: {
+        if (!resolvePlot()) return;
+        int deg = std::clamp(static_cast<int>(std::lround(cmd.f0)), -360, 360);
+        m_controlPanel->SetPlotSpinRock(plot, cmd.axis, false, false);
+        if (all) m_controlPanel->SetAllRotation(cmd.axis, deg);
+        float angle = static_cast<float>(deg);
+        if (cmd.axis == 1) {
+            if (m_controlPanel->onRotationXChanged)
+                m_controlPanel->onRotationXChanged(plot, angle, false);
+        } else if (cmd.axis == 2) {
+            if (m_controlPanel->onRotationZChanged)
+                m_controlPanel->onRotationZChanged(plot, angle, false);
+        } else if (m_controlPanel->onRotationChanged) {
+            m_controlPanel->onRotationChanged(plot, angle, false);
+        }
+        syncPlots(plot);
+        return;
+    }
+    case CommandKind::SpinRock:
+        if (!resolvePlot()) return;
+        m_controlPanel->SetPlotSpinRock(plot, cmd.axis, cmd.spinning, cmd.rocking);
+        if (all) m_controlPanel->SetAllSpinRock(cmd.axis, cmd.spinning, cmd.rocking);
+        if (m_controlPanel->onSpinRockChanged)
+            m_controlPanel->onSpinRockChanged(plot, cmd.axis, cmd.spinning, cmd.rocking);
+        return;
+    case CommandKind::Axis: {
+        if (!resolvePlot()) return;
+        int x = kLeaveField, y = kLeaveField;
+        if (cmd.hasX) {
+            x = findCol(cmd.xName);
+            if (x < 0) { reject("unknown column '" + wxString::FromUTF8(cmd.xName) + "'"); return; }
+        }
+        if (cmd.hasY) {
+            y = findCol(cmd.yName);
+            if (y < 0) { reject("unknown column '" + wxString::FromUTF8(cmd.yName) + "'"); return; }
+        }
+        if (m_controlPanel->onAxisChanged)
+            m_controlPanel->onAxisChanged(plot, x, y);
+        if (all) m_controlPanel->SetAllAxisColumn(cmd.hasX, x, cmd.hasY, y);
+        return;
+    }
+    case CommandKind::AxisLock: {
+        if (!resolvePlot()) return;
+        int xLock = cmd.hasX ? (cmd.on ? 1 : 0) : kLeaveField;
+        int yLock = cmd.hasY ? (cmd.reversed ? 1 : 0) : kLeaveField;
+        if (m_controlPanel->onAxisLockChanged)
+            m_controlPanel->onAxisLockChanged(plot, xLock, yLock);
+        if (all) m_controlPanel->SetAllLock(cmd.hasX, xLock, cmd.hasY, yLock);
+        return;
+    }
+    case CommandKind::Normalization: {
+        if (!resolvePlot()) return;
+        int x = kLeaveField, y = kLeaveField;
+        if (cmd.hasX) {
+            x = findNorm(cmd.xName);
+            if (x < 0) { reject("unknown normalization '" + wxString::FromUTF8(cmd.xName) + "'"); return; }
+        }
+        if (cmd.hasY) {
+            y = findNorm(cmd.yName);
+            if (y < 0) { reject("unknown normalization '" + wxString::FromUTF8(cmd.yName) + "'"); return; }
+        }
+        if (m_controlPanel->onNormChanged)
+            m_controlPanel->onNormChanged(plot, x, y);
+        if (all) m_controlPanel->SetAllNorm(cmd.hasX, x, cmd.hasY, y);
+        return;
+    }
+    case CommandKind::ZAxis: {
+        if (!resolvePlot()) return;
+        int zCol = kLeaveZ;
+        int zNorm = kLeaveField;
+        if (cmd.hasX) {
+            if (cmd.zNone) zCol = -1;
+            else {
+                zCol = findCol(cmd.xName);
+                if (zCol < 0) { reject("unknown column '" + wxString::FromUTF8(cmd.xName) + "'"); return; }
+            }
+        }
+        if (cmd.hasY) {
+            zNorm = findNorm(cmd.yName);
+            if (zNorm < 0) { reject("unknown normalization '" + wxString::FromUTF8(cmd.yName) + "'"); return; }
+        }
+        if (m_controlPanel->onZAxisChanged)
+            m_controlPanel->onZAxisChanged(plot, zCol, zNorm);
+        if (all) m_controlPanel->SetAllZ(cmd.hasX, zCol, cmd.hasY, zNorm);
+        return;
+    }
+    case CommandKind::PointSize: {
+        if (!resolvePlot()) return;
+        float size = std::clamp(cmd.f0, 0.5f, 30.0f);
+        size = std::round(size * 10.0f) / 10.0f;
+        if (all) {
+            m_controlPanel->SetGlobalPointSize(size);
+            if (m_controlPanel->onGlobalPointSizeChanged)
+                m_controlPanel->onGlobalPointSizeChanged(size);
+            syncPlots(kAllPlots);
+        } else {
+            if (m_controlPanel->onPointSizeChanged)
+                m_controlPanel->onPointSizeChanged(plot, size);
+            syncPlots(plot);
+        }
+        return;
+    }
+    case CommandKind::Opacity: {
+        if (!resolvePlot()) return;
+        int pct = std::clamp(static_cast<int>(std::lround(cmd.f0)), 1, 100);
+        if (all) m_controlPanel->SetAllOpacityPercent(pct);
+        if (m_controlPanel->onOpacityChanged)
+            m_controlPanel->onOpacityChanged(plot, static_cast<float>(pct) / 100.0f);
+        if (!all) syncPlots(plot);
+        return;
+    }
+    case CommandKind::HistBins: {
+        if (!resolvePlot()) return;
+        int bins = std::clamp(cmd.intVal, 2, 512);
+        if (all) {
+            m_controlPanel->SetGlobalHistBins(bins);
+            if (m_controlPanel->onGlobalHistBinsChanged)
+                m_controlPanel->onGlobalHistBinsChanged(bins);
+            syncPlots(kAllPlots);
+        } else {
+            if (m_controlPanel->onHistBinsChanged)
+                m_controlPanel->onHistBinsChanged(plot, bins);
+            syncPlots(plot);
+        }
+        return;
+    }
+    case CommandKind::Colormap: {
+        int map = findMap(cmd.xName);
+        if (map < 0) { reject("unknown colormap '" + wxString::FromUTF8(cmd.xName) + "'"); return; }
+        int var = 0;
+        if (wxString::FromUTF8(cmd.yName).CmpNoCase("density") != 0 &&
+            wxString::FromUTF8(cmd.yName).CmpNoCase("(density)") != 0) {
+            int col = findCol(cmd.yName);
+            if (col < 0) { reject("unknown column '" + wxString::FromUTF8(cmd.yName) + "'"); return; }
+            var = col + 1;
+        }
+        m_controlPanel->SetColorMapUi(map, var, cmd.reversed);
+        if (m_controlPanel->onColorMapChanged)
+            m_controlPanel->onColorMapChanged(map, var, cmd.reversed);
+        return;
+    }
+    case CommandKind::AdditiveBlending:
+        m_controlPanel->SetAdditiveUi(cmd.on);
+        if (m_controlPanel->onAdditiveSelectedChanged)
+            m_controlPanel->onAdditiveSelectedChanged(cmd.on);
+        return;
+    case CommandKind::Background: {
+        int pct = std::clamp(static_cast<int>(std::lround(cmd.f0)), 0, 50);
+        m_controlPanel->SetBackgroundUi(pct);
+        if (m_controlPanel->onBackgroundChanged)
+            m_controlPanel->onBackgroundChanged(static_cast<float>(pct) / 100.0f);
+        return;
+    }
+    case CommandKind::ActivePlot:
+        if (cmd.scope != CommandScope::Plot || !resolvePlot()) {
+            if (cmd.scope != CommandScope::Plot) reject(shown);
+            return;
+        }
+        if (m_controlPanel->onTabSelected)
+            m_controlPanel->onTabSelected(plot);
+        return;
+    case CommandKind::AllPlotsHighlighted:
+        m_controlPanel->ShowAllPlotsPage();
+        if (m_controlPanel->onAllSelected)
+            m_controlPanel->onAllSelected();
+        return;
+    case CommandKind::GridResize:
+        if (cmd.row < 1 || cmd.col < 1) { reject(shown); return; }
+        if (cmd.row != m_gridRows || cmd.col != m_gridCols) {
+            m_gridRows = cmd.row;
+            m_gridCols = cmd.col;
+            RebuildGrid();
+        }
+        LogAction(wxString::Format("Grid resized to %d x %d", m_gridRows, m_gridCols));
+        return;
+    case CommandKind::ActiveBrush: {
+        int b = cmd.unselectedBrush ? 0 : cmd.intVal;
+        if (b < 0 || b >= CP_NUM_BRUSHES) { reject(shown); return; }
+        m_controlPanel->SelectBrush(b);
+        return;
+    }
+    case CommandKind::BrushColor: {
+        if (cmd.intVal < 0 || cmd.intVal >= CP_NUM_BRUSHES) { reject(shown); return; }
+        auto cl = [](float v) { return std::clamp(v, 0.0f, 1.0f); };
+        m_controlPanel->ApplyBrushColor(cmd.intVal, cl(cmd.f0), cl(cmd.f1), cl(cmd.f2), cl(cmd.f3));
+        return;
+    }
+    case CommandKind::BrushSymbol: {
+        if (cmd.intVal < 0 || cmd.intVal >= CP_NUM_BRUSHES) { reject(shown); return; }
+        int sym = findSymbol(cmd.xName);
+        if (sym < 0) { reject("unknown symbol '" + wxString::FromUTF8(cmd.xName) + "'"); return; }
+        m_controlPanel->SetBrushSymbolUi(cmd.intVal, sym);
+        if (m_controlPanel->onBrushSymbolChanged)
+            m_controlPanel->onBrushSymbolChanged(cmd.intVal, sym);
+        return;
+    }
+    case CommandKind::BrushSizeOffset: {
+        if (cmd.intVal < 0 || cmd.intVal >= CP_NUM_BRUSHES) { reject(shown); return; }
+        float off = std::clamp(cmd.f0, -10.0f, 20.0f);
+        off = std::round(off * 100.0f) / 100.0f;
+        m_controlPanel->SetBrushSizeUi(cmd.intVal, off);
+        if (m_controlPanel->onBrushSizeOffsetChanged)
+            m_controlPanel->onBrushSizeOffsetChanged(cmd.intVal, off);
+        return;
+    }
+    case CommandKind::BrushOpacityOffset: {
+        if (cmd.intVal < 0 || cmd.intVal >= CP_NUM_BRUSHES) { reject(shown); return; }
+        float off = std::clamp(cmd.f0, -100.0f, 100.0f);
+        off = std::round(off);
+        m_controlPanel->SetBrushOpacityUi(cmd.intVal, off);
+        if (m_controlPanel->onBrushOpacityOffsetChanged)
+            m_controlPanel->onBrushOpacityOffsetChanged(cmd.intVal, off);
+        return;
+    }
+    case CommandKind::BrushReset: {
+        if (cmd.intVal < 0 || cmd.intVal >= CP_NUM_BRUSHES) { reject(shown); return; }
+        int sym = (cmd.intVal == 0) ? SYMBOL_CIRCLE : (cmd.intVal - 1) % SYMBOL_COUNT;
+        m_controlPanel->SetBrushSymbolUi(cmd.intVal, sym);
+        m_controlPanel->SetBrushSizeUi(cmd.intVal, 0.0f);
+        m_controlPanel->SetBrushOpacityUi(cmd.intVal, 0.0f);
+        if (m_controlPanel->onBrushReset)
+            m_controlPanel->onBrushReset(cmd.intVal);
+        if (cmd.intVal < (int)m_brushColors.size()) {
+            const auto& c = m_brushColors[cmd.intVal];
+            m_controlPanel->SetBrushButtonColor(cmd.intVal, c.r, c.g, c.b);
+        }
+        return;
+    }
+    case CommandKind::ClearSelection:
+        if (m_controlPanel->onClearSelection)
+            m_controlPanel->onClearSelection();
+        return;
+    case CommandKind::InvertSelection:
+        if (m_controlPanel->onInvertSelection)
+            m_controlPanel->onInvertSelection();
+        return;
+    }
 }
 
 void MainFrame::LogAction(const wxString& line) {

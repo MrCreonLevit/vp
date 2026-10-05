@@ -6,9 +6,10 @@
 #include <functional>
 #include <map>
 #include <mutex>
+#include <vector>
 
 // ============================================================
-//  ChatPanel — scrollable, output-only action log.
+//  ChatPanel — scrollable action log with a command line.
 //
 //  A sizer element on the right of the main frame, separated from the
 //  plot grid by a draggable sash (same 4px grey gap as plot dividers).
@@ -16,7 +17,7 @@
 //  grid reclaims the space.  The view is a wxTextCtrl that retains all
 //  text across hide/show, so re-showing reveals the full scrollback.
 //
-//  Phase 1: output only.  A bottom text-input row is a later phase.
+//  Enter in the bottom field submits onCommand. Up/down recalls history.
 // ============================================================
 class ChatPanel : public wxPanel {
 public:
@@ -27,10 +28,18 @@ public:
     void Log(const wxString& line);
     void ClearLog();
 
+    std::function<void(const wxString& line)> onCommand;
+
 private:
     void BuildUi();
+    void SubmitInput();
+    void RecallHistory(int direction);
 
     wxTextCtrl* m_text = nullptr;       // read-only scrollable view
+    wxTextCtrl* m_input = nullptr;
+    std::vector<wxString> m_history;
+    int m_historyPos = 0;               // size() means "draft / newest"
+    wxString m_historyDraft;
     int  m_panelWidth;
 };
 

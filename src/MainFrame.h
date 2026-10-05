@@ -67,7 +67,8 @@ private:
     void InvertAllSelections();
     NormMode DefaultNormForColumn(size_t col) const;
 
-      // Logging helpers (output-only action log).
+      // Logging helpers. ExecuteCommand runs a parsed action-log sentence.
+    void ExecuteCommand(const wxString& line);
     void LogAction(const wxString& line);              // discrete actions (immediate)
     void LogActionThrottled(const wxString& key, const wxString& text);   // continuous
     wxString ColName(size_t col) const;                 // dataset column name or "(col N)"
